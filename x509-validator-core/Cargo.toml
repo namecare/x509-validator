@@ -1,0 +1,15 @@
+[package]
+name = "x509-validator-core"
+version = "0.1.0"
+edition = "2021"
+description = "Validates an X.509 certificate chain against a set of root certificates and a ``VerifierPolicy``."
+repository = "https://github.com/namecare/x509-validator"
+homepage = "https://github.com/namecare/x509-validator"
+authors = ["tkhp", "namecare"]
+license = "MIT"
+readme = "README.md"
+documentation = "https://docs.rs/x509-validator"
+categories = ["network-programming", "cryptography"]
+keywords = ["crypto", "x509"]
+
+[dependencies]
