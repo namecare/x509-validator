@@ -1,13 +1,13 @@
 use crate::crypto::CryptoProvider;
 use crate::diagnostic::VerificationDiagnostic;
 use crate::policy::{PolicyFailureReason, VerifierPolicy};
+use crate::store::CertificateStore;
+use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
+use x509_validator_core::validated_chain::ValidatedCertificateChain;
 use x509_validator_core::{
     CertificateView, ChainValidationResult, ExtensionsView, NameView,
     PublicKeyInfoView,
 };
-use x509_validator_core::store::CertificateStore;
-use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
-use x509_validator_core::validated_chain::ValidatedCertificateChain;
 
 fn subject_key<C: CertificateView>(certificate: &C) -> Vec<u8> {
     certificate.subject().canonical_der().to_vec()
@@ -324,11 +324,11 @@ mod tests {
     use super::*;
     use crate::crypto::{CryptoError, Digest, KeyProvider, PublicKey};
     use crate::policy::{PolicyFailureReason, VerifierPolicy};
+    use crate::PolicyEvaluationResult;
     use x509_validator_core::{
         AuthorityKeyIdentifier, BasicConstraints, ExtensionsView, GeneralNameKind, NameConstraints, NameView, Oid,
         PublicKeyInfoView, SignatureAlgorithmId, SubjectKeyIdentifier, Timestamp,
     };
-    use crate::PolicyEvaluationResult;
     // ---- Fake CertificateView family ----
 
     #[derive(Debug, Clone, PartialEq, Eq)]

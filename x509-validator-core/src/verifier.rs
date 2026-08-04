@@ -1,4 +1,3 @@
-use crate::store::CertificateStore;
 use crate::validated_chain::ValidatedCertificateChain;
 use crate::view::CertificateView;
 

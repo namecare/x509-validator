@@ -45,7 +45,7 @@ impl<C: CertificateView + Clone> CertificateStore<C> {
 /// Canonical lookup key for a Name. `NameView` doesn't require `Hash` (parser
 /// backends may not want to implement it), so the store hashes a stable
 /// byte representation instead, using `NameView::canonical_der()`.
-pub(crate) fn subject_key<C: CertificateView>(certificate: &C) -> Vec<u8> {
+pub fn subject_key<C: CertificateView>(certificate: &C) -> Vec<u8> {
     certificate.subject().canonical_der().to_vec()
 }
 
