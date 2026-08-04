@@ -16,11 +16,11 @@ pub enum ChainValidationResult<C: CertificateView, R> {
 /// criteria work — core only fixes the shape of construction and the
 /// validation entry point.
 pub trait Verifier<C: CertificateView, R> {
-    fn new(root_certificates: CertificateStore<C>) -> Self;
+    fn new(root_certificates_der: &[Vec<u8>]) -> Self;
 
     fn validate(
         &mut self,
         leaf: &C,
-        intermediates: &CertificateStore<C>,
+        intermediates: &[Vec<u8>],
     ) -> ChainValidationResult<C, R>;
 }

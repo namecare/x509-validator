@@ -182,6 +182,16 @@ name = "x509-validator"
 version = "0.1.0"
 dependencies = [
  "aws-lc-rs",
+ "aws-lc-sys",
+ "thiserror",
+ "x509-validator-core",
+]
+
+[[package]]
+name = "x509-validator-awc-lc"
+version = "0.1.0"
+dependencies = [
+ "aws-lc-rs",
  "thiserror",
  "x509-validator-core",
 ]

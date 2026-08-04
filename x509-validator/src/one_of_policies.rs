@@ -16,11 +16,21 @@ impl<C: CertificateView> OneOfPolicies<C> {
 }
 
 impl<C: CertificateView> VerifierPolicy<C> for OneOfPolicies<C> {
+    /// Intersection, not union: only one sub-policy's checks actually run
+    /// for a given chain (the first one that meets policy, or none), so an
+    /// extension is only safe to claim as handled here if every sub-policy
+    /// independently understands it.
     fn verifying_critical_extensions(&self) -> Vec<Oid> {
-        self.policies
-            .iter()
-            .flat_map(|policy| policy.verifying_critical_extensions())
-            .collect()
+        let mut policies = self.policies.iter();
+        let Some(first) = policies.next() else {
+            return Vec::new();
+        };
+        let mut common = first.verifying_critical_extensions();
+        for policy in policies {
+            let handled = policy.verifying_critical_extensions();
+            common.retain(|oid| handled.contains(oid));
+        }
+        common
     }
 
     fn chain_meets_policy_requirements(&mut self, chain: &UnverifiedCertificateChain<C>) -> PolicyEvaluationResult {
