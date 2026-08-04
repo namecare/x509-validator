@@ -15,3 +15,7 @@ keywords = ["crypto", "x509"]
 [dependencies]
 x509-validator-core = { path = "../x509-validator-core" }
 thiserror = "1"
+aws-lc-rs = { version = "1.17.3", optional = true }
+
+[features]
+aws_lc = ["dep:aws-lc-rs"]
