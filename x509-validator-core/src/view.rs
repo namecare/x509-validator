@@ -85,10 +85,17 @@ pub trait ExtensionsView: Debug {
     fn subject_key_identifier(&self) -> Result<Option<SubjectKeyIdentifier>, Self::Error>;
 }
 
-pub trait CertificateView: Debug {
+pub trait CertificateView: Debug + Sized {
     type Name: NameView;
     type Extensions: ExtensionsView;
     type PublicKeyInfo: PublicKeyInfoView;
+    type Error: std::error::Error;
+
+    /// Parses a DER-encoded certificate into this backend's concrete
+    /// certificate type. The one entry point a `Verifier` implementation
+    /// needs to turn caller-supplied DER (leaf, intermediates, roots) into
+    /// `Self` without core depending on any particular parsing backend.
+    fn from_der(der: &[u8]) -> Result<Self, Self::Error>;
 
     fn subject(&self) -> &Self::Name;
     fn issuer(&self) -> &Self::Name;
@@ -101,11 +108,4 @@ pub trait CertificateView: Debug {
     fn signature_algorithm(&self) -> SignatureAlgorithmId;
     fn signature(&self) -> &[u8];
     fn tbs_der(&self) -> &[u8]; // bytes actually covered by the signature
-}
-
-pub trait CertificateParser {
-    type Certificate: CertificateView;
-    type Error: std::error::Error;
-
-    fn parse(&self, der: &[u8]) -> Result<Self::Certificate, Self::Error>;
 }

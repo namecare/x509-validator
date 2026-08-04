@@ -187,6 +187,11 @@ mod tests {
         type Name = FakeName;
         type Extensions = FakeExtensions;
         type PublicKeyInfo = FakePublicKeyInfo;
+        type Error = std::io::Error;
+
+        fn from_der(_der: &[u8]) -> Result<Self, Self::Error> {
+            Err(std::io::Error::other("FakeCertificate does not support from_der"))
+        }
 
         fn subject(&self) -> &Self::Name {
             &self.subject

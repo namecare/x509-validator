@@ -13,13 +13,27 @@ fn subject_key<C: CertificateView>(certificate: &C) -> Vec<u8> {
     certificate.subject().canonical_der().to_vec()
 }
 
-pub struct Verifier<'a, C: CertificateView, P> {
+/// Parses each DER-encoded certificate in `der` via `C::from_der` and
+/// collects the results into a `CertificateStore`. Fails on the first
+/// certificate that doesn't parse, since a malformed intermediate makes the
+/// rest of the supplied set untrustworthy as a chain-building input.
+fn parse_certificate_store<C: CertificateView + Clone>(der: &[Vec<u8>]) -> Result<CertificateStore<C>, PolicyFailureReason> {
+    let mut store = CertificateStore::new();
+    for bytes in der {
+        let certificate = C::from_der(bytes)
+            .map_err(|_| PolicyFailureReason::new("failed to parse certificate DER"))?;
+        store.append(certificate);
+    }
+    Ok(store)
+}
+
+pub struct BaseVerifier<'a, C: CertificateView, P> {
     root_certificates: CertificateStore<C>,
     crypto: &'a CryptoProvider,
     policy: P,
 }
 
-impl<'a, C, P> Verifier<'a, C, P>
+impl<'a, C, P> BaseVerifier<'a, C, P>
 where
     C: CertificateView + Clone + PartialEq,
     P: VerifierPolicy<C>,
@@ -44,9 +58,13 @@ where
     pub fn validate(
         &mut self,
         leaf: &C,
-        intermediates: &CertificateStore<C>,
+        intermediates: &[Vec<u8>],
     ) -> ChainValidationResult<C, Vec<PolicyFailureReason>> {
-        self.validate_with_diagnostics(leaf, intermediates, &mut |_: VerificationDiagnostic<C>| {})
+        let store = match parse_certificate_store(intermediates) {
+            Ok(store) => store,
+            Err(reason) => return ChainValidationResult::CouldNotValidate(vec![reason]),
+        };
+        self.validate_with_diagnostics(leaf, &store, &mut |_: VerificationDiagnostic<C>| {})
     }
 
     /// Same as `validate`, but calls `diagnostic_callback` with progress and
@@ -167,27 +185,6 @@ where
             reasons: policy_failures.clone(),
         });
         ChainValidationResult::CouldNotValidate(policy_failures)
-    }
-}
-
-impl<'a, C, P> x509_validator_core::Verifier<C, Vec<PolicyFailureReason>> for Verifier<'a, C, P>
-where
-    C: CertificateView + Clone + PartialEq,
-    P: VerifierPolicy<C> + Default,
-{
-    /// Constructs a verifier with a default policy and a default crypto
-    /// backend. Callers who need a specific policy or crypto backend should
-    /// use `with_policy_and_backend` instead.
-    fn new(root_certificates: CertificateStore<C>) -> Self {
-        Self::with_policy_and_backend(root_certificates, P::default(), CryptoProvider::default_backend())
-    }
-
-    fn validate(
-        &mut self,
-        leaf: &C,
-        intermediates: &CertificateStore<C>,
-    ) -> ChainValidationResult<C, Vec<PolicyFailureReason>> {
-        Verifier::validate(self, leaf, intermediates)
     }
 }
 
@@ -325,7 +322,7 @@ fn same_certificate_identity<C: CertificateView>(a: &C, b: &C) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::crypto::{CryptoError, Digest, SignatureVerifier};
+    use crate::crypto::{CryptoError, Digest, KeyProvider, PublicKey};
     use crate::policy::{PolicyFailureReason, VerifierPolicy};
     use x509_validator_core::{
         AuthorityKeyIdentifier, BasicConstraints, ExtensionsView, GeneralNameKind, NameConstraints, NameView, Oid,
@@ -428,6 +425,11 @@ mod tests {
         type Name = FakeName;
         type Extensions = FakeExtensions;
         type PublicKeyInfo = FakePublicKeyInfo;
+        type Error = std::io::Error;
+
+        fn from_der(_der: &[u8]) -> Result<Self, Self::Error> {
+            Err(std::io::Error::other("FakeCertificate does not support from_der"))
+        }
 
         fn subject(&self) -> &Self::Name {
             &self.subject
@@ -482,10 +484,22 @@ mod tests {
     // ---- Fake CryptoProvider wiring ----
 
     #[derive(Debug)]
-    struct AlwaysValidVerifier;
-    impl SignatureVerifier for AlwaysValidVerifier {
-        fn verify(&self, _public_key_der: &[u8], _message: &[u8], _signature: &[u8]) -> Result<(), CryptoError> {
+    struct AlwaysValidKey;
+    impl PublicKey for AlwaysValidKey {
+        fn is_valid(&self, _signature: &[u8], _message: &[u8]) -> Result<(), CryptoError> {
             Ok(())
+        }
+    }
+
+    #[derive(Debug)]
+    struct AlwaysValidKeyProvider;
+    impl KeyProvider for AlwaysValidKeyProvider {
+        fn public_key(
+            &self,
+            _algorithm: SignatureAlgorithmId,
+            _public_key_der: &[u8],
+        ) -> Result<Box<dyn PublicKey>, CryptoError> {
+            Ok(Box::new(AlwaysValidKey))
         }
     }
 
@@ -493,13 +507,28 @@ mod tests {
     /// of a fixed set of "bad" keys; otherwise succeeds. Lets tests mark a
     /// specific candidate as having a non-verifying signature.
     #[derive(Debug)]
-    struct RejectKeysVerifier {
+    struct RejectKeysProvider {
         bad_keys: &'static [&'static str],
     }
-    impl SignatureVerifier for RejectKeysVerifier {
-        fn verify(&self, public_key_der: &[u8], _message: &[u8], _signature: &[u8]) -> Result<(), CryptoError> {
-            let key = std::str::from_utf8(public_key_der).unwrap_or("");
-            if self.bad_keys.contains(&key) {
+    impl KeyProvider for RejectKeysProvider {
+        fn public_key(
+            &self,
+            _algorithm: SignatureAlgorithmId,
+            public_key_der: &[u8],
+        ) -> Result<Box<dyn PublicKey>, CryptoError> {
+            let key = std::str::from_utf8(public_key_der).unwrap_or("").to_string();
+            let rejected = self.bad_keys.contains(&key.as_str());
+            Ok(Box::new(RejectKeysKey { rejected }))
+        }
+    }
+
+    #[derive(Debug)]
+    struct RejectKeysKey {
+        rejected: bool,
+    }
+    impl PublicKey for RejectKeysKey {
+        fn is_valid(&self, _signature: &[u8], _message: &[u8]) -> Result<(), CryptoError> {
+            if self.rejected {
                 Err(CryptoError::VerificationFailed)
             } else {
                 Ok(())
@@ -515,31 +544,23 @@ mod tests {
         }
     }
 
-    static ALWAYS_VALID: AlwaysValidVerifier = AlwaysValidVerifier;
+    static ALWAYS_VALID_KEY_PROVIDER: AlwaysValidKeyProvider = AlwaysValidKeyProvider;
     static FAKE_DIGEST: FakeDigest = FakeDigest;
 
     fn always_valid_crypto() -> CryptoProvider {
         CryptoProvider {
-            p256: &ALWAYS_VALID,
-            p384: &ALWAYS_VALID,
-            p521: &ALWAYS_VALID,
-            rsa: &ALWAYS_VALID,
-            ed25519: &ALWAYS_VALID,
+            key_provider: &ALWAYS_VALID_KEY_PROVIDER,
             sha256: &FAKE_DIGEST,
         }
     }
 
-    static REJECT_INTERMEDIATE: RejectKeysVerifier = RejectKeysVerifier {
+    static REJECT_INTERMEDIATE: RejectKeysProvider = RejectKeysProvider {
         bad_keys: &["intermediate-key"],
     };
 
     fn rejecting_crypto() -> CryptoProvider {
         CryptoProvider {
-            p256: &REJECT_INTERMEDIATE,
-            p384: &REJECT_INTERMEDIATE,
-            p521: &REJECT_INTERMEDIATE,
-            rsa: &REJECT_INTERMEDIATE,
-            ed25519: &REJECT_INTERMEDIATE,
+            key_provider: &REJECT_INTERMEDIATE,
             sha256: &FAKE_DIGEST,
         }
     }
@@ -568,9 +589,9 @@ mod tests {
         let roots = CertificateStore::from_iter(vec![root.clone()]);
         let intermediates = CertificateStore::from_iter(vec![intermediate.clone()]);
         let crypto = always_valid_crypto();
-        let mut verifier = Verifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &crypto);
+        let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &crypto);
 
-        let result = verifier.validate(&leaf, &intermediates);
+        let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
         match result {
             ChainValidationResult::ValidCertificate(chain) => {
                 let certs: Vec<&FakeCertificate> = chain.iter().collect();
@@ -591,9 +612,9 @@ mod tests {
         let roots: CertificateStore<FakeCertificate> = CertificateStore::new();
         let intermediates: CertificateStore<FakeCertificate> = CertificateStore::new();
         let crypto = always_valid_crypto();
-        let mut verifier = Verifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &crypto);
+        let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &crypto);
 
-        let result = verifier.validate(&leaf, &intermediates);
+        let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
         assert!(matches!(result, ChainValidationResult::CouldNotValidate(_)));
     }
 
@@ -603,9 +624,9 @@ mod tests {
         let roots = CertificateStore::from_iter(vec![leaf.clone()]);
         let intermediates: CertificateStore<FakeCertificate> = CertificateStore::new();
         let crypto = always_valid_crypto();
-        let mut verifier = Verifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &crypto);
+        let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &crypto);
 
-        let result = verifier.validate(&leaf, &intermediates);
+        let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
         match result {
             ChainValidationResult::ValidCertificate(chain) => {
                 let certs: Vec<&FakeCertificate> = chain.iter().collect();
@@ -632,9 +653,9 @@ mod tests {
         let roots = CertificateStore::from_iter(vec![root]);
         let intermediates = CertificateStore::from_iter(vec![intermediate]);
         let crypto = rejecting_crypto();
-        let mut verifier = Verifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &crypto);
+        let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &crypto);
 
-        let result = verifier.validate(&leaf, &intermediates);
+        let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
         assert!(matches!(result, ChainValidationResult::CouldNotValidate(_)));
     }
 
@@ -651,12 +672,12 @@ mod tests {
         let mut intermediates = CertificateStore::new();
         intermediates.append(self_signed);
         let crypto = always_valid_crypto();
-        let mut verifier = Verifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &crypto);
+        let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &crypto);
 
         // Leaf's issuer matches the self-referential intermediate's subject.
         let leaf = make_cert("leaf", "only", "leaf-key");
 
-        let result = verifier.validate(&leaf, &intermediates);
+        let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
         // No root present, so this cannot validate — the important
         // assertion is that this call returns at all (proving the DFS
         // terminates) rather than hanging.
@@ -672,9 +693,9 @@ mod tests {
         let roots = CertificateStore::from_iter(vec![root]);
         let intermediates: CertificateStore<FakeCertificate> = CertificateStore::new();
         let crypto = always_valid_crypto();
-        let mut verifier = Verifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &crypto);
+        let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &crypto);
 
-        let result = verifier.validate(&leaf, &intermediates);
+        let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
         match result {
             ChainValidationResult::CouldNotValidate(reasons) => {
                 assert_eq!(reasons.len(), 1);
@@ -692,9 +713,9 @@ mod tests {
         let roots = CertificateStore::from_iter(vec![root]);
         let intermediates: CertificateStore<FakeCertificate> = CertificateStore::new();
         let crypto = always_valid_crypto();
-        let mut verifier = Verifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &crypto);
+        let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &crypto);
 
-        let result = verifier.validate(&leaf, &intermediates);
+        let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
         assert!(matches!(result, ChainValidationResult::CouldNotValidate(_)));
     }
 
@@ -735,9 +756,9 @@ mod tests {
                 }
             }
         }
-        let mut verifier = Verifier::with_policy_and_backend(roots, RequireRootKeyPolicy, &crypto);
+        let mut verifier = BaseVerifier::with_policy_and_backend(roots, RequireRootKeyPolicy, &crypto);
 
-        let result = verifier.validate(&leaf, &intermediates);
+        let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
         match result {
             ChainValidationResult::ValidCertificate(chain) => {
                 assert_eq!(chain.root().public_key.0, b"right-root-key");
