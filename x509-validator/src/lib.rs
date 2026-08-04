@@ -21,6 +21,7 @@ pub mod server_identity_policy;
 pub mod all_of_policies;
 pub mod any_policy;
 pub mod one_of_policies;
+pub mod store;
 
 pub use policy::*;
 pub use diagnostic::*;
