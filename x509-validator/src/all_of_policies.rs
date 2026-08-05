@@ -1,5 +1,5 @@
 use crate::policy::{PolicyEvaluationResult, VerifierPolicy};
-use x509_validator_core::{CertificateView, Oid};
+use x509_parser::der_parser::Oid;
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
 
 /// Use this to build a policy where all of the sub-policies must be met for the overall policy to be met.
@@ -15,12 +15,12 @@ impl<P> AllOfPolicies<P> {
     }
 }
 
-impl<C: CertificateView, P: VerifierPolicy<C>> VerifierPolicy<C> for AllOfPolicies<P> {
-    fn verifying_critical_extensions(&self) -> Vec<Oid> {
+impl<P: VerifierPolicy> VerifierPolicy for AllOfPolicies<P> {
+    fn verifying_critical_extensions(&self) -> Vec<Oid<'static>> {
         self.policy.verifying_critical_extensions()
     }
 
-    fn chain_meets_policy_requirements(&mut self, chain: &UnverifiedCertificateChain<C>) -> PolicyEvaluationResult {
+    fn chain_meets_policy_requirements(&mut self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
         self.policy.chain_meets_policy_requirements(chain)
     }
 }

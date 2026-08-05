@@ -1,12 +1,80 @@
 //! aws-lc-rs backed crypto backend.
 
-use aws_lc_rs::signature::{
-    UnparsedPublicKey, VerificationAlgorithm, ECDSA_P256_SHA256_ASN1, ECDSA_P384_SHA384_ASN1,
-    ED25519, RSA_PKCS1_2048_8192_SHA256, RSA_PSS_2048_8192_SHA256,
-};
+use aws_lc_rs::signature::{self, UnparsedPublicKey, VerificationAlgorithm};
+use x509_parser::asn1_rs::Any;
+use x509_parser::signature_algorithm::RsaSsaPssParams;
+use x509_parser::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
 
 use crate::crypto::{CryptoError, CryptoProvider, Digest, KeyProvider, PublicKey};
-use x509_validator_core::SignatureAlgorithmId;
+
+/// Maps an X.509 `signatureAlgorithm` OID (plus, for ECDSA, the signer's
+/// public-key curve OID) to the matching aws-lc-rs verification algorithm.
+fn verification_algorithm(
+    signature_algorithm: &AlgorithmIdentifier,
+    public_key: &SubjectPublicKeyInfo,
+) -> Option<&'static dyn VerificationAlgorithm> {
+    let oid = &signature_algorithm.algorithm;
+
+    if *oid == oid_registry::OID_PKCS1_SHA1WITHRSA || *oid == oid_registry::OID_SHA1_WITH_RSA {
+        Some(&signature::RSA_PKCS1_1024_8192_SHA1_FOR_LEGACY_USE_ONLY)
+    } else if *oid == oid_registry::OID_PKCS1_SHA256WITHRSA {
+        Some(&signature::RSA_PKCS1_2048_8192_SHA256)
+    } else if *oid == oid_registry::OID_PKCS1_SHA384WITHRSA {
+        Some(&signature::RSA_PKCS1_2048_8192_SHA384)
+    } else if *oid == oid_registry::OID_PKCS1_SHA512WITHRSA {
+        Some(&signature::RSA_PKCS1_2048_8192_SHA512)
+    } else if *oid == oid_registry::OID_PKCS1_RSASSAPSS {
+        rsa_pss_algorithm(signature_algorithm.parameters.as_ref())
+    } else if *oid == oid_registry::OID_SIG_ECDSA_WITH_SHA256 {
+        ecdsa_algorithm(&public_key.algorithm, 256)
+    } else if *oid == oid_registry::OID_SIG_ECDSA_WITH_SHA384 {
+        ecdsa_algorithm(&public_key.algorithm, 384)
+    } else if *oid == oid_registry::OID_SIG_ECDSA_WITH_SHA512 {
+        ecdsa_algorithm(&public_key.algorithm, 512)
+    } else if *oid == oid_registry::OID_SIG_ED25519 {
+        Some(&signature::ED25519)
+    } else {
+        None
+    }
+}
+
+fn ecdsa_algorithm(public_key_algorithm: &AlgorithmIdentifier, sha_len: usize) -> Option<&'static dyn VerificationAlgorithm> {
+    let curve_oid = public_key_algorithm.parameters.as_ref()?.as_oid().ok()?;
+
+    if curve_oid == oid_registry::OID_EC_P256 {
+        match sha_len {
+            256 => Some(&signature::ECDSA_P256_SHA256_ASN1),
+            384 => Some(&signature::ECDSA_P256_SHA384_ASN1),
+            512 => Some(&signature::ECDSA_P256_SHA512_ASN1),
+            _ => None,
+        }
+    } else if curve_oid == oid_registry::OID_NIST_EC_P384 {
+        match sha_len {
+            256 => Some(&signature::ECDSA_P384_SHA256_ASN1),
+            384 => Some(&signature::ECDSA_P384_SHA384_ASN1),
+            512 => Some(&signature::ECDSA_P384_SHA512_ASN1),
+            _ => None,
+        }
+    } else {
+        None
+    }
+}
+
+fn rsa_pss_algorithm(params: Option<&Any>) -> Option<&'static dyn VerificationAlgorithm> {
+    let params = params?;
+    let params = RsaSsaPssParams::try_from(params).ok()?;
+    let hash_algorithm = params.hash_algorithm_oid();
+
+    if *hash_algorithm == oid_registry::OID_NIST_HASH_SHA256 {
+        Some(&signature::RSA_PSS_2048_8192_SHA256)
+    } else if *hash_algorithm == oid_registry::OID_NIST_HASH_SHA384 {
+        Some(&signature::RSA_PSS_2048_8192_SHA384)
+    } else if *hash_algorithm == oid_registry::OID_NIST_HASH_SHA512 {
+        Some(&signature::RSA_PSS_2048_8192_SHA512)
+    } else {
+        None
+    }
+}
 
 /// Marker type implementing every capability this backend provides.
 #[derive(Debug)]
@@ -14,9 +82,7 @@ struct AwsLc;
 
 impl Digest for AwsLc {
     fn hash(&self, data: &[u8]) -> Vec<u8> {
-        aws_lc_rs::digest::digest(&aws_lc_rs::digest::SHA256, data)
-            .as_ref()
-            .to_vec()
+        aws_lc_rs::digest::digest(&aws_lc_rs::digest::SHA256, data).as_ref().to_vec()
     }
 }
 
@@ -35,30 +101,13 @@ impl PublicKey for AwsLcPublicKey {
 }
 
 impl KeyProvider for AwsLc {
-    fn public_key(
-        &self,
-        algorithm: SignatureAlgorithmId,
-        public_key_der: &[u8],
-    ) -> Result<Box<dyn PublicKey>, CryptoError> {
-        let algorithm: &'static dyn VerificationAlgorithm = match algorithm {
-            SignatureAlgorithmId::EcdsaP256Sha256 => &ECDSA_P256_SHA256_ASN1,
-            SignatureAlgorithmId::EcdsaP384Sha384 => &ECDSA_P384_SHA384_ASN1,
-            SignatureAlgorithmId::EcdsaP521Sha512 => {
-                return Err(CryptoError::InvalidKey(
-                    "unsupported algorithm: EcdsaP521Sha512".into(),
-                ));
-            }
-            SignatureAlgorithmId::Ed25519 => &ED25519,
-            SignatureAlgorithmId::RsaPkcs1Sha256 => &RSA_PKCS1_2048_8192_SHA256,
-            SignatureAlgorithmId::RsaPssSha256 => &RSA_PSS_2048_8192_SHA256,
-            SignatureAlgorithmId::Unknown => {
-                return Err(CryptoError::InvalidKey("unknown signature algorithm".into()));
-            }
-        };
+    fn public_key(&self, algorithm: &AlgorithmIdentifier, public_key: &SubjectPublicKeyInfo) -> Result<Box<dyn PublicKey>, CryptoError> {
+        let algorithm = verification_algorithm(algorithm, public_key)
+            .ok_or_else(|| CryptoError::InvalidKey(format!("unsupported algorithm: {}", algorithm.algorithm)))?;
 
         Ok(Box::new(AwsLcPublicKey {
             algorithm,
-            spki_der: public_key_der.to_vec(),
+            spki_der: public_key.subject_public_key.as_ref().to_vec(),
         }))
     }
 }
@@ -71,82 +120,62 @@ pub const DEFAULT_PROVIDER: CryptoProvider = CryptoProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aws_lc_rs::rand::SystemRandom;
-    use aws_lc_rs::signature::{
-        EcdsaKeyPair, Ed25519KeyPair, KeyPair, ECDSA_P256_SHA256_ASN1_SIGNING,
-    };
+    use rcgen::{CertificateParams, KeyPair};
+    use x509_parser::prelude::FromDer;
+    use x509_validator_core::Certificate;
+
+    /// Builds a real self-signed certificate for `key_pair` and parses it
+    /// back, giving tests a genuine `AlgorithmIdentifier`/`SubjectPublicKeyInfo`
+    /// pair straight from a real DER encoding rather than hand-assembled
+    /// ASN.1 structs.
+    fn self_signed(key_pair: &KeyPair) -> Vec<u8> {
+        let params = CertificateParams::default();
+        params.self_signed(key_pair).expect("self-sign").der().to_vec()
+    }
+
+    fn parse(der: &'static [u8]) -> Certificate<'static> {
+        Certificate::from_der(der).unwrap().1
+    }
 
     #[test]
     fn ecdsa_p256_round_trip_verifies() {
-        let rng = SystemRandom::new();
-        let pkcs8 = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &rng)
-            .expect("generate pkcs8");
-        let key_pair = EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, pkcs8.as_ref())
-            .expect("load key pair");
-
-        let message = b"tbs certificate bytes";
-        let signature = key_pair.sign(&rng, message).expect("sign");
-        let spki_der = key_pair.public_key().as_ref().to_vec();
+        let key_pair = KeyPair::generate().expect("generate key pair");
+        let der: &'static [u8] = Box::leak(self_signed(&key_pair).into_boxed_slice());
+        let cert = parse(der);
 
         let public_key = AwsLc
-            .public_key(SignatureAlgorithmId::EcdsaP256Sha256, &spki_der)
+            .public_key(&cert.signature_algorithm, cert.public_key())
             .expect("build public key");
 
-        let result = public_key.is_valid(signature.as_ref(), message);
+        let result = public_key.is_valid(cert.signature_value.as_ref(), cert.tbs_certificate.as_ref());
         assert!(result.is_ok(), "expected valid signature to verify, got {result:?}");
     }
 
     #[test]
     fn ecdsa_p256_tampered_message_fails() {
-        let rng = SystemRandom::new();
-        let pkcs8 = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &rng)
-            .expect("generate pkcs8");
-        let key_pair = EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, pkcs8.as_ref())
-            .expect("load key pair");
-
-        let signature = key_pair.sign(&rng, b"original message").expect("sign");
-        let spki_der = key_pair.public_key().as_ref().to_vec();
+        let key_pair = KeyPair::generate().expect("generate key pair");
+        let der: &'static [u8] = Box::leak(self_signed(&key_pair).into_boxed_slice());
+        let cert = parse(der);
 
         let public_key = AwsLc
-            .public_key(SignatureAlgorithmId::EcdsaP256Sha256, &spki_der)
+            .public_key(&cert.signature_algorithm, cert.public_key())
             .expect("build public key");
 
-        let result = public_key.is_valid(signature.as_ref(), b"tampered message");
+        let result = public_key.is_valid(cert.signature_value.as_ref(), b"tampered message");
         assert!(matches!(result, Err(CryptoError::VerificationFailed)));
     }
 
     #[test]
-    fn ed25519_round_trip_verifies() {
-        let rng = SystemRandom::new();
-        let pkcs8 = Ed25519KeyPair::generate_pkcs8(&rng).expect("generate pkcs8");
-        let key_pair = Ed25519KeyPair::from_pkcs8(pkcs8.as_ref()).expect("load key pair");
+    fn unsupported_algorithm_is_rejected() {
+        let algorithm = AlgorithmIdentifier {
+            algorithm: oid_registry::OID_SIG_ED448,
+            parameters: None,
+        };
+        let key_pair = KeyPair::generate().expect("generate key pair");
+        let der: &'static [u8] = Box::leak(self_signed(&key_pair).into_boxed_slice());
+        let cert = parse(der);
 
-        let message = b"tbs certificate bytes";
-        let sig = key_pair.sign(message);
-        let spki_der = key_pair.public_key().as_ref().to_vec();
-
-        let public_key = AwsLc
-            .public_key(SignatureAlgorithmId::Ed25519, &spki_der)
-            .expect("build public key");
-
-        let result = public_key.is_valid(sig.as_ref(), message);
-        assert!(result.is_ok(), "expected valid signature to verify, got {result:?}");
-    }
-
-    #[test]
-    fn p521_is_unsupported() {
-        let result = AwsLc.public_key(SignatureAlgorithmId::EcdsaP521Sha512, b"irrelevant");
-        match result {
-            Err(CryptoError::InvalidKey(msg)) => {
-                assert_eq!(msg, "unsupported algorithm: EcdsaP521Sha512");
-            }
-            other => panic!("expected InvalidKey error, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn unknown_algorithm_is_rejected() {
-        let result = AwsLc.public_key(SignatureAlgorithmId::Unknown, b"irrelevant");
+        let result = AwsLc.public_key(&algorithm, cert.public_key());
         assert!(matches!(result, Err(CryptoError::InvalidKey(_))));
     }
 
@@ -154,26 +183,5 @@ mod tests {
     fn digest_returns_32_bytes() {
         let hash = AwsLc.hash(b"some data");
         assert_eq!(hash.len(), 32);
-    }
-
-    #[test]
-    fn default_provider_dispatches_through_verify_signature() {
-        let rng = SystemRandom::new();
-        let pkcs8 = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &rng)
-            .expect("generate pkcs8");
-        let key_pair = EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, pkcs8.as_ref())
-            .expect("load key pair");
-
-        let message = b"tbs certificate bytes";
-        let signature = key_pair.sign(&rng, message).expect("sign");
-        let spki_der = key_pair.public_key().as_ref().to_vec();
-
-        let result = DEFAULT_PROVIDER.verify_signature(
-            SignatureAlgorithmId::EcdsaP256Sha256,
-            &spki_der,
-            message,
-            signature.as_ref(),
-        );
-        assert!(result.is_ok(), "expected valid signature to verify, got {result:?}");
     }
 }

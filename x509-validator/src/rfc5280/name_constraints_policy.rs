@@ -1,10 +1,12 @@
-use x509_validator_core::{CertificateView, ExtensionsView, GeneralNameKind, NameView, Oid};
-use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
 use crate::{VerifierPolicy, PolicyEvaluationResult, PolicyFailureReason};
+use x509_parser::der_parser::Oid;
+use x509_parser::extensions::{GeneralName, GeneralSubtree};
+use x509_parser::oid_registry::OID_X509_EXT_NAME_CONSTRAINTS;
+use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
 
 /// id-ce-nameConstraints, RFC 5280 §4.2.1.10: 2.5.29.30.
-fn name_constraints_oid() -> Oid {
-    Oid(vec![0x55, 0x1D, 0x1E])
+fn name_constraints_oid() -> Oid<'static> {
+    OID_X509_EXT_NAME_CONSTRAINTS
 }
 
 /// A sub-policy of `RFC5280Policy` that polices the nameConstraints
@@ -28,12 +30,12 @@ fn name_constraints_oid() -> Oid {
 /// constraints are enforced against itself.
 pub struct NameConstraintsPolicy;
 
-impl<C: CertificateView> VerifierPolicy<C> for NameConstraintsPolicy {
-    fn verifying_critical_extensions(&self) -> Vec<Oid> {
+impl VerifierPolicy for NameConstraintsPolicy {
+    fn verifying_critical_extensions(&self) -> Vec<Oid<'static>> {
         vec![name_constraints_oid()]
     }
 
-    fn chain_meets_policy_requirements(&mut self, chain: &UnverifiedCertificateChain<C>) -> PolicyEvaluationResult {
+    fn chain_meets_policy_requirements(&mut self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
         if chain.len() == 1 {
             // A lone self-signed certificate briefly acts as its own
             // issuer, so its own constraints are enforced against itself.
@@ -59,26 +61,31 @@ impl NameConstraintsPolicy {
     /// `chain` at each of `subject_indices` — i.e. every certificate
     /// `issuer` issued, directly or transitively, in leaf-first ordering
     /// (or, in the single-certificate case, the certificate itself).
-    fn validate_name_constraints<C: CertificateView>(
-        chain: &UnverifiedCertificateChain<C>,
-        issuer: &C,
+    fn validate_name_constraints(
+        chain: &UnverifiedCertificateChain,
+        issuer: &x509_validator_core::Certificate,
         subject_indices: &[usize],
     ) -> PolicyEvaluationResult {
         let constraints = issuer
-            .extensions()
+            .tbs_certificate
             .name_constraints()
             .map_err(|error| PolicyFailureReason::new(format!("unable to decode name constraints from {:?}: {}", issuer, error)))?;
 
         let Some(constraints) = constraints else {
             return Ok(());
         };
+        let constraints = &constraints.value;
 
         for &i in subject_indices {
             let cert = &chain[i];
 
             for name in Self::names(cert) {
-                Self::validate_permitted_subtrees(&constraints.permitted_subtrees, &name)?;
-                Self::validate_excluded_subtrees(&constraints.excluded_subtrees, &name)?;
+                if let Some(permitted) = &constraints.permitted_subtrees {
+                    Self::validate_permitted_subtrees(permitted, &name)?;
+                }
+                if let Some(excluded) = &constraints.excluded_subtrees {
+                    Self::validate_excluded_subtrees(excluded, &name)?;
+                }
             }
         }
 
@@ -88,33 +95,37 @@ impl NameConstraintsPolicy {
     /// The unified name sequence a certificate presents for constraint
     /// checking: the subject distinguished name (as a directoryName), then
     /// every subjectAltName entry.
-    fn names<C: CertificateView>(cert: &C) -> Vec<(GeneralNameKind, Vec<u8>)> {
-        cert.subject().general_names()
+    fn names<'a>(cert: &'a x509_validator_core::Certificate<'a>) -> Vec<GeneralName<'a>> {
+        let mut names = vec![GeneralName::DirectoryName(cert.subject().clone())];
+        if let Ok(Some(san)) = cert.tbs_certificate.subject_alternative_name() {
+            names.extend(san.value.general_names.iter().cloned());
+        }
+        names
     }
 
-    fn validate_excluded_subtrees(
-        excluded_subtrees: &[(GeneralNameKind, Vec<u8>)],
-        name: &(GeneralNameKind, Vec<u8>),
-    ) -> PolicyEvaluationResult {
-        let (name_kind, name_value) = name;
+    fn validate_excluded_subtrees(excluded_subtrees: &[GeneralSubtree], name: &GeneralName) -> PolicyEvaluationResult {
+        for subtree in excluded_subtrees {
+            let constraint = &subtree.base;
 
-        for (constraint_kind, constraint_value) in excluded_subtrees {
-            if *constraint_kind == GeneralNameKind::DirectoryName && *name_kind == GeneralNameKind::DirectoryName {
+            if matches!(constraint, GeneralName::DirectoryName(_)) && matches!(name, GeneralName::DirectoryName(_)) {
                 return Err(PolicyFailureReason::new("directoryName name constraints are not supported"));
             }
 
-            if constraint_kind != name_kind {
-                continue;
-            }
-
-            let matched = match constraint_kind {
-                GeneralNameKind::DnsName => Self::dns_name_matches_constraint(name_value, constraint_value),
-                GeneralNameKind::IpAddress => Self::ip_address_matches_constraint(name_value, constraint_value),
-                GeneralNameKind::UniformResourceIdentifier => Self::uri_name_matches_constraint(name_value, constraint_value),
-                GeneralNameKind::DirectoryName => unreachable!("handled above"),
-                GeneralNameKind::Other => {
+            let matched = match (name, constraint) {
+                (GeneralName::DNSName(name_value), GeneralName::DNSName(constraint_value)) => {
+                    Self::dns_name_matches_constraint(name_value.as_bytes(), constraint_value.as_bytes())
+                }
+                (GeneralName::IPAddress(name_value), GeneralName::IPAddress(constraint_value)) => {
+                    Self::ip_address_matches_constraint(name_value, constraint_value)
+                }
+                (GeneralName::URI(name_value), GeneralName::URI(constraint_value)) => {
+                    Self::uri_name_matches_constraint(name_value.as_bytes(), constraint_value.as_bytes())
+                }
+                (GeneralName::DirectoryName(_), GeneralName::DirectoryName(_)) => unreachable!("handled above"),
+                (n, c) if std::mem::discriminant(n) == std::mem::discriminant(c) => {
                     return Err(PolicyFailureReason::new("unable to validate excluded subtree, unsupported constraint kind"));
                 }
+                _ => continue,
             };
 
             if matched {
@@ -125,39 +136,34 @@ impl NameConstraintsPolicy {
         Ok(())
     }
 
-    fn validate_permitted_subtrees(
-        permitted_subtrees: &[(GeneralNameKind, Vec<u8>)],
-        name: &(GeneralNameKind, Vec<u8>),
-    ) -> PolicyEvaluationResult {
-        let (name_kind, name_value) = name;
+    fn validate_permitted_subtrees(permitted_subtrees: &[GeneralSubtree], name: &GeneralName) -> PolicyEvaluationResult {
         let mut evaluated_at_least_one_constraint = false;
 
-        for (constraint_kind, constraint_value) in permitted_subtrees {
-            if *constraint_kind == GeneralNameKind::DirectoryName && *name_kind == GeneralNameKind::DirectoryName {
+        for subtree in permitted_subtrees {
+            let constraint = &subtree.base;
+
+            if matches!(constraint, GeneralName::DirectoryName(_)) && matches!(name, GeneralName::DirectoryName(_)) {
                 return Err(PolicyFailureReason::new("directoryName name constraints are not supported"));
             }
 
-            if constraint_kind != name_kind {
-                continue;
-            }
-
-            let matched = match constraint_kind {
-                GeneralNameKind::DnsName => {
+            let matched = match (name, constraint) {
+                (GeneralName::DNSName(name_value), GeneralName::DNSName(constraint_value)) => {
                     evaluated_at_least_one_constraint = true;
-                    Self::dns_name_matches_constraint(name_value, constraint_value)
+                    Self::dns_name_matches_constraint(name_value.as_bytes(), constraint_value.as_bytes())
                 }
-                GeneralNameKind::IpAddress => {
+                (GeneralName::IPAddress(name_value), GeneralName::IPAddress(constraint_value)) => {
                     evaluated_at_least_one_constraint = true;
                     Self::ip_address_matches_constraint(name_value, constraint_value)
                 }
-                GeneralNameKind::UniformResourceIdentifier => {
+                (GeneralName::URI(name_value), GeneralName::URI(constraint_value)) => {
                     evaluated_at_least_one_constraint = true;
-                    Self::uri_name_matches_constraint(name_value, constraint_value)
+                    Self::uri_name_matches_constraint(name_value.as_bytes(), constraint_value.as_bytes())
                 }
-                GeneralNameKind::DirectoryName => unreachable!("handled above"),
-                GeneralNameKind::Other => {
+                (GeneralName::DirectoryName(_), GeneralName::DirectoryName(_)) => unreachable!("handled above"),
+                (n, c) if std::mem::discriminant(n) == std::mem::discriminant(c) => {
                     return Err(PolicyFailureReason::new("unable to validate permitted subtree, unsupported constraint kind"));
                 }
+                _ => continue,
             };
 
             if matched {
@@ -176,181 +182,60 @@ impl NameConstraintsPolicy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use x509_validator_core::{
-        AuthorityKeyIdentifier, BasicConstraints, NameConstraints, PublicKeyInfoView, SignatureAlgorithmId, SubjectKeyIdentifier, Timestamp,
-    };
+    use crate::test_support::{dns_subtree, issue_leaf, name_constraints, self_signed_ca_with};
+    use rcgen::CertificateParams;
+    use x509_parser::prelude::FromDer;
+    use x509_validator_core::Certificate;
 
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    struct FakeName {
-        der: Vec<u8>,
-        names: Vec<(GeneralNameKind, Vec<u8>)>,
-    }
-
-    impl NameView for FakeName {
-        fn general_names(&self) -> Vec<(GeneralNameKind, Vec<u8>)> {
-            self.names.clone()
-        }
-        fn canonical_der(&self) -> &[u8] {
-            &self.der
-        }
-        fn common_name(&self) -> Option<Vec<u8>> {
-            None
-        }
-    }
-
-    #[derive(Debug, Clone, Default)]
-    struct FakeExtensions {
-        name_constraints: Option<(Vec<(GeneralNameKind, Vec<u8>)>, Vec<(GeneralNameKind, Vec<u8>)>)>,
-    }
-
-    impl ExtensionsView for FakeExtensions {
-        type Error = std::io::Error;
-
-        fn oids(&self) -> Vec<(Oid, bool)> {
-            vec![]
-        }
-        fn bytes_for(&self, _oid: &Oid) -> Option<&[u8]> {
-            None
-        }
-        fn basic_constraints(&self) -> Result<Option<BasicConstraints>, Self::Error> {
-            Ok(None)
-        }
-        fn name_constraints(&self) -> Result<Option<NameConstraints>, Self::Error> {
-            Ok(self.name_constraints.clone().map(|(permitted, excluded)| NameConstraints {
-                permitted_subtrees: permitted,
-                excluded_subtrees: excluded,
-            }))
-        }
-        fn key_usage_present(&self) -> Result<bool, Self::Error> {
-            Ok(false)
-        }
-        fn extended_key_usage_contains_ocsp_signing(&self) -> Result<bool, Self::Error> {
-            Ok(false)
-        }
-        fn subject_alt_names(&self) -> Result<Option<Vec<(GeneralNameKind, Vec<u8>)>>, Self::Error> {
-            Ok(None)
-        }
-        fn authority_key_identifier(&self) -> Result<Option<AuthorityKeyIdentifier>, Self::Error> {
-            Ok(None)
-        }
-        fn subject_key_identifier(&self) -> Result<Option<SubjectKeyIdentifier>, Self::Error> {
-            Ok(None)
-        }
-    }
-
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    struct FakePublicKeyInfo(Vec<u8>);
-
-    impl PublicKeyInfoView for FakePublicKeyInfo {
-        fn subject_public_key_info_der(&self) -> &[u8] {
-            &self.0
-        }
-    }
-
-    #[derive(Debug, Clone)]
-    struct FakeCertificate {
-        subject: FakeName,
-        issuer: FakeName,
-        extensions: FakeExtensions,
-        public_key: FakePublicKeyInfo,
-    }
-
-    impl CertificateView for FakeCertificate {
-        type Name = FakeName;
-        type Extensions = FakeExtensions;
-        type PublicKeyInfo = FakePublicKeyInfo;
-        type Error = std::io::Error;
-
-        fn from_der(_der: &[u8]) -> Result<Self, Self::Error> {
-            Err(std::io::Error::other("FakeCertificate does not support from_der"))
-        }
-
-        fn subject(&self) -> &Self::Name {
-            &self.subject
-        }
-        fn issuer(&self) -> &Self::Name {
-            &self.issuer
-        }
-        fn is_v1(&self) -> bool {
-            false
-        }
-        fn has_extensions(&self) -> bool {
-            true
-        }
-        fn not_before(&self) -> Timestamp {
-            0
-        }
-        fn not_after(&self) -> Timestamp {
-            0
-        }
-        fn extensions(&self) -> &Self::Extensions {
-            &self.extensions
-        }
-        fn public_key_info(&self) -> &Self::PublicKeyInfo {
-            &self.public_key
-        }
-        fn signature_algorithm(&self) -> SignatureAlgorithmId {
-            SignatureAlgorithmId::EcdsaP256Sha256
-        }
-        fn signature(&self) -> &[u8] {
-            &[]
-        }
-        fn tbs_der(&self) -> &[u8] {
-            &[]
-        }
-    }
-
-    fn dns(name: &str) -> (GeneralNameKind, Vec<u8>) {
-        (GeneralNameKind::DnsName, name.as_bytes().to_vec())
-    }
-
-    fn cert(name: &str, issuer: &str, names: Vec<(GeneralNameKind, Vec<u8>)>, constraints: Option<(Vec<(GeneralNameKind, Vec<u8>)>, Vec<(GeneralNameKind, Vec<u8>)>)>) -> FakeCertificate {
-        FakeCertificate {
-            subject: FakeName {
-                der: name.as_bytes().to_vec(),
-                names,
-            },
-            issuer: FakeName {
-                der: issuer.as_bytes().to_vec(),
-                names: vec![],
-            },
-            extensions: FakeExtensions { name_constraints: constraints },
-            public_key: FakePublicKeyInfo(format!("{name}-key").into_bytes()),
-        }
+    fn chain_of(ders: Vec<Vec<u8>>) -> UnverifiedCertificateChain<'static> {
+        let certs = ders
+            .into_iter()
+            .map(|der| {
+                let der: &'static [u8] = Box::leak(der.into_boxed_slice());
+                Certificate::from_der(der).unwrap().1
+            })
+            .collect();
+        UnverifiedCertificateChain::new(certs)
     }
 
     #[test]
     fn chain_without_name_constraints_is_accepted() {
-        let leaf = cert("leaf", "root", vec![dns("www.example.com")], None);
-        let root = cert("root", "root", vec![], None);
-        let chain = UnverifiedCertificateChain::new(vec![leaf, root]);
+        let root = self_signed_ca_with("root", |_| {});
+        let leaf = issue_leaf("leaf", &["www.example.com"], &root);
+        let chain = chain_of(vec![leaf, root.der]);
         let mut policy = NameConstraintsPolicy;
         assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
     }
 
     #[test]
     fn leaf_name_in_permitted_subtree_is_accepted() {
-        let leaf = cert("leaf", "root", vec![dns("www.example.com")], None);
-        let root = cert("root", "root", vec![], Some((vec![dns("example.com")], vec![])));
-        let chain = UnverifiedCertificateChain::new(vec![leaf, root]);
+        let root = self_signed_ca_with("root", |params: &mut CertificateParams| {
+            params.name_constraints = Some(name_constraints(vec![dns_subtree("example.com")], vec![]));
+        });
+        let leaf = issue_leaf("leaf", &["www.example.com"], &root);
+        let chain = chain_of(vec![leaf, root.der]);
         let mut policy = NameConstraintsPolicy;
         assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
     }
 
     #[test]
     fn leaf_name_outside_permitted_subtree_is_rejected() {
-        let leaf = cert("leaf", "root", vec![dns("www.evil.com")], None);
-        let root = cert("root", "root", vec![], Some((vec![dns("example.com")], vec![])));
-        let chain = UnverifiedCertificateChain::new(vec![leaf, root]);
+        let root = self_signed_ca_with("root", |params: &mut CertificateParams| {
+            params.name_constraints = Some(name_constraints(vec![dns_subtree("example.com")], vec![]));
+        });
+        let leaf = issue_leaf("leaf", &["www.evil.com"], &root);
+        let chain = chain_of(vec![leaf, root.der]);
         let mut policy = NameConstraintsPolicy;
         assert!(policy.chain_meets_policy_requirements(&chain).is_err());
     }
 
     #[test]
     fn leaf_name_in_excluded_subtree_is_rejected() {
-        let leaf = cert("leaf", "root", vec![dns("www.example.com")], None);
-        let root = cert("root", "root", vec![], Some((vec![], vec![dns("example.com")])));
-        let chain = UnverifiedCertificateChain::new(vec![leaf, root]);
+        let root = self_signed_ca_with("root", |params: &mut CertificateParams| {
+            params.name_constraints = Some(name_constraints(vec![], vec![dns_subtree("example.com")]));
+        });
+        let leaf = issue_leaf("leaf", &["www.example.com"], &root);
+        let chain = chain_of(vec![leaf, root.der]);
         let mut policy = NameConstraintsPolicy;
         assert_eq!(
             policy.chain_meets_policy_requirements(&chain).unwrap_err(),
@@ -360,37 +245,36 @@ mod tests {
 
     #[test]
     fn constraints_apply_transitively_through_intermediate() {
-        let leaf = cert("leaf", "intermediate", vec![dns("www.evil.com")], None);
-        let intermediate = cert("intermediate", "root", vec![], None);
-        let root = cert("root", "root", vec![], Some((vec![dns("example.com")], vec![])));
-        let chain = UnverifiedCertificateChain::new(vec![leaf, intermediate, root]);
+        let root = self_signed_ca_with("root", |params: &mut CertificateParams| {
+            params.name_constraints = Some(name_constraints(vec![dns_subtree("example.com")], vec![]));
+        });
+        let intermediate = crate::test_support::issue_ca("intermediate", &root, None, |_| {});
+        let leaf = issue_leaf("leaf", &["www.evil.com"], &intermediate);
+        let chain = chain_of(vec![leaf, intermediate.der, root.der]);
         let mut policy = NameConstraintsPolicy;
         assert!(policy.chain_meets_policy_requirements(&chain).is_err());
     }
 
     #[test]
     fn self_signed_single_certificate_enforces_its_own_constraints() {
-        let root = cert("root", "root", vec![dns("www.evil.com")], Some((vec![dns("example.com")], vec![])));
-        let chain = UnverifiedCertificateChain::new(vec![root]);
+        let root = self_signed_ca_with("root", |params: &mut CertificateParams| {
+            params.subject_alt_names = vec![rcgen::SanType::DnsName("www.evil.com".try_into().unwrap())];
+            params.name_constraints = Some(name_constraints(vec![dns_subtree("example.com")], vec![]));
+        });
+        let chain = chain_of(vec![root.der]);
         let mut policy = NameConstraintsPolicy;
         assert!(policy.chain_meets_policy_requirements(&chain).is_err());
     }
 
     #[test]
     fn directory_name_constraint_is_rejected_outright() {
-        let leaf = cert(
-            "leaf",
-            "root",
-            vec![(GeneralNameKind::DirectoryName, b"leaf".to_vec())],
-            None,
-        );
-        let root = cert(
-            "root",
-            "root",
-            vec![],
-            Some((vec![(GeneralNameKind::DirectoryName, b"CN=example".to_vec())], vec![])),
-        );
-        let chain = UnverifiedCertificateChain::new(vec![leaf, root]);
+        let root = self_signed_ca_with("root", |params: &mut CertificateParams| {
+            let mut dn = rcgen::DistinguishedName::new();
+            dn.push(rcgen::DnType::CommonName, "example");
+            params.name_constraints = Some(name_constraints(vec![rcgen::GeneralSubtree::DirectoryName(dn)], vec![]));
+        });
+        let leaf = issue_leaf("leaf", &["www.example.com"], &root);
+        let chain = chain_of(vec![leaf, root.der]);
         let mut policy = NameConstraintsPolicy;
         assert_eq!(
             policy.chain_meets_policy_requirements(&chain).unwrap_err(),
@@ -401,7 +285,7 @@ mod tests {
     #[test]
     fn verifying_critical_extensions_includes_name_constraints_oid() {
         let policy = NameConstraintsPolicy;
-        let oids = <NameConstraintsPolicy as VerifierPolicy<FakeCertificate>>::verifying_critical_extensions(&policy);
+        let oids = policy.verifying_critical_extensions();
         assert!(oids.contains(&name_constraints_oid()));
     }
 }

@@ -1,21 +1,22 @@
-use x509_validator_core::{CertificateView, Oid};
 use crate::PolicyFailureReason;
+use x509_parser::der_parser::Oid;
+use x509_validator_core::Certificate;
 
 /// Verification progress/failure events, useful for debugging and detailed
 /// error reporting. Case names describe what happened during chain
 /// building; payloads carry the certs/OIDs/reasons involved.
 #[derive(Debug)]
-pub enum VerificationDiagnostic<C: CertificateView> {
-    LeafCertificateHasUnhandledCriticalExtension { oid: Oid },
+pub enum VerificationDiagnostic<'a> {
+    LeafCertificateHasUnhandledCriticalExtension { oid: Oid<'static> },
     LeafCertificateIsInTheRootStoreButDoesNotMeetPolicy { reason: PolicyFailureReason },
-    ChainFailsToMeetPolicy { chain: Vec<C>, reason: PolicyFailureReason },
-    IssuerHasUnhandledCriticalExtension { issuer: C, oid: Oid },
-    IssuerHasNotSignedCertificate { issuer: C, subject: C },
-    SearchingForIssuerOfPartialChain { partial_chain: Vec<C> },
-    FoundCandidateIssuersOfPartialChainInRootStore { partial_chain: Vec<C>, candidates: Vec<C> },
-    FoundCandidateIssuersOfPartialChainInIntermediateStore { partial_chain: Vec<C>, candidates: Vec<C> },
-    FoundValidCertificateChain { chain: Vec<C> },
+    ChainFailsToMeetPolicy { chain: Vec<Certificate<'a>>, reason: PolicyFailureReason },
+    IssuerHasUnhandledCriticalExtension { issuer: Certificate<'a>, oid: Oid<'static> },
+    IssuerHasNotSignedCertificate { issuer: Certificate<'a>, subject: Certificate<'a> },
+    SearchingForIssuerOfPartialChain { partial_chain: Vec<Certificate<'a>> },
+    FoundCandidateIssuersOfPartialChainInRootStore { partial_chain: Vec<Certificate<'a>>, candidates: Vec<Certificate<'a>> },
+    FoundCandidateIssuersOfPartialChainInIntermediateStore { partial_chain: Vec<Certificate<'a>>, candidates: Vec<Certificate<'a>> },
+    FoundValidCertificateChain { chain: Vec<Certificate<'a>> },
     CouldNotValidateLeafCertificate { reasons: Vec<PolicyFailureReason> },
-    IssuerIsAlreadyInTheChain { issuer: C },
+    IssuerIsAlreadyInTheChain { issuer: Certificate<'a> },
     LoadingTrustRootsFailed { reason: String },
 }
