@@ -2,7 +2,7 @@
 pub mod aws_lc;
 
 use std::fmt::Debug;
-use x509_validator_core::SignatureAlgorithmId;
+use x509_parser::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
 
 #[derive(thiserror::Error, Debug)]
 pub enum CryptoError {
@@ -16,12 +16,10 @@ pub trait PublicKey: Send + Sync + Debug {
     fn is_valid(&self, signature: &[u8], message: &[u8]) -> Result<(), CryptoError>;
 }
 
+/// Provides public keys usable for signature verification, given the
+/// signer's SPKI and the algorithm the signature to verify was made with.
 pub trait KeyProvider: Send + Sync + Debug {
-    fn public_key(
-        &self,
-        algorithm: SignatureAlgorithmId,
-        public_key_der: &[u8],
-    ) -> Result<Box<dyn PublicKey>, CryptoError>;
+    fn public_key(&self, algorithm: &AlgorithmIdentifier, public_key: &SubjectPublicKeyInfo) -> Result<Box<dyn PublicKey>, CryptoError>;
 }
 
 pub struct CryptoProvider {
@@ -33,8 +31,6 @@ pub trait Digest: Send + Sync + Debug {
     fn hash(&self, data: &[u8]) -> Vec<u8>;
 }
 
-
-
 /// A `KeyProvider`/`Digest` pair that always fails, used to populate
 /// `CryptoProvider::default_backend` until a real crypto backend is wired
 /// in. Every call reports that no backend has been configured.
@@ -42,11 +38,7 @@ pub trait Digest: Send + Sync + Debug {
 struct UnconfiguredCryptoBackend;
 
 impl KeyProvider for UnconfiguredCryptoBackend {
-    fn public_key(
-        &self,
-        _algorithm: SignatureAlgorithmId,
-        _public_key_der: &[u8],
-    ) -> Result<Box<dyn PublicKey>, CryptoError> {
+    fn public_key(&self, _algorithm: &AlgorithmIdentifier, _public_key: &SubjectPublicKeyInfo) -> Result<Box<dyn PublicKey>, CryptoError> {
         Err(CryptoError::InvalidKey("no crypto backend configured".into()))
     }
 }
@@ -74,20 +66,18 @@ impl CryptoProvider {
         &DEFAULT
     }
 
-    /// Looks up the public key for `algorithm` and checks `signature` over
-    /// `message`. This is the one crypto call site the chain-building core
-    /// uses to check a candidate issuer's signature over a certificate.
+    /// Looks up the public key for `algorithm`/`public_key` and checks
+    /// `signature` over `message`. This is the one crypto call site the
+    /// chain-building core uses to check a candidate issuer's signature
+    /// over a certificate.
     pub fn verify_signature(
         &self,
-        algorithm: SignatureAlgorithmId,
-        public_key_der: &[u8],
+        algorithm: &AlgorithmIdentifier,
+        public_key: &SubjectPublicKeyInfo,
         message: &[u8],
         signature: &[u8],
     ) -> Result<(), CryptoError> {
-        if algorithm == SignatureAlgorithmId::Unknown {
-            return Err(CryptoError::InvalidKey("unknown signature algorithm".into()));
-        }
-        let key = self.key_provider.public_key(algorithm, public_key_der)?;
+        let key = self.key_provider.public_key(algorithm, public_key)?;
         key.is_valid(signature, message)
     }
 }
@@ -95,6 +85,20 @@ impl CryptoProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rcgen::{CertificateParams, KeyPair};
+    use x509_parser::prelude::FromDer;
+    use x509_validator_core::Certificate;
+
+    /// A real self-signed certificate's `AlgorithmIdentifier` and
+    /// `SubjectPublicKeyInfo`, for tests that only need *some* valid values
+    /// of these types rather than to exercise a specific algorithm.
+    fn algorithm_and_spki() -> (AlgorithmIdentifier<'static>, SubjectPublicKeyInfo<'static>) {
+        let key_pair = KeyPair::generate().expect("generate key pair");
+        let der = CertificateParams::default().self_signed(&key_pair).expect("self-sign").der().to_vec();
+        let der: &'static [u8] = Box::leak(der.into_boxed_slice());
+        let cert = Certificate::from_der(der).unwrap().1;
+        (cert.signature_algorithm, cert.tbs_certificate.subject_pki)
+    }
 
     /// Tagged KeyProvider that returns a distinct error message from
     /// `public_key` to identify which algorithm it was dispatched for.
@@ -102,12 +106,8 @@ mod tests {
     struct TaggedKeyProvider;
 
     impl KeyProvider for TaggedKeyProvider {
-        fn public_key(
-            &self,
-            algorithm: SignatureAlgorithmId,
-            _public_key_der: &[u8],
-        ) -> Result<Box<dyn PublicKey>, CryptoError> {
-            Err(CryptoError::InvalidKey(format!("{algorithm:?}-was-called")))
+        fn public_key(&self, algorithm: &AlgorithmIdentifier, _public_key: &SubjectPublicKeyInfo) -> Result<Box<dyn PublicKey>, CryptoError> {
+            Err(CryptoError::InvalidKey(format!("{}-was-called", algorithm.algorithm)))
         }
     }
 
@@ -126,11 +126,7 @@ mod tests {
     struct FailureKeyProvider;
 
     impl KeyProvider for FailureKeyProvider {
-        fn public_key(
-            &self,
-            _algorithm: SignatureAlgorithmId,
-            _public_key_der: &[u8],
-        ) -> Result<Box<dyn PublicKey>, CryptoError> {
+        fn public_key(&self, _algorithm: &AlgorithmIdentifier, _public_key: &SubjectPublicKeyInfo) -> Result<Box<dyn PublicKey>, CryptoError> {
             Ok(Box::new(FailurePublicKey))
         }
     }
@@ -157,148 +153,30 @@ mod tests {
     }
 
     #[test]
-    fn test_verify_signature_ecdsa_p256() {
+    fn verify_signature_dispatches_by_algorithm_oid() {
         let provider = tagged_provider();
+        let (algorithm, spki) = algorithm_and_spki();
 
-        let result = provider.verify_signature(
-            SignatureAlgorithmId::EcdsaP256Sha256,
-            b"public_key",
-            b"message",
-            b"signature",
-        );
+        let result = provider.verify_signature(&algorithm, &spki, b"message", b"signature");
 
         assert!(result.is_err());
         match result {
             Err(CryptoError::InvalidKey(msg)) => {
-                assert_eq!(msg, "EcdsaP256Sha256-was-called", "Expected p256 algorithm to be dispatched to");
+                assert_eq!(msg, format!("{}-was-called", algorithm.algorithm));
             }
             _ => panic!("Expected InvalidKey error from key provider"),
         }
     }
 
     #[test]
-    fn test_verify_signature_ecdsa_p384() {
-        let provider = tagged_provider();
-
-        let result = provider.verify_signature(
-            SignatureAlgorithmId::EcdsaP384Sha384,
-            b"public_key",
-            b"message",
-            b"signature",
-        );
-
-        assert!(result.is_err());
-        match result {
-            Err(CryptoError::InvalidKey(msg)) => {
-                assert_eq!(msg, "EcdsaP384Sha384-was-called", "Expected p384 algorithm to be dispatched to");
-            }
-            _ => panic!("Expected InvalidKey error from key provider"),
-        }
-    }
-
-    #[test]
-    fn test_verify_signature_ecdsa_p521() {
-        let provider = tagged_provider();
-
-        let result = provider.verify_signature(
-            SignatureAlgorithmId::EcdsaP521Sha512,
-            b"public_key",
-            b"message",
-            b"signature",
-        );
-
-        assert!(result.is_err());
-        match result {
-            Err(CryptoError::InvalidKey(msg)) => {
-                assert_eq!(msg, "EcdsaP521Sha512-was-called", "Expected p521 algorithm to be dispatched to");
-            }
-            _ => panic!("Expected InvalidKey error from key provider"),
-        }
-    }
-
-    #[test]
-    fn test_verify_signature_ed25519() {
-        let provider = tagged_provider();
-
-        let result = provider.verify_signature(SignatureAlgorithmId::Ed25519, b"public_key", b"message", b"signature");
-
-        assert!(result.is_err());
-        match result {
-            Err(CryptoError::InvalidKey(msg)) => {
-                assert_eq!(msg, "Ed25519-was-called", "Expected ed25519 algorithm to be dispatched to");
-            }
-            _ => panic!("Expected InvalidKey error from key provider"),
-        }
-    }
-
-    #[test]
-    fn test_verify_signature_rsa_pkcs1() {
-        let provider = tagged_provider();
-
-        let result = provider.verify_signature(
-            SignatureAlgorithmId::RsaPkcs1Sha256,
-            b"public_key",
-            b"message",
-            b"signature",
-        );
-
-        assert!(result.is_err());
-        match result {
-            Err(CryptoError::InvalidKey(msg)) => {
-                assert_eq!(msg, "RsaPkcs1Sha256-was-called", "Expected rsa algorithm to be dispatched to");
-            }
-            _ => panic!("Expected InvalidKey error from key provider"),
-        }
-    }
-
-    #[test]
-    fn test_verify_signature_rsa_pss() {
-        let provider = tagged_provider();
-
-        let result = provider.verify_signature(
-            SignatureAlgorithmId::RsaPssSha256,
-            b"public_key",
-            b"message",
-            b"signature",
-        );
-
-        assert!(result.is_err());
-        match result {
-            Err(CryptoError::InvalidKey(msg)) => {
-                assert_eq!(msg, "RsaPssSha256-was-called", "Expected rsa algorithm to be dispatched to");
-            }
-            _ => panic!("Expected InvalidKey error from key provider"),
-        }
-    }
-
-    #[test]
-    fn test_verify_signature_unknown() {
-        let provider = tagged_provider();
-
-        let result = provider.verify_signature(SignatureAlgorithmId::Unknown, b"public_key", b"message", b"signature");
-
-        assert!(result.is_err());
-        match result {
-            Err(CryptoError::InvalidKey(msg)) => {
-                assert_eq!(msg, "unknown signature algorithm");
-            }
-            _ => panic!("Expected InvalidKey error"),
-        }
-    }
-
-    #[test]
-    fn test_verify_signature_verifier_fails() {
+    fn verify_signature_verifier_fails() {
         let provider = CryptoProvider {
             key_provider: &FAILURE_KEY_PROVIDER,
             sha256: &FAKE_DIGEST,
         };
+        let (algorithm, spki) = algorithm_and_spki();
 
-        let result = provider.verify_signature(
-            SignatureAlgorithmId::EcdsaP256Sha256,
-            b"public_key",
-            b"message",
-            b"signature",
-        );
+        let result = provider.verify_signature(&algorithm, &spki, b"message", b"signature");
 
         assert!(result.is_err());
         match result {

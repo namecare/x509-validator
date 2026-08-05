@@ -1,26 +1,26 @@
 use crate::policy::{PolicyEvaluationResult, PolicyFailureReason, VerifierPolicy};
-use x509_validator_core::{CertificateView, Oid};
+use x509_parser::der_parser::Oid;
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
 
 /// Use this to build a policy where any one of the sub-policies must be met for the overall
 /// policy to be met. For example, requiring either `PolicyA` or `PolicyB` to be met (but not
 /// necessarily both).
-pub struct OneOfPolicies<C: CertificateView> {
-    policies: Vec<Box<dyn VerifierPolicy<C>>>,
+pub struct OneOfPolicies {
+    policies: Vec<Box<dyn VerifierPolicy>>,
 }
 
-impl<C: CertificateView> OneOfPolicies<C> {
-    pub fn new(policies: Vec<Box<dyn VerifierPolicy<C>>>) -> Self {
+impl OneOfPolicies {
+    pub fn new(policies: Vec<Box<dyn VerifierPolicy>>) -> Self {
         Self { policies }
     }
 }
 
-impl<C: CertificateView> VerifierPolicy<C> for OneOfPolicies<C> {
+impl VerifierPolicy for OneOfPolicies {
     /// Intersection, not union: only one sub-policy's checks actually run
     /// for a given chain (the first one that meets policy, or none), so an
     /// extension is only safe to claim as handled here if every sub-policy
     /// independently understands it.
-    fn verifying_critical_extensions(&self) -> Vec<Oid> {
+    fn verifying_critical_extensions(&self) -> Vec<Oid<'static>> {
         let mut policies = self.policies.iter();
         let Some(first) = policies.next() else {
             return Vec::new();
@@ -33,7 +33,7 @@ impl<C: CertificateView> VerifierPolicy<C> for OneOfPolicies<C> {
         common
     }
 
-    fn chain_meets_policy_requirements(&mut self, chain: &UnverifiedCertificateChain<C>) -> PolicyEvaluationResult {
+    fn chain_meets_policy_requirements(&mut self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
         if self.policies.is_empty() {
             return Err(PolicyFailureReason::new("no policies specified in OneOfPolicies"));
         }

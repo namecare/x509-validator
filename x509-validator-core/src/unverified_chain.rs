@@ -1,22 +1,22 @@
-use x509_parser::certificate::X509Certificate;
+use crate::Certificate;
 
 /// Leaf-first ordered chain, not yet accepted by policy.
 #[derive(Debug, Clone)]
 pub struct UnverifiedCertificateChain<'a> {
-    certificates: Vec<X509Certificate<'a>>,
+    certificates: Vec<Certificate<'a>>,
 }
 
 impl<'a> UnverifiedCertificateChain<'a> {
-    pub fn new(certificates: Vec<X509Certificate<'a>>) -> Self {
+    pub fn new(certificates: Vec<Certificate<'a>>) -> Self {
         assert!(!certificates.is_empty(), "chain must be non-empty");
         Self { certificates }
     }
 
-    pub fn leaf(&self) -> &X509Certificate<'a> {
+    pub fn leaf(&self) -> &Certificate<'a> {
         &self.certificates[0]
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &X509Certificate<'a>> {
+    pub fn iter(&self) -> impl Iterator<Item = &Certificate<'a>> {
         self.certificates.iter()
     }
 
@@ -30,8 +30,8 @@ impl<'a> UnverifiedCertificateChain<'a> {
 }
 
 impl<'a> std::ops::Index<usize> for UnverifiedCertificateChain<'a> {
-    type Output = X509Certificate<'a>;
-    fn index(&self, i: usize) -> &X509Certificate<'a> {
+    type Output = Certificate<'a>;
+    fn index(&self, i: usize) -> &Certificate<'a> {
         &self.certificates[i]
     }
 }
