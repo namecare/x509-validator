@@ -13,3 +13,4 @@ categories = ["network-programming", "cryptography"]
 keywords = ["crypto", "x509"]
 
 [dependencies]
+x509-parser = "0.18.1"

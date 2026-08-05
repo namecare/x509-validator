@@ -1,6 +1,6 @@
 use x509_validator_core::{
-    CertificateView, ExtensionsView, GeneralNameKind, NameView, Oid, PublicKeyInfoView,
-    SignatureAlgorithmId, Timestamp,
+    CertificateView, ExtensionView, ExtensionsExt, GeneralNameKind, NameView, Oid,
+    PublicKeyInfoView, SignatureAlgorithmId, Timestamp,
 };
 
 // Minimal fake implementation for smoke testing
@@ -32,61 +32,23 @@ impl NameView for FakeName {
 }
 
 #[derive(Debug)]
-struct FakeExtensions;
-
-impl PartialEq for FakeExtensions {
-    fn eq(&self, _other: &Self) -> bool {
-        true
-    }
+struct FakeExtension {
+    oid: Oid,
+    critical: bool,
+    value: Vec<u8>,
 }
 
-impl ExtensionsView for FakeExtensions {
-    type Error = std::io::Error;
-
-    fn oids(&self) -> Vec<(Oid, bool)> {
-        vec![]
+impl ExtensionView for FakeExtension {
+    fn oid(&self) -> &Oid {
+        &self.oid
     }
 
-    fn bytes_for(&self, _oid: &Oid) -> Option<&[u8]> {
-        None
+    fn critical(&self) -> bool {
+        self.critical
     }
 
-    fn basic_constraints(
-        &self,
-    ) -> Result<Option<x509_validator_core::BasicConstraints>, Self::Error> {
-        Ok(None)
-    }
-
-    fn name_constraints(
-        &self,
-    ) -> Result<Option<x509_validator_core::NameConstraints>, Self::Error> {
-        Ok(None)
-    }
-
-    fn key_usage_present(&self) -> Result<bool, Self::Error> {
-        Ok(false)
-    }
-
-    fn extended_key_usage_contains_ocsp_signing(&self) -> Result<bool, Self::Error> {
-        Ok(false)
-    }
-
-    fn subject_alt_names(
-        &self,
-    ) -> Result<Option<Vec<(GeneralNameKind, Vec<u8>)>>, Self::Error> {
-        Ok(None)
-    }
-
-    fn authority_key_identifier(
-        &self,
-    ) -> Result<Option<x509_validator_core::AuthorityKeyIdentifier>, Self::Error> {
-        Ok(None)
-    }
-
-    fn subject_key_identifier(
-        &self,
-    ) -> Result<Option<x509_validator_core::SubjectKeyIdentifier>, Self::Error> {
-        Ok(None)
+    fn value(&self) -> &[u8] {
+        &self.value
     }
 }
 
@@ -119,16 +81,21 @@ struct FakeCertificate {
     signature_bytes: Vec<u8>,
     tbs_bytes: Vec<u8>,
     public_key: FakePublicKeyInfo,
+    extensions: Vec<FakeExtension>,
 }
 
 impl CertificateView for FakeCertificate {
     type Name = FakeName;
-    type Extensions = FakeExtensions;
+    type Extension = FakeExtension;
     type PublicKeyInfo = FakePublicKeyInfo;
     type Error = std::io::Error;
 
     fn from_der(_der: &[u8]) -> Result<Self, Self::Error> {
         Err(std::io::Error::other("FakeCertificate does not support from_der"))
+    }
+
+    fn version(&self) -> u8 {
+        2
     }
 
     fn subject(&self) -> &Self::Name {
@@ -139,14 +106,6 @@ impl CertificateView for FakeCertificate {
         &self.issuer_name
     }
 
-    fn is_v1(&self) -> bool {
-        false
-    }
-
-    fn has_extensions(&self) -> bool {
-        false
-    }
-
     fn not_before(&self) -> Timestamp {
         self.not_before
     }
@@ -155,8 +114,8 @@ impl CertificateView for FakeCertificate {
         self.not_after
     }
 
-    fn extensions(&self) -> &Self::Extensions {
-        &FakeExtensions
+    fn extensions(&self) -> &[Self::Extension] {
+        &self.extensions
     }
 
     fn public_key_info(&self) -> &Self::PublicKeyInfo {
@@ -193,11 +152,11 @@ fn smoke_test_certificate_view() {
         public_key: FakePublicKeyInfo {
             der_bytes: vec![0x30, 0x60],
         },
+        extensions: vec![],
     };
 
     // Test accessor methods
-    assert_eq!(cert.is_v1(), false);
-    assert_eq!(cert.has_extensions(), false);
+    assert_eq!(cert.version(), 2);
     assert_eq!(cert.not_before(), 1609459200);
     assert_eq!(cert.not_after(), 1640995200);
     assert_eq!(cert.signature_algorithm(), SignatureAlgorithmId::EcdsaP256Sha256);
@@ -216,7 +175,7 @@ fn smoke_test_certificate_view() {
         &vec![0x30, 0x60][..]
     );
 
-    // Test Extensions trait
-    let oids = cert.extensions().oids();
-    assert_eq!(oids.len(), 0);
+    // Test Extensions
+    assert_eq!(cert.extensions().len(), 0);
+    assert_eq!(cert.extensions().unhandled_critical_extensions(&[]).len(), 0);
 }

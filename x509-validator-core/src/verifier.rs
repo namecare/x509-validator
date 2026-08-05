@@ -1,11 +1,11 @@
 use crate::validated_chain::ValidatedCertificateChain;
-use crate::view::CertificateView;
+use x509_parser::certificate::X509Certificate;
 
 /// Outcome of `Verifier::validate`. Generic over `R`, the failure-reason
 /// type a concrete `Verifier` implementation chooses to report — core has
 /// no opinion on what a validation failure looks like.
-pub enum ChainValidationResult<C: CertificateView, R> {
-    ValidCertificate(ValidatedCertificateChain<C>),
+pub enum ChainValidationResult<'a, R> {
+    ValidCertificate(ValidatedCertificateChain<'a>),
     CouldNotValidate(R),
 }
 
@@ -14,12 +14,19 @@ pub enum ChainValidationResult<C: CertificateView, R> {
 /// chain building, signature verification, and any additional acceptance
 /// criteria work — core only fixes the shape of construction and the
 /// validation entry point.
-pub trait Verifier<C: CertificateView, R> {
-    fn new(root_certificates_der: &[Vec<u8>]) -> Self;
+pub trait Verifier<R> {
+    fn new(root_certificates: &[X509Certificate]) -> Self;
+    fn with_raw_certificates(root_certificates: &[u8]) -> Self;
 
-    fn validate(
+    fn validate_raw<'a>(
         &mut self,
-        leaf: &C,
+        leaf: &[u8],
         intermediates: &[Vec<u8>],
-    ) -> ChainValidationResult<C, R>;
+    ) -> ChainValidationResult<'a, R>;
+
+    fn validate<'a>(
+        &mut self,
+        leaf: &X509Certificate<'a>,
+        intermediates: &[X509Certificate<'a>],
+    ) -> ChainValidationResult<'a, R>;
 }

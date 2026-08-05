@@ -14,7 +14,5 @@ keywords = ["crypto", "x509"]
 
 [dependencies]
 x509-validator-core = { path = "../x509-validator-core" }
-x509-validator = { path = "../x509-validator" }
-thiserror = "1"
 aws-lc-rs = { version = "1.17.3" }
 aws-lc-sys = { version = "0.43.0" }
