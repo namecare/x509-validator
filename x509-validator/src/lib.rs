@@ -22,6 +22,7 @@ pub mod all_of_policies;
 pub mod any_policy;
 pub mod one_of_policies;
 pub mod store;
+pub mod view;
 
 pub use policy::*;
 pub use diagnostic::*;

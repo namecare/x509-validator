@@ -24,14 +24,16 @@ pub trait KeyProvider: Send + Sync + Debug {
     ) -> Result<Box<dyn PublicKey>, CryptoError>;
 }
 
-pub trait Digest: Send + Sync + Debug {
-    fn hash(&self, data: &[u8]) -> Vec<u8>;
-}
-
 pub struct CryptoProvider {
     pub key_provider: &'static dyn KeyProvider,
     pub sha256: &'static dyn Digest,
 }
+
+pub trait Digest: Send + Sync + Debug {
+    fn hash(&self, data: &[u8]) -> Vec<u8>;
+}
+
+
 
 /// A `KeyProvider`/`Digest` pair that always fails, used to populate
 /// `CryptoProvider::default_backend` until a real crypto backend is wired
