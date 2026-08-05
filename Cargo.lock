@@ -470,6 +470,8 @@ version = "0.1.0"
 dependencies = [
  "aws-lc-rs",
  "aws-lc-sys",
+ "oid-registry",
+ "x509-parser",
  "x509-validator-core",
 ]
 
