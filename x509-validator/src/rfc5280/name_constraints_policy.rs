@@ -79,7 +79,7 @@ impl NameConstraintsPolicy {
         for &i in subject_indices {
             let cert = &chain[i];
 
-            for name in Self::names(cert) {
+            for name in Self::names(cert)? {
                 if let Some(permitted) = &constraints.permitted_subtrees {
                     Self::validate_permitted_subtrees(permitted, &name)?;
                 }
@@ -95,12 +95,26 @@ impl NameConstraintsPolicy {
     /// The unified name sequence a certificate presents for constraint
     /// checking: the subject distinguished name (as a directoryName), then
     /// every subjectAltName entry.
-    fn names<'a>(cert: &'a x509_validator_core::Certificate<'a>) -> Vec<GeneralName<'a>> {
+    ///
+    /// A subjectAltName that cannot be decoded is an error, not an empty
+    /// list of names: if the names a certificate presents can't be
+    /// enumerated, no constraint can be shown to hold over them, so the
+    /// only safe answer is to refuse the chain. Treating a decode failure
+    /// as "no names" would let a malformed extension silently suppress
+    /// every name constraint that should have applied.
+    fn names<'a>(cert: &'a x509_validator_core::Certificate<'a>) -> Result<Vec<GeneralName<'a>>, PolicyFailureReason> {
         let mut names = vec![GeneralName::DirectoryName(cert.subject().clone())];
-        if let Ok(Some(san)) = cert.tbs_certificate.subject_alternative_name() {
+
+        let san = cert
+            .tbs_certificate
+            .subject_alternative_name()
+            .map_err(|error| PolicyFailureReason::new(format!("unable to decode subject alternative name from {:?}: {}", cert, error)))?;
+
+        if let Some(san) = san {
             names.extend(san.value.general_names.iter().cloned());
         }
-        names
+
+        Ok(names)
     }
 
     fn validate_excluded_subtrees(excluded_subtrees: &[GeneralSubtree], name: &GeneralName) -> PolicyEvaluationResult {
