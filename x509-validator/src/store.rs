@@ -1,8 +1,7 @@
 use std::collections::HashMap;
-use x509_validator_core::Certificate;
+use x509_validator_core::{Certificate, CertificateExt};
 
-/// Holds certificates indexed by subject name for fast issuer lookup during
-/// chain building.
+/// A collection of certificates for use in verification.
 #[derive(Debug, Clone)]
 pub struct CertificateStore<'a> {
     by_subject: HashMap<Vec<u8>, Vec<Certificate<'a>>>, // keyed by subject's raw DER bytes
@@ -19,6 +18,7 @@ impl<'a> CertificateStore<'a> {
         Self { by_subject: HashMap::new() }
     }
 
+    /// Initialize a certificate store from a sequence of certificates.
     pub fn from_iter(certificates: impl IntoIterator<Item = Certificate<'a>>) -> Self {
         let mut store = Self::new();
         for cert in certificates {
@@ -39,5 +39,5 @@ impl<'a> CertificateStore<'a> {
 
 /// Canonical lookup key for a certificate's subject: its raw DER bytes.
 pub fn subject_key(certificate: &Certificate) -> Vec<u8> {
-    certificate.subject().as_raw().to_vec()
+    certificate.subject_key()
 }

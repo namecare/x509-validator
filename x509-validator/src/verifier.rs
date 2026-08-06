@@ -1,19 +1,13 @@
 use crate::crypto::CryptoProvider;
 use crate::diagnostic::VerificationDiagnostic;
 use crate::policy::{PolicyFailureReason, VerifierPolicy};
-use crate::store::{subject_key, CertificateStore};
+use crate::store::CertificateStore;
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
 use x509_validator_core::validated_chain::ValidatedCertificateChain;
-use x509_validator_core::Certificate;
-use x509_validator_core::extensions::ParsedExtension;
-use x509_validator_core::oid_registry::{OID_X509_EXT_AUTHORITY_KEY_IDENTIFIER, OID_X509_EXT_SUBJECT_KEY_IDENTIFIER};
+use x509_validator_core::{Certificate, CertificateExt};
 use x509_validator_core::FromDer;
 
-/// Parses each DER-encoded certificate in `der` and collects the results
-/// into a `CertificateStore`. Fails on the first certificate that doesn't
-/// parse, since a malformed intermediate makes the rest of the supplied set
-/// untrustworthy as a chain-building input.
-fn parse_certificate_store<'a>(der: &'a [Vec<u8>]) -> Result<CertificateStore<'a>, PolicyFailureReason> {
+fn parse_certificate_store(der: &[Vec<u8>]) -> Result<CertificateStore, PolicyFailureReason> {
     let mut store = CertificateStore::new();
     for bytes in der {
         let (_, certificate) = Certificate::from_der(bytes).map_err(|_| PolicyFailureReason::new("failed to parse certificate DER"))?;
@@ -22,30 +16,12 @@ fn parse_certificate_store<'a>(der: &'a [Vec<u8>]) -> Result<CertificateStore<'a
     Ok(store)
 }
 
-/// The `subjectKeyIdentifier`/`authorityKeyIdentifier` key-identifier bytes
-/// for a certificate, if the corresponding extension is present and parses.
-/// `x509-parser`'s `TbsCertificate` has no dedicated accessor for either
-/// (unlike `basic_constraints`/`name_constraints`/`subject_alternative_name`),
-/// so both go through `get_extension_unique` + `ParsedExtension` matching.
-fn subject_key_identifier<'a>(cert: &Certificate<'a>) -> Option<&'a [u8]> {
-    let ext = cert.tbs_certificate.get_extension_unique(&OID_X509_EXT_SUBJECT_KEY_IDENTIFIER).ok()??;
-    match ext.parsed_extension() {
-        ParsedExtension::SubjectKeyIdentifier(key_id) => Some(key_id.0),
-        _ => None,
-    }
-}
-
-fn authority_key_identifier<'a>(cert: &Certificate<'a>) -> Option<&'a [u8]> {
-    let ext = cert.tbs_certificate.get_extension_unique(&OID_X509_EXT_AUTHORITY_KEY_IDENTIFIER).ok()??;
-    match ext.parsed_extension() {
-        ParsedExtension::AuthorityKeyIdentifier(aki) => aki.key_identifier.as_ref().map(|id| id.0),
-        _ => None,
-    }
-}
-
+/// Validates an X.509 certificate chain against a set of root certificates and a [`VerifierPolicy`].
 pub struct BaseVerifier<'a, P> {
+    /// The trusted root certificates used to anchor chain validation.
     root_certificates: CertificateStore<'a>,
     crypto: &'a CryptoProvider,
+    /// The policy applied to candidate chains during validation.
     policy: P,
 }
 
@@ -53,6 +29,11 @@ impl<'a, P> BaseVerifier<'a, P>
 where
     P: VerifierPolicy,
 {
+    /// Creates a verifier with the given root certificates and policy.
+    ///
+    /// - Parameters:
+    ///   - root_certificates: The trusted root certificates.
+    ///   - policy: The verification policy.
     pub fn with_policy_and_backend(root_certificates: CertificateStore<'a>, policy: P, crypto: &'a CryptoProvider) -> Self {
         Self {
             root_certificates,
@@ -61,11 +42,12 @@ where
         }
     }
 
-    /// Builds and validates a certificate chain from `leaf` up to a trusted
-    /// root, using a depth-first search over candidate issuers drawn from
-    /// the root store and `intermediates`. Returns the first chain that
-    /// satisfies `self.policy`, or every accumulated policy failure if no
-    /// chain satisfies it.
+    /// Validates a leaf certificate by building chains through intermediate certificates to the root store.
+    ///
+    /// - Parameters:
+    ///   - leaf: The leaf certificate to validate.
+    ///   - intermediates: The DER-encoded intermediate certificates that may form part of the chain.
+    /// - Returns: A [`ChainValidationResultOwned`] indicating whether the certificate is valid.
     pub fn validate(&mut self, leaf: &Certificate<'a>, intermediates: &'a [Vec<u8>]) -> ChainValidationResultOwned<'a> {
         let store = match parse_certificate_store(intermediates) {
             Ok(store) => store,
@@ -74,15 +56,21 @@ where
         self.validate_with_diagnostics(leaf, &store, &mut |_: VerificationDiagnostic| {})
     }
 
-    /// Same as `validate`, but calls `diagnostic_callback` with progress and
-    /// failure events during chain building, useful for debugging and
-    /// detailed error reporting.
+    /// Validates a leaf certificate by building chains through intermediate certificates to the root store.
+    ///
+    /// - Parameters:
+    ///   - leaf: The leaf certificate to validate.
+    ///   - intermediates: A store of intermediate certificates that may form part of the chain.
+    ///   - diagnostic_callback: A closure invoked with diagnostic events during validation.
+    /// - Returns: A [`ChainValidationResultOwned`] indicating whether the certificate is valid.
     pub fn validate_with_diagnostics(
         &mut self,
         leaf: &Certificate<'a>,
         intermediates: &CertificateStore<'a>,
         diagnostic_callback: &mut dyn FnMut(VerificationDiagnostic),
     ) -> ChainValidationResultOwned<'a> {
+        // First check: does this leaf certificate contain critical extensions that are not satisfied by the policy?
+        // If so, reject the chain.
         if has_unhandled_critical_extensions(leaf, &self.policy) {
             diagnostic_callback(VerificationDiagnostic::leaf_certificate_has_unhandled_critical_extension(
                 leaf.clone(),
@@ -95,11 +83,18 @@ where
 
         let mut policy_failures = Vec::new();
 
-        let leaf_key = subject_key(leaf);
+        // Second check: is this leaf _already in_ the certificate store? If it is, we can just trust it directly.
+        //
+        // Note that this requires an _exact match_: if there isn't an exact match, we'll fall back to chain building,
+        // which may let us chain through another variant of this certificate and build a valid chain. This is a very
+        // deliberate choice: certificates that assert the same combination of (subject, public key, SAN) but different
+        // extensions or policies should not be tolerated by this check, and will be ignored.
+        let leaf_key = leaf.subject_key();
         if self.root_certificates.find_by_subject(&leaf_key).iter().any(|c| c == leaf) {
             let chain = UnverifiedCertificateChain::new(vec![leaf.clone()]);
             match self.policy.chain_meets_policy_requirements(&chain) {
                 Ok(()) => {
+                    // We're good!
                     diagnostic_callback(VerificationDiagnostic::found_valid_certificate_chain(vec![leaf.clone()]));
                     return ChainValidationResultOwned::ValidCertificate(ValidatedCertificateChain::new_unchecked(vec![leaf.clone()]));
                 }
@@ -114,13 +109,17 @@ where
 
         let mut stack: Vec<Vec<Certificate<'a>>> = vec![vec![leaf.clone()]];
 
+        // This is essentially a DFS of the certificate tree. We attempt to iteratively build up possible chains.
         while let Some(partial_chain) = stack.pop() {
             diagnostic_callback(VerificationDiagnostic::searching_for_issuer_of_partial_chain(partial_chain.clone()));
 
             let tip = partial_chain.last().unwrap();
-            let issuer_key = issuer_key_of(tip);
+            let issuer_key = tip.issuer_key();
 
+            // We want to search for parents. Our preferred parent comes from the root store, as this will potentially
+            // produce smaller chains.
             let mut root_candidates = self.root_certificates.find_by_subject(&issuer_key).to_vec();
+            // We then want to sort by suitability.
             sort_by_suitability_for_issuing(&mut root_candidates, tip);
             if !root_candidates.is_empty() {
                 diagnostic_callback(VerificationDiagnostic::found_candidate_issuers_of_partial_chain_in_root_store(
@@ -128,6 +127,7 @@ where
                     root_candidates.clone(),
                 ));
             }
+            // Each of these is now potentially a valid unverified chain.
             for candidate in &root_candidates {
                 if should_skip_adding_certificate(candidate, &partial_chain, self.crypto, &self.policy, diagnostic_callback) {
                     continue;
@@ -137,6 +137,7 @@ where
                 let chain = UnverifiedCertificateChain::new(chain_certs.clone());
                 match self.policy.chain_meets_policy_requirements(&chain) {
                     Ok(()) => {
+                        // We're good!
                         diagnostic_callback(VerificationDiagnostic::found_valid_certificate_chain(chain_certs.clone()));
                         return ChainValidationResultOwned::ValidCertificate(ValidatedCertificateChain::new_unchecked(chain_certs));
                     }
@@ -148,6 +149,7 @@ where
             }
 
             let mut intermediate_candidates = intermediates.find_by_subject(&issuer_key).to_vec();
+            // We then want to sort by suitability.
             sort_by_suitability_for_issuing(&mut intermediate_candidates, tip);
             if !intermediate_candidates.is_empty() {
                 diagnostic_callback(
@@ -157,6 +159,9 @@ where
                     ),
                 );
             }
+            // we need to reverse the order of the already sorted intermediates because
+            // we will push them on to the `stack` which in turn will
+            // consume them in the reverse order that they have been pushed onto the stack
             for candidate in intermediate_candidates.into_iter().rev() {
                 if should_skip_adding_certificate(&candidate, &partial_chain, self.crypto, &self.policy, diagnostic_callback) {
                     continue;
@@ -172,62 +177,28 @@ where
     }
 }
 
-/// Outcome of `BaseVerifier::validate`/`validate_with_diagnostics`: either a
-/// validated chain, or every policy failure accumulated across the DFS
-/// (unlike `x509_validator_core::ChainValidationResult`, which reports a
-/// single `PolicyFailure` alongside the unverified chain that produced it).
+/// The result of validating a certificate chain.
 pub enum ChainValidationResultOwned<'a> {
+    /// The certificate chain is valid and trusted.
     ValidCertificate(ValidatedCertificateChain<'a>),
+    /// The certificate chain could not be validated, with the associated policy failures.
     CouldNotValidate(Vec<PolicyFailureReason>),
 }
 
-/// True if `cert` carries a critical extension whose OID is not among the
-/// ones `policy` declares it understands and enforces
-/// (`VerifierPolicy::verifying_critical_extensions`). Per RFC 5280 section
-/// 4.2, a certificate consumer must reject a certificate that contains a
-/// critical extension it does not recognize.
 fn has_unhandled_critical_extensions(cert: &Certificate, policy: &impl VerifierPolicy) -> bool {
     let handled = policy.verifying_critical_extensions();
     cert.tbs_certificate.iter_extensions().any(|ext| ext.critical && !handled.contains(&ext.oid))
 }
 
-/// Canonical lookup key for the *issuer* name of a certificate (as opposed
-/// to `subject_key`, which keys by the certificate's own subject). Both use
-/// the same canonical-DER byte representation so entries stored by subject
-/// can be found by an issuer-name lookup.
-fn issuer_key_of(cert: &Certificate) -> Vec<u8> {
-    cert.issuer().as_raw().to_vec()
-}
-
-/// Orders candidate issuers by how well-suited they are to have issued
-/// `subject`, most-suitable first.
-///
-/// Ordering rule: a candidate whose `subject_key_identifier` matches
-/// `subject`'s `authority_key_identifier().key_identifier` is a strong,
-/// RFC 5280 §4.2.1.1-recommended signal that this is the intended issuer
-/// (especially useful when a subject name has multiple issuing certificates
-/// in the store, e.g. during root/intermediate rollover).
-///
-/// The ranking is three-way, not two-way, as RFC 4158 §3.5.3 describes: a
-/// *missing* `subjectKeyIdentifier` and a *mismatching* one are not
-/// equivalent. RFC 5280 §4.2.1.2 leaves the extension optional, so a
-/// candidate that omits it supplies no evidence either way and remains
-/// plausible; a candidate that carries one which differs from the subject's
-/// AKI supplies positive evidence that it is the wrong issuer, and so is
-/// tried last.
-///
-/// Within a rank, candidates keep their original (store insertion) order —
-/// this is a stable sort, and beyond the AKI/SKI signal the algorithm has no
-/// further basis to prefer one candidate over another, so preserving
-/// insertion order is the least surprising choice and keeps iteration
-/// deterministic for a given store.
 fn sort_by_suitability_for_issuing<'a>(candidates: &mut [Certificate<'a>], subject: &Certificate<'a>) {
-    let subject_aki = authority_key_identifier(subject);
+    // First, an early exit. If the subject doesn't have an AKI extension, we don't need
+    // to do anything.
+    let subject_aki = subject.authority_key_identifier();
 
-    // 0: SKI matches the subject's AKI. 1: no SKI, so no evidence.
-    // 2: SKI present but different, i.e. evidence of the wrong issuer.
+    // Medium preference if we have no SKI. The SKI is present: if the two match, this is
+    // higher preference; if they don't match, it's lower.
     let rank = |candidate: &Certificate<'a>| -> u8 {
-        match (subject_aki, subject_key_identifier(candidate)) {
+        match (subject_aki, candidate.subject_key_identifier()) {
             (Some(aki), Some(ski)) if aki == ski => 0,
             (_, None) => 1,
             (None, Some(_)) => 1,
@@ -238,16 +209,6 @@ fn sort_by_suitability_for_issuing<'a>(candidates: &mut [Certificate<'a>], subje
     candidates.sort_by_key(rank);
 }
 
-/// True if `candidate` should not be added to `partial_chain`: it carries an
-/// unhandled critical extension, it is already present in the chain by
-/// identity (see `same_certificate_identity`), or its signature over the
-/// current chain tip does not verify.
-///
-/// `policy` is threaded through explicitly (rather than only being
-/// available at the leaf check) because "unhandled" is meaningless without
-/// knowing which critical extensions the policy declares it understands —
-/// the same policy object passed to `validate` is used here so per-candidate
-/// critical-extension policing is consistent with the leaf check.
 fn should_skip_adding_certificate<'a>(
     candidate: &Certificate<'a>,
     partial_chain: &[Certificate<'a>],
@@ -255,6 +216,7 @@ fn should_skip_adding_certificate<'a>(
     policy: &impl VerifierPolicy,
     diagnostic_callback: &mut dyn FnMut(VerificationDiagnostic<'a>),
 ) -> bool {
+    // We want to confirm that the certificate has no unhandled critical extensions. If it does, we can't build the chain.
     if has_unhandled_critical_extensions(candidate, policy) {
         diagnostic_callback(VerificationDiagnostic::issuer_has_unhandled_critical_extension(
             candidate.clone(),
@@ -264,7 +226,9 @@ fn should_skip_adding_certificate<'a>(
         return true;
     }
 
-    if partial_chain.iter().any(|existing| same_certificate_identity(existing, candidate)) {
+    // We don't want to re-add the same certificate to the chain: that will always produce a chain that
+    // could have been shorter.
+    if partial_chain.iter().any(|existing| existing.has_same_identity_as(candidate)) {
         diagnostic_callback(VerificationDiagnostic::issuer_is_already_in_the_chain(
             partial_chain.to_vec(),
             candidate.clone(),
@@ -272,6 +236,7 @@ fn should_skip_adding_certificate<'a>(
         return true;
     }
 
+    // We check the signature here: if the signature isn't valid, don't try to apply policy.
     let tip = partial_chain.last().unwrap();
     let signature_verifies = crypto
         .verify_signature(
@@ -290,30 +255,4 @@ fn should_skip_adding_certificate<'a>(
     }
 
     !signature_verifies
-}
-
-/// Identity used for loop prevention during chain building: subject name +
-/// public key + subject alternative names. Deliberately NOT full DER
-/// equality — two distinct DER encodings can represent semantically-equal
-/// certificates, and (more importantly) this stops the DFS from looping
-/// forever on a structurally distinct but logically-repeated certificate
-/// (e.g. a cross-signed or reissued cert with the same subject/key/SANs but
-/// different signature bytes).
-fn same_certificate_identity(a: &Certificate, b: &Certificate) -> bool {
-    if a.subject() != b.subject() {
-        return false;
-    }
-    if a.public_key() != b.public_key() {
-        return false;
-    }
-    certificate_sans(a) == certificate_sans(b)
-}
-
-fn certificate_sans<'a>(c: &Certificate<'a>) -> Vec<x509_validator_core::extensions::GeneralName<'a>> {
-    c.tbs_certificate
-        .subject_alternative_name()
-        .ok()
-        .flatten()
-        .map(|ext| ext.value.general_names.clone())
-        .unwrap_or_default()
 }

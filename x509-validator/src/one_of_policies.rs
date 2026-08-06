@@ -2,9 +2,15 @@ use crate::policy::{PolicyEvaluationResult, PolicyFailureReason, VerifierPolicy}
 use x509_validator_core::der_parser::Oid;
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
 
-/// Use this to build a policy where any one of the sub-policies must be met for the overall
-/// policy to be met. For example, requiring either `PolicyA` or `PolicyB` to be met (but not
-/// necessarily both).
+/// Use this to build a policy where any one of the sub-policies must be met for the overall policy to be met.
+/// For example, the following policy requires that `RFC5280Policy` is always met, and either `PolicyA` or `PolicyB`
+/// is met. It does not require that both `PolicyA` and `PolicyB` are met.
+/// ```ignore
+/// let verifier = Verifier::new(CertificateStore::default(), AllOfPolicies::new((
+///     RFC5280Policy::new(),
+///     OneOfPolicies::new(vec![Box::new(PolicyA::new()), Box::new(PolicyB::new())]),
+/// )));
+/// ```
 pub struct OneOfPolicies {
     policies: Vec<Box<dyn VerifierPolicy>>,
 }

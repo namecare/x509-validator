@@ -22,6 +22,8 @@ impl NameConstraintsPolicy {
     ///    component in which the host name is specified as an IP address), then
     ///    the application MUST reject the certificate.
     pub(crate) fn uri_name_matches_constraint(uri_name: &[u8], constraint: &[u8]) -> bool {
+        // If we can't parse the URL, the constraint is definitely not satisfied.
+        // If there is no authority component then the last rule above applies.
         let Some(host) = extract_host(uri_name) else {
             return false;
         };
@@ -31,6 +33,7 @@ impl NameConstraintsPolicy {
             return false;
         }
 
+        // From this point, we can do regular domain matching.
         Self::dns_name_matches_constraint(host.as_bytes(), constraint)
     }
 }

@@ -1,6 +1,7 @@
 pub mod verifier;
 pub use verifier::*;
 
+pub mod certificate;
 pub mod crypto;
 pub mod error;
 pub mod unverified_chain;
@@ -14,8 +15,7 @@ pub mod validated_chain;
 // the alias, so the underlying representation can be swapped for a different
 // parser (or an owned type of our own) by editing this file alone.
 
-/// The concrete certificate type this crate (and its consumers) validate.
-pub type Certificate<'a> = x509_parser::certificate::X509Certificate<'a>;
+pub use certificate::{Certificate, CertificateExt};
 
 /// An object identifier.
 pub type Oid<'a> = x509_parser::der_parser::Oid<'a>;
@@ -50,10 +50,7 @@ pub use x509_parser::x509::X509Version;
 /// DER decoding. A trait, so it is re-exported rather than aliased.
 pub use x509_parser::prelude::FromDer;
 
-// Pass-through modules, mirroring the parser's own layout. These carry the
-// surface not worth aliasing individually — OID constants above all — so
-// consumers reach them at a familiar path, e.g.
-// `x509_validator_core::oid_registry::OID_X509_EXT_KEY_USAGE`.
+// Pass-through modules, mirroring the parser's own layout.
 
 pub mod der_parser {
     pub use x509_parser::der_parser::*;
@@ -77,10 +74,6 @@ pub mod objects {
 
 pub mod signature_algorithm {
     pub use x509_parser::signature_algorithm::*;
-}
-
-pub mod certificate {
-    pub use x509_parser::certificate::*;
 }
 
 pub mod prelude {

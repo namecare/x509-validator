@@ -7,9 +7,6 @@ pub struct ValidatedCertificateChain<'a> {
 }
 
 impl<'a> ValidatedCertificateChain<'a> {
-    /// Caller-asserted: the caller is certifying this chain was actually
-    /// validated through some external process, not necessarily this
-    /// crate's `Verifier`.
     pub fn new_unchecked(certificates: Vec<Certificate<'a>>) -> Self {
         assert!(!certificates.is_empty());
         Self { certificates }
@@ -21,6 +18,7 @@ impl<'a> ValidatedCertificateChain<'a> {
     pub fn root(&self) -> &Certificate<'a> {
         self.certificates.last().unwrap()
     }
+    
     pub fn iter(&self) -> impl Iterator<Item = &Certificate<'a>> {
         self.certificates.iter()
     }

@@ -4,53 +4,75 @@ const ASCII_PERIOD: u8 = b'.';
 const ASCII_ASTERISK: u8 = b'*';
 const ASCII_HYPHEN: u8 = b'-';
 
+// The maximum label length is 63 bytes.
 const MAXIMUM_LABEL_LENGTH: usize = 63;
 const MAXIMUM_NAME_LENGTH: usize = 253;
 
 impl NameConstraintsPolicy {
     /// Validates that a dnsName matches a name constraint.
     ///
-    /// From RFC 5280 §4.2.1.10:
+    /// The rules on name constraints are simple. Another word would be vague.
+    /// From RFC 5280 § 4.2.1.10:
     ///
     ///    DNS name restrictions are expressed as host.example.com.  Any DNS
     ///    name that can be constructed by simply adding zero or more labels to
     ///    the left-hand side of the name satisfies the name constraint.  For
     ///    example, www.host.example.com would satisfy the constraint but
     ///    host1.example.com would not.
+    ///
+    /// We have a number of other caveats in play, that will be commented within
+    /// the body of the function as we go.
     pub(crate) fn dns_name_matches_constraint(dns_name: &[u8], constraint: &[u8]) -> bool {
+        // Before any validation: confirm that these are both valid DNS names.
         if !is_valid_dns_name(dns_name, false) || !is_valid_dns_name(constraint, true) {
             return false;
         }
 
+        // Step 0: Zero-length constraints.
+        //
         // The empty constraint matches everything.
         if constraint.is_empty() {
             return true;
         }
 
-        // Drop a trailing period from the constraint, if present.
+        // Step 2: If the constraint ends in a period, drop it.
         let mut constraint = constraint;
         if constraint.last() == Some(&ASCII_PERIOD) {
             constraint = &constraint[..constraint.len() - 1];
         }
 
+        // Next, we get the reverse DNS labels.
         let mut dns_labels = ReverseDnsLabels::new(dns_name);
         let mut constraint_labels = ReverseDnsLabels::new(constraint);
 
+        // We're going to walk these labels for as long as they match.
+        // While we're here, we're going to confirm that none of the labels are
+        // empty except, for the constraint, the last one. If they are,
+        // that means that _either_ the domain name is absolute
+        // _or_ there is an empty DNS label. We support neither.
         loop {
             let next_dns_label = dns_labels.next();
             let next_constraint_label = constraint_labels.next();
 
             match (next_dns_label, next_constraint_label) {
+                // Both sequences are empty, this is a perfect match.
                 (None, None) => return true,
+                // We've run out of constraint labels to match. This is a match!
                 (Some(_), None) => return true,
+                // We've run out of DNS name labels, but there is still
+                // a constraint label! Even if the constraint label is empty
+                // (that is, there was a leading period), we don't match.
                 (None, Some(_)) => return false,
+                // Empty DNS label. This is always forbidden.
                 (Some([]), _) => return false,
                 (Some(_), Some([])) => {
-                    // An empty constraint label (i.e. a leading period) must
-                    // be the last one.
+                    // We have an empty constraint label. This must be last, so confirm that.
+                    // The period matches everything else, so we're good to go. If this label
+                    // is empty, and not last, that is unacceptable.
                     return !constraint_labels.has_more_labels();
                 }
                 (Some(dns_label), Some(constraint_label)) => {
+                    // The two labels match, continue. Otherwise, two labels don't match!
                     if !case_insensitive_ascii_match(dns_label, constraint_label) {
                         return false;
                     }
@@ -60,14 +82,8 @@ impl NameConstraintsPolicy {
     }
 }
 
-/// Whether this is a valid DNS name for constraint matching purposes:
-/// only ASCII letters/digits/hyphen/period, at most one wildcard as the
-/// entire first label, at most 253 bytes total, at most 63 bytes per label,
-/// no empty labels (except a leading empty label in a constraint, which
-/// represents ".example.com"-style subdomain matching), no label starting
-/// or ending with a hyphen, and the most significant label not entirely
-/// numeric.
 fn is_valid_dns_name(name: &[u8], is_constraint: bool) -> bool {
+    // First check: reject long domains. Anything more than 253 bytes is no good.
     if name.len() > MAXIMUM_NAME_LENGTH {
         return false;
     }
@@ -76,58 +92,78 @@ fn is_valid_dns_name(name: &[u8], is_constraint: bool) -> bool {
     let mut label_count = 0usize;
     let mut is_wildcard = false;
 
+    // We're going to allow a wildcard, but it must be first, and must be the whole
+    // label.
     if bytes.first() == Some(&ASCII_ASTERISK) {
         bytes = &bytes[1..];
         match bytes.first() {
             Some(&ASCII_PERIOD) => {
                 bytes = &bytes[1..];
             }
+            // Either there was no next byte, or it wasn't a period. Not a valid name.
             _ => return false,
         }
         label_count += 1;
         is_wildcard = true;
     }
 
+    // This is not the most efficient construction, but it's a bit easier to understand than a
+    // purely iterative approach. If we need to squeeze more perf out of there, we can
+    // rewrite it.
     while !bytes.is_empty() {
         let label: &[u8];
         if let Some(period_index) = bytes.iter().position(|&b| b == ASCII_PERIOD) {
             label = &bytes[..period_index];
             bytes = &bytes[period_index + 1..];
         } else {
+            // No periods left, the label is whatever is left.
             label = bytes;
             bytes = &[];
         }
 
         label_count += 1;
 
+        // We forbid empty labels, unless that label is first in a name constraint.
         if label.is_empty() && !(label_count == 1 && is_constraint) {
             return false;
         }
 
+        // We don't allow labels to start or end with a hyphen.
         if label.first() == Some(&ASCII_HYPHEN) || label.last() == Some(&ASCII_HYPHEN) {
             return false;
         }
 
+        // Labels must not exceed the max label length.
         if label.len() > MAXIMUM_LABEL_LENGTH {
             return false;
         }
 
+        // Now we want to scan for valid bytes. The scan here is doing two
+        // things: counting numerics and non-numerics, and detecting non ASCII bytes.
+        //
+        // We are counting numerics because the most significant label must not be entirely
+        // numeric. We can detect whether this is the last label because, if it is,
+        // there are no more bytes left in the name.
         match label_contents(label) {
+            // Either non-ASCII, or all numeric. Not allowed.
             LabelContents::NonAscii => return false,
             LabelContents::AllAscii { non_numerics } => {
+                // All ASCII, and at least one non-numeric, we're good. On to the next label.
+                // A label that is all numeric is allowed as long as this isn't the last label.
                 if non_numerics == 0 && bytes.is_empty() {
-                    // Last label is entirely numeric. Not allowed.
+                    // Last label is all numeric. Not allowed.
                     return false;
                 }
             }
         }
     }
 
-    // For wildcards, require at least two labels after the wildcard.
+    // For wildcards, we follow NSS and require at least two labels after the wildcard.
     if is_wildcard && label_count < 3 {
         return false;
     }
 
+    // We're good!
     true
 }
 
@@ -158,9 +194,6 @@ fn case_insensitive_ascii_match(a: &[u8], b: &[u8]) -> bool {
     a.iter().zip(b.iter()).all(|(&x, &y)| (x & MASK) == (y & MASK))
 }
 
-/// Iterates a DNS name's labels from right to left (most significant label
-/// last, matching how name constraints anchor to the right-hand side of the
-/// name).
 struct ReverseDnsLabels<'a> {
     remaining: Option<&'a [u8]>,
 }
@@ -179,15 +212,22 @@ impl<'a> Iterator for ReverseDnsLabels<'a> {
     type Item = &'a [u8];
 
     fn next(&mut self) -> Option<&'a [u8]> {
+        // If we've sliced everything out, this is the end of the sequence.
         let base = self.remaining?;
 
+        // We walk backwards from the end until we find a period, then
+        // we slice out that section and return it.
         match base.iter().rposition(|&b| b == ASCII_PERIOD) {
             Some(period_index) => {
+                // Ok, we found a period. Slice out that section, then drop the
+                // period and save the updated base.
                 let label = &base[period_index + 1..];
                 self.remaining = Some(&base[..period_index]);
                 Some(label)
             }
             None => {
+                // No period left! Return the entirety of what is left as the label,
+                // and then store nil.
                 self.remaining = None;
                 Some(base)
             }

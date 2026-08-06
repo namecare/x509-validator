@@ -1,35 +1,13 @@
-//! Verification progress and failure events emitted while a chain is being
-//! built.
-//!
-//! A [`VerificationDiagnostic`] is a tagged union: one variant per event the
-//! chain builder can report, each carrying exactly the certificates, OIDs and
-//! policy failure reasons involved. The public surface is deliberately opaque
-//! — callers construct diagnostics through the constructor functions and
-//! consume them through the two rendering forms:
-//!
-//! * [`Display`] renders a single line, suitable for a log statement. It is
-//!   guaranteed never to contain a newline.
-//! * [`VerificationDiagnostic::multiline_description`] renders the same
-//!   information spread over several lines, for a human reading a terminal.
-//!
-//! Certificates are always rendered through
-//! [`format_certificate`](crate::certificate_display::format_certificate),
-//! never through their derived `Debug`, which would dump the raw DER bytes.
-
 use crate::certificate_display::format_certificate;
 use crate::policy::PolicyFailureReason;
 use std::fmt;
 use x509_validator_core::der_parser::Oid;
 use x509_validator_core::Certificate;
 
-/// A single event observed while building and validating a certificate chain.
 pub struct VerificationDiagnostic<'a> {
     storage: Storage<'a>,
 }
 
-/// The payloads are boxed so that every variant is one pointer wide; the
-/// certificate-carrying payloads differ substantially in size, and an unboxed
-/// union would make every diagnostic as large as its biggest variant.
 enum Storage<'a> {
     LeafCertificateHasUnhandledCriticalExtension(Box<LeafCertificateHasUnhandledCriticalExtensions<'a>>),
     LeafCertificateIsInTheRootStoreButDoesNotMeetPolicy(Box<LeafCertificateIsInTheRootStoreButDoesNotMeetPolicy<'a>>),
@@ -100,9 +78,6 @@ struct IssuerIsAlreadyInTheChain<'a> {
 // MARK: Constructors
 
 impl<'a> VerificationDiagnostic<'a> {
-    /// The leaf carries at least one critical extension the policy does not
-    /// declare it understands. The unhandled set is derived at render time
-    /// from `handled_critical_extensions`.
     pub fn leaf_certificate_has_unhandled_critical_extension(
         leaf_certificate: Certificate<'a>,
         handled_critical_extensions: Vec<Oid<'static>>,
@@ -137,9 +112,6 @@ impl<'a> VerificationDiagnostic<'a> {
         }
     }
 
-    /// A candidate issuer of the chain tip carries at least one critical
-    /// extension the policy does not declare it understands. As with the leaf
-    /// variant, the unhandled set is derived at render time.
     pub fn issuer_has_unhandled_critical_extension(
         issuer: Certificate<'a>,
         partial_chain: Vec<Certificate<'a>>,
@@ -225,10 +197,6 @@ impl<'a> VerificationDiagnostic<'a> {
 
 // MARK: Rendering helpers
 
-/// The critical extension OIDs of `cert` that are not in
-/// `handled_critical_extensions`, in the order they appear in the
-/// certificate. Computed on demand rather than at construction time, so that
-/// emitting a diagnostic costs nothing when nobody renders it.
 fn unhandled_critical_extensions(cert: &Certificate<'_>, handled_critical_extensions: &[Oid<'static>]) -> Vec<String> {
     cert.tbs_certificate
         .iter_extensions()
@@ -237,7 +205,6 @@ fn unhandled_critical_extensions(cert: &Certificate<'_>, handled_critical_extens
         .collect()
 }
 
-/// Renders each certificate on its own entry, joined by `separator`.
 fn join_certificates(certificates: &[Certificate<'_>], separator: &str) -> String {
     certificates.iter().map(format_certificate).collect::<Vec<_>>().join(separator)
 }
@@ -245,9 +212,7 @@ fn join_certificates(certificates: &[Certificate<'_>], separator: &str) -> Strin
 // MARK: Single-line description
 
 impl fmt::Display for VerificationDiagnostic<'_> {
-    /// A human readable, single-line description. This never contains a
-    /// newline, whatever the payload: the whole point of this form is that a
-    /// diagnostic occupies exactly one line in a log.
+    /// Produces a human readable description of this [`VerificationDiagnostic`] that is potentially expensive to compute.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.storage {
             Storage::LeafCertificateHasUnhandledCriticalExtension(d) => write!(
@@ -332,9 +297,8 @@ impl fmt::Display for VerificationDiagnostic<'_> {
 }
 
 impl fmt::Debug for VerificationDiagnostic<'_> {
-    /// The single-line description, quoted and escaped so it can be embedded
-    /// in a structural dump without breaking it apart.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // this just adds quotes around the string and escapes any characters not suitable for displaying in a structural display.
         write!(f, "{:?}", self.to_string())
     }
 }
@@ -342,8 +306,8 @@ impl fmt::Debug for VerificationDiagnostic<'_> {
 // MARK: Multi-line description
 
 impl VerificationDiagnostic<'_> {
-    /// A human readable description spread over multiple lines for better
-    /// readability. Carries the same information as the [`Display`] form.
+    /// Produces a human readable description of this [`VerificationDiagnostic`] over multiple lines for better readability
+    /// but includes otherwise the same information as the [`Display`] form.
     pub fn multiline_description(&self) -> String {
         match &self.storage {
             Storage::LeafCertificateHasUnhandledCriticalExtension(d) => format!(
