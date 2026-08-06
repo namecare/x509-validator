@@ -42,7 +42,7 @@ pub trait VerifierPolicy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::self_signed_ca;
+    use x509_validator_testkit::self_signed_ca;
     use x509_validator_core::FromDer;
     use x509_validator_core::Certificate;
 

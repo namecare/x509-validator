@@ -323,12 +323,12 @@ mod tests {
     use super::*;
     use crate::policy::{PolicyFailureReason, VerifierPolicy};
     use crate::crypto::{CryptoError, Digest, KeyProvider, PublicKey};
-    use crate::test_support::{
+    use x509_validator_testkit::{
         issue_ca, issue_ca_with_key, issue_ca_with_key_and_name, issue_ca_with_key_ids, issue_leaf, issue_leaf_with,
         issue_leaf_with_aki, self_signed_ca_with, self_signed_ca_with_key_ids, signing_identity,
         weird_critical_extension, Ski,
     };
-    use rcgen::KeyPair;
+    use x509_validator_testkit::rcgen::KeyPair;
     use std::sync::Mutex;
     use x509_validator_core::FromDer;
     use x509_validator_core::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
@@ -426,7 +426,7 @@ mod tests {
     /// returns it so it can be parsed with a `'static` lifetime. Every
     /// fixture in a test using [`discriminating_crypto`] must go through
     /// this, or its signature will be treated as unverifiable.
-    fn leak_signed_by(der: Vec<u8>, signer: &crate::test_support::Ca) -> &'static [u8] {
+    fn leak_signed_by(der: Vec<u8>, signer: &x509_validator_testkit::Ca) -> &'static [u8] {
         let leaked = leak(der);
         let cert = parse(leaked);
         signer_registry()
@@ -594,8 +594,8 @@ mod tests {
         // A root carrying an unrecognized critical extension must be
         // skipped as a candidate issuer, so a leaf whose only path runs
         // through it fails to validate.
-        let root = self_signed_ca_with("root", |params: &mut rcgen::CertificateParams| {
-            params.custom_extensions.push(rcgen::CustomExtension::from_oid_content(
+        let root = self_signed_ca_with("root", |params: &mut x509_validator_testkit::rcgen::CertificateParams| {
+            params.custom_extensions.push(x509_validator_testkit::rcgen::CustomExtension::from_oid_content(
                 &[1, 2, 3, 4, 5],
                 b"unrecognized".to_vec(),
             ));
@@ -953,7 +953,7 @@ mod tests {
         // accepted as a path of length one.
         let trusted_root = self_signed_ca_with("root", |_| {});
         let intermediate = issue_ca("intermediate", &trusted_root, None, |_| {});
-        let weird = self_signed_ca_with("weird-critical-extension", |params: &mut rcgen::CertificateParams| {
+        let weird = self_signed_ca_with("weird-critical-extension", |params: &mut x509_validator_testkit::rcgen::CertificateParams| {
             params.custom_extensions.push(weird_critical_extension());
         });
 
@@ -1347,7 +1347,7 @@ mod tests {
             Ski::Exactly(vec![0xC1; 20]),
             true,
             |params| {
-                params.subject_alt_names = vec![rcgen::SanType::DnsName(rcgen::string::Ia5String::try_from("example.com").unwrap())];
+                params.subject_alt_names = vec![x509_validator_testkit::rcgen::SanType::DnsName(x509_validator_testkit::rcgen::string::Ia5String::try_from("example.com").unwrap())];
             },
         );
         // t2 shares t1's key and name but has no SAN and no SKI.
@@ -1389,7 +1389,7 @@ mod tests {
             Ski::Absent,
             true,
             |params| {
-                params.subject_alt_names = vec![rcgen::SanType::DnsName(rcgen::string::Ia5String::try_from("foo.example.com").unwrap())];
+                params.subject_alt_names = vec![x509_validator_testkit::rcgen::SanType::DnsName(x509_validator_testkit::rcgen::string::Ia5String::try_from("foo.example.com").unwrap())];
             },
         );
         let insane_leaf_der = issue_leaf_with("insane-leaf", &[], &sign_as_t_with_t3_key, |params| {

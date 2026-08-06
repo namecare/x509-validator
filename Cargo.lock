@@ -629,11 +629,10 @@ version = "0.1.0"
 dependencies = [
  "aws-lc-rs",
  "aws-lc-sys",
- "rcgen",
  "ring",
  "thiserror 1.0.69",
- "time",
  "x509-validator-core",
+ "x509-validator-testkit",
 ]
 
 [[package]]

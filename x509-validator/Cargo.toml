@@ -20,8 +20,7 @@ aws-lc-sys = { version = "0.43.0", optional = true }
 ring = { version = "0.17.14", optional = true }
 
 [dev-dependencies]
-rcgen = "0.14.8"
-time = "0.3"
+x509-validator-testkit = { path = "../x509-validator-testkit" }
 
 [features]
 aws_lc = ["dep:aws-lc-rs", "dep:aws-lc-sys"]

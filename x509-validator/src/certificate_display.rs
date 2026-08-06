@@ -68,7 +68,7 @@ fn format_extensions(cert: &Certificate<'_>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::{issue_ca, issue_leaf, self_signed_ca_with};
+    use x509_validator_testkit::{issue_ca, issue_leaf, self_signed_ca_with};
     use x509_validator_core::FromDer;
 
     fn leak(der: Vec<u8>) -> &'static [u8] {
@@ -154,9 +154,12 @@ mod tests {
     fn formats_certificate_with_multiple_extensions() {
         let root = self_signed_ca_with("Multi Root", |_| {});
         let intermediate = issue_ca("Multi Intermediate", &root, Some(0), |params| {
-            params.key_usages = vec![rcgen::KeyUsagePurpose::KeyCertSign, rcgen::KeyUsagePurpose::CrlSign];
-            params.name_constraints = Some(crate::test_support::name_constraints(
-                vec![crate::test_support::dns_subtree("example.com")],
+            params.key_usages = vec![
+                x509_validator_testkit::rcgen::KeyUsagePurpose::KeyCertSign,
+                x509_validator_testkit::rcgen::KeyUsagePurpose::CrlSign,
+            ];
+            params.name_constraints = Some(x509_validator_testkit::name_constraints(
+                vec![x509_validator_testkit::dns_subtree("example.com")],
                 vec![],
             ));
         });

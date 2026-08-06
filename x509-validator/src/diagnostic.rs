@@ -420,7 +420,7 @@ impl VerificationDiagnostic<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::{issue_ca, issue_leaf, self_signed_ca_with};
+    use x509_validator_testkit::{issue_ca, issue_leaf, self_signed_ca_with};
     use x509_validator_core::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS;
     use x509_validator_core::FromDer;
 
@@ -446,8 +446,8 @@ mod tests {
     /// A self-signed CA carrying an unrecognized critical extension with OID
     /// 1.2.3.4.5, alongside the critical basicConstraints rcgen always adds.
     fn certificate_with_unknown_critical_extension() -> Certificate<'static> {
-        let ca = self_signed_ca_with("Unknown Critical Ext", |params: &mut rcgen::CertificateParams| {
-            let mut ext = rcgen::CustomExtension::from_oid_content(&[1, 2, 3, 4, 5], b"unrecognized".to_vec());
+        let ca = self_signed_ca_with("Unknown Critical Ext", |params: &mut x509_validator_testkit::rcgen::CertificateParams| {
+            let mut ext = x509_validator_testkit::rcgen::CustomExtension::from_oid_content(&[1, 2, 3, 4, 5], b"unrecognized".to_vec());
             ext.set_criticality(true);
             params.custom_extensions.push(ext);
         });

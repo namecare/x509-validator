@@ -196,8 +196,8 @@ impl NameConstraintsPolicy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::{dns_subtree, issue_leaf, name_constraints, self_signed_ca_with};
-    use rcgen::CertificateParams;
+    use x509_validator_testkit::{dns_subtree, issue_leaf, name_constraints, self_signed_ca_with};
+    use x509_validator_testkit::rcgen::CertificateParams;
     use x509_validator_core::FromDer;
     use x509_validator_core::Certificate;
 
@@ -262,7 +262,7 @@ mod tests {
         let root = self_signed_ca_with("root", |params: &mut CertificateParams| {
             params.name_constraints = Some(name_constraints(vec![dns_subtree("example.com")], vec![]));
         });
-        let intermediate = crate::test_support::issue_ca("intermediate", &root, None, |_| {});
+        let intermediate = x509_validator_testkit::issue_ca("intermediate", &root, None, |_| {});
         let leaf = issue_leaf("leaf", &["www.evil.com"], &intermediate);
         let chain = chain_of(vec![leaf, intermediate.der, root.der]);
         let mut policy = NameConstraintsPolicy;
@@ -272,7 +272,7 @@ mod tests {
     #[test]
     fn self_signed_single_certificate_enforces_its_own_constraints() {
         let root = self_signed_ca_with("root", |params: &mut CertificateParams| {
-            params.subject_alt_names = vec![rcgen::SanType::DnsName("www.evil.com".try_into().unwrap())];
+            params.subject_alt_names = vec![x509_validator_testkit::rcgen::SanType::DnsName("www.evil.com".try_into().unwrap())];
             params.name_constraints = Some(name_constraints(vec![dns_subtree("example.com")], vec![]));
         });
         let chain = chain_of(vec![root.der]);
@@ -283,9 +283,9 @@ mod tests {
     #[test]
     fn directory_name_constraint_is_rejected_outright() {
         let root = self_signed_ca_with("root", |params: &mut CertificateParams| {
-            let mut dn = rcgen::DistinguishedName::new();
-            dn.push(rcgen::DnType::CommonName, "example");
-            params.name_constraints = Some(name_constraints(vec![rcgen::GeneralSubtree::DirectoryName(dn)], vec![]));
+            let mut dn = x509_validator_testkit::rcgen::DistinguishedName::new();
+            dn.push(x509_validator_testkit::rcgen::DnType::CommonName, "example");
+            params.name_constraints = Some(name_constraints(vec![x509_validator_testkit::rcgen::GeneralSubtree::DirectoryName(dn)], vec![]));
         });
         let leaf = issue_leaf("leaf", &["www.example.com"], &root);
         let chain = chain_of(vec![leaf, root.der]);

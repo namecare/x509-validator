@@ -107,8 +107,8 @@ impl VerifierPolicy for BasicConstraintsPolicy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::{issue_ca, issue_leaf, self_signed_ca_with};
-    use rcgen::CertificateParams;
+    use x509_validator_testkit::{issue_ca, issue_leaf, self_signed_ca_with};
+    use x509_validator_testkit::rcgen::CertificateParams;
     use x509_validator_core::FromDer;
     use x509_validator_core::Certificate;
 
@@ -145,7 +145,7 @@ mod tests {
         // A self-signed cert that isn't marked as a CA at all: built the
         // same way `issue_leaf` builds ordinary leaves, but self-signed.
         let this = self_signed_ca_with("root", |params: &mut CertificateParams| {
-            params.is_ca = rcgen::IsCa::NoCa;
+            params.is_ca = x509_validator_testkit::rcgen::IsCa::NoCa;
         });
         let chain = chain_of(vec![this.der]);
         let mut policy = BasicConstraintsPolicy;
