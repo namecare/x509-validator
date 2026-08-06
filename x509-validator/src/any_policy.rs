@@ -1,5 +1,5 @@
 use crate::policy::{PolicyEvaluationResult, VerifierPolicy};
-use x509_parser::der_parser::Oid;
+use x509_validator_core::der_parser::Oid;
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
 
 /// `AnyPolicy` can be used to erase the concrete type of some `VerifierPolicy`.

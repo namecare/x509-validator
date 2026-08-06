@@ -12,8 +12,8 @@ pub use basic_constraints_policy::BasicConstraintsPolicy;
 pub use name_constraints_policy::NameConstraintsPolicy;
 
 use crate::{VerifierPolicy, PolicyEvaluationResult};
-use x509_parser::der_parser::Oid;
-use x509_parser::oid_registry::OID_X509_EXT_KEY_USAGE;
+use x509_validator_core::der_parser::Oid;
+use x509_validator_core::oid_registry::OID_X509_EXT_KEY_USAGE;
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
 
 /// Composes VersionPolicy + ExpiryPolicy + BasicConstraintsPolicy +
@@ -83,9 +83,9 @@ mod tests {
     use crate::PolicyFailureReason;
     use rcgen::CertificateParams;
     use time::{Duration, OffsetDateTime};
-    use x509_parser::prelude::FromDer;
+    use x509_validator_core::FromDer;
     use x509_validator_core::Certificate;
-    use x509_parser::oid_registry::{OID_X509_EXT_BASIC_CONSTRAINTS, OID_X509_EXT_NAME_CONSTRAINTS};
+    use x509_validator_core::oid_registry::{OID_X509_EXT_BASIC_CONSTRAINTS, OID_X509_EXT_NAME_CONSTRAINTS};
 
     fn chain_of(ders: Vec<Vec<u8>>) -> UnverifiedCertificateChain<'static> {
         let certs = ders
@@ -222,7 +222,7 @@ mod conformance {
     };
     use rcgen::CertificateParams;
     use time::{Duration, OffsetDateTime};
-    use x509_parser::prelude::FromDer;
+    use x509_validator_core::FromDer;
     use x509_validator_core::Certificate;
 
     /// The validation time every test that doesn't care about expiry uses;
@@ -337,7 +337,7 @@ mod conformance {
         );
 
         let mut downgraded = parsed.clone();
-        downgraded.tbs_certificate.version = x509_parser::x509::X509Version::V1;
+        downgraded.tbs_certificate.version = x509_validator_core::x509::X509Version::V1;
         let chain = UnverifiedCertificateChain::new(vec![downgraded]);
 
         for_both_policies(PolicyUnderTest::Version, |policy| {

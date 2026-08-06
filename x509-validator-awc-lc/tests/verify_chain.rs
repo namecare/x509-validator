@@ -1,4 +1,4 @@
-use x509_parser::prelude::FromDer;
+use x509_validator_core::{Certificate, FromDer};
 use x509_validator_awc_lc::Verifier;
 use x509_validator_core::{ChainValidationResult, Verifier as _};
 
@@ -14,7 +14,7 @@ fn validates_digicert_rsa_chain() {
     let intermediate = fixture!("intermediate.der");
     let leaf = fixture!("leaf.der");
 
-    let (_, root_cert) = x509_parser::certificate::X509Certificate::from_der(root).unwrap();
+    let (_, root_cert) = Certificate::from_der(root).unwrap();
     let roots = [root_cert];
     let verifier = Verifier::new(&roots);
     let intermediates: [&[u8]; 1] = [intermediate.as_slice()];
@@ -37,7 +37,7 @@ fn validates_apple_ecdsa_chain() {
     let intermediate = fixture!("apple/intermediate.der");
     let leaf = fixture!("apple/leaf.der");
 
-    let (_, root_cert) = x509_parser::certificate::X509Certificate::from_der(root).unwrap();
+    let (_, root_cert) = Certificate::from_der(root).unwrap();
     let roots = [root_cert];
     let verifier = Verifier::new(&roots);
     let intermediates: [&[u8]; 1] = [intermediate.as_slice()];
@@ -63,7 +63,7 @@ fn rejects_chain_with_untrusted_root() {
     let intermediate = fixture!("intermediate.der");
     let leaf = fixture!("leaf.der");
 
-    let (_, root_cert) = x509_parser::certificate::X509Certificate::from_der(root).unwrap();
+    let (_, root_cert) = Certificate::from_der(root).unwrap();
     let roots = [root_cert];
     let verifier = Verifier::new(&roots);
     let intermediates: [&[u8]; 1] = [intermediate.as_slice()];
@@ -85,7 +85,7 @@ fn rejects_tampered_leaf_signature() {
     let last = leaf.len() - 1;
     leaf[last] ^= 0xFF;
 
-    let (_, root_cert) = x509_parser::certificate::X509Certificate::from_der(root).unwrap();
+    let (_, root_cert) = Certificate::from_der(root).unwrap();
     let roots = [root_cert];
     let verifier = Verifier::new(&roots);
     let intermediates: [&[u8]; 1] = [intermediate.as_slice()];

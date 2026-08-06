@@ -1,5 +1,5 @@
 use std::fmt;
-use x509_parser::der_parser::Oid;
+use x509_validator_core::der_parser::Oid;
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
 
 /// Result of evaluating a certificate chain against a policy. `Ok(())` indicates
@@ -43,7 +43,7 @@ pub trait VerifierPolicy {
 mod tests {
     use super::*;
     use crate::test_support::self_signed_ca;
-    use x509_parser::prelude::FromDer;
+    use x509_validator_core::FromDer;
     use x509_validator_core::Certificate;
 
     struct AlwaysMeetsPolicy;

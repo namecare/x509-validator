@@ -1,7 +1,7 @@
 use crate::policy::{PolicyEvaluationResult, PolicyFailureReason, VerifierPolicy};
-use x509_parser::der_parser::Oid;
+use x509_validator_core::der_parser::Oid;
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
-use x509_parser::x509::X509Version;
+use x509_validator_core::x509::X509Version;
 
 /// A sub-policy of `RFC5280Policy` that polices that version 1 certificates
 /// do not contain extensions.
@@ -31,7 +31,7 @@ impl VerifierPolicy for VersionPolicy {
 mod tests {
     use super::*;
     use crate::test_support::{issue_leaf, self_signed_ca_with};
-    use x509_parser::prelude::FromDer;
+    use x509_validator_core::FromDer;
     use x509_validator_core::Certificate;
 
     fn chain_of(ders: &[Vec<u8>]) -> UnverifiedCertificateChain<'static> {

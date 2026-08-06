@@ -1,7 +1,7 @@
 use crate::{VerifierPolicy, PolicyEvaluationResult, PolicyFailureReason};
-use x509_parser::der_parser::Oid;
-use x509_parser::extensions::{GeneralName, GeneralSubtree};
-use x509_parser::oid_registry::OID_X509_EXT_NAME_CONSTRAINTS;
+use x509_validator_core::der_parser::Oid;
+use x509_validator_core::extensions::{GeneralName, GeneralSubtree};
+use x509_validator_core::oid_registry::OID_X509_EXT_NAME_CONSTRAINTS;
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
 
 /// id-ce-nameConstraints, RFC 5280 §4.2.1.10: 2.5.29.30.
@@ -198,7 +198,7 @@ mod tests {
     use super::*;
     use crate::test_support::{dns_subtree, issue_leaf, name_constraints, self_signed_ca_with};
     use rcgen::CertificateParams;
-    use x509_parser::prelude::FromDer;
+    use x509_validator_core::FromDer;
     use x509_validator_core::Certificate;
 
     fn chain_of(ders: Vec<Vec<u8>>) -> UnverifiedCertificateChain<'static> {

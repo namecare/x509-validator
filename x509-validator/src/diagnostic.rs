@@ -19,7 +19,7 @@
 use crate::certificate_display::format_certificate;
 use crate::policy::PolicyFailureReason;
 use std::fmt;
-use x509_parser::der_parser::Oid;
+use x509_validator_core::der_parser::Oid;
 use x509_validator_core::Certificate;
 
 /// A single event observed while building and validating a certificate chain.
@@ -421,8 +421,8 @@ impl VerificationDiagnostic<'_> {
 mod tests {
     use super::*;
     use crate::test_support::{issue_ca, issue_leaf, self_signed_ca_with};
-    use x509_parser::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS;
-    use x509_parser::prelude::FromDer;
+    use x509_validator_core::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS;
+    use x509_validator_core::FromDer;
 
     fn leak(der: Vec<u8>) -> &'static [u8] {
         Box::leak(der.into_boxed_slice())

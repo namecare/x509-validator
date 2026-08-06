@@ -5,9 +5,9 @@ use crate::store::{subject_key, CertificateStore};
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
 use x509_validator_core::validated_chain::ValidatedCertificateChain;
 use x509_validator_core::Certificate;
-use x509_parser::extensions::ParsedExtension;
-use x509_parser::oid_registry::{OID_X509_EXT_AUTHORITY_KEY_IDENTIFIER, OID_X509_EXT_SUBJECT_KEY_IDENTIFIER};
-use x509_parser::prelude::FromDer;
+use x509_validator_core::extensions::ParsedExtension;
+use x509_validator_core::oid_registry::{OID_X509_EXT_AUTHORITY_KEY_IDENTIFIER, OID_X509_EXT_SUBJECT_KEY_IDENTIFIER};
+use x509_validator_core::FromDer;
 
 /// Parses each DER-encoded certificate in `der` and collects the results
 /// into a `CertificateStore`. Fails on the first certificate that doesn't
@@ -309,7 +309,7 @@ fn same_certificate_identity(a: &Certificate, b: &Certificate) -> bool {
     certificate_sans(a) == certificate_sans(b)
 }
 
-fn certificate_sans<'a>(c: &Certificate<'a>) -> Vec<x509_parser::extensions::GeneralName<'a>> {
+fn certificate_sans<'a>(c: &Certificate<'a>) -> Vec<x509_validator_core::extensions::GeneralName<'a>> {
     c.tbs_certificate
         .subject_alternative_name()
         .ok()
@@ -330,8 +330,8 @@ mod tests {
     };
     use rcgen::KeyPair;
     use std::sync::Mutex;
-    use x509_parser::prelude::FromDer;
-    use x509_parser::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
+    use x509_validator_core::FromDer;
+    use x509_validator_core::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
 
     fn parse(der: &'static [u8]) -> Certificate<'static> {
         Certificate::from_der(der).unwrap().1
@@ -478,11 +478,11 @@ mod tests {
 
     struct AlwaysMeetsPolicy;
     impl VerifierPolicy for AlwaysMeetsPolicy {
-        fn verifying_critical_extensions(&self) -> Vec<x509_parser::der_parser::Oid<'static>> {
+        fn verifying_critical_extensions(&self) -> Vec<x509_validator_core::der_parser::Oid<'static>> {
             // rcgen always marks basicConstraints critical, so a fake
             // policy that claims no extensions would reject every
             // rcgen-generated CA/root as "unhandled critical extension".
-            vec![x509_parser::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS]
+            vec![x509_validator_core::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS]
         }
         fn chain_meets_policy_requirements(&mut self, _chain: &UnverifiedCertificateChain) -> crate::policy::PolicyEvaluationResult {
             Ok(())
@@ -627,8 +627,8 @@ mod tests {
             right_root_spki: Vec<u8>,
         }
         impl VerifierPolicy for RequireRootKeyPolicy {
-            fn verifying_critical_extensions(&self) -> Vec<x509_parser::der_parser::Oid<'static>> {
-                vec![x509_parser::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS]
+            fn verifying_critical_extensions(&self) -> Vec<x509_validator_core::der_parser::Oid<'static>> {
+                vec![x509_validator_core::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS]
             }
             fn chain_meets_policy_requirements(&mut self, chain: &UnverifiedCertificateChain) -> crate::policy::PolicyEvaluationResult {
                 let root = &chain[chain.len() - 1];
@@ -685,8 +685,8 @@ mod tests {
             root_skis: Mutex<Vec<Option<Vec<u8>>>>,
         }
         impl VerifierPolicy for RecordingPolicy {
-            fn verifying_critical_extensions(&self) -> Vec<x509_parser::der_parser::Oid<'static>> {
-                vec![x509_parser::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS]
+            fn verifying_critical_extensions(&self) -> Vec<x509_validator_core::der_parser::Oid<'static>> {
+                vec![x509_validator_core::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS]
             }
             fn chain_meets_policy_requirements(&mut self, chain: &UnverifiedCertificateChain) -> crate::policy::PolicyEvaluationResult {
                 let root = &chain[chain.len() - 1];
@@ -1243,8 +1243,8 @@ mod tests {
             forbidden_der: Vec<u8>,
         }
         impl VerifierPolicy for ForbidCertificatePolicy {
-            fn verifying_critical_extensions(&self) -> Vec<x509_parser::der_parser::Oid<'static>> {
-                vec![x509_parser::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS]
+            fn verifying_critical_extensions(&self) -> Vec<x509_validator_core::der_parser::Oid<'static>> {
+                vec![x509_validator_core::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS]
             }
             fn chain_meets_policy_requirements(&mut self, chain: &UnverifiedCertificateChain) -> crate::policy::PolicyEvaluationResult {
                 for index in 0..chain.len() {

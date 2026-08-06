@@ -1,16 +1,16 @@
 use crate::signature;
-use x509_parser::prelude::FromDer;
+use x509_validator_core::FromDer;
 use x509_validator_core::error::{PolicyFailure, PolicyFailureReason};
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
 use x509_validator_core::validated_chain::ValidatedCertificateChain;
-use x509_validator_core::{ChainValidationResult, X509Certificate};
+use x509_validator_core::{Certificate, ChainValidationResult};
 
 pub struct Verifier<'a> {
-    roots: Vec<X509Certificate<'a>>,
+    roots: Vec<Certificate<'a>>,
 }
 
 impl<'a> x509_validator_core::Verifier<'a> for Verifier<'a> {
-    fn new(root_certificates: &'a [X509Certificate<'a>]) -> Self {
+    fn new(root_certificates: &'a [Certificate<'a>]) -> Self {
         Self {
             roots: root_certificates.to_vec(),
         }
@@ -25,7 +25,7 @@ impl<'a> x509_validator_core::Verifier<'a> for Verifier<'a> {
         let mut roots = Vec::new();
 
         while !remaining.is_empty() {
-            match X509Certificate::from_der(remaining) {
+            match Certificate::from_der(remaining) {
                 Ok((rest, cert)) => {
                     roots.push(cert);
                     remaining = rest;
@@ -38,7 +38,7 @@ impl<'a> x509_validator_core::Verifier<'a> for Verifier<'a> {
     }
 
     fn validate_raw(&self, leaf: &'a [u8], intermediates: &'a [&'a [u8]]) -> ChainValidationResult<'a> {
-        let leaf = match X509Certificate::from_der(leaf) {
+        let leaf = match Certificate::from_der(leaf) {
             Ok((_, leaf)) => leaf,
             Err(_) => {
                 return ChainValidationResult::CouldNotValidate(PolicyFailure::new(
@@ -48,9 +48,9 @@ impl<'a> x509_validator_core::Verifier<'a> for Verifier<'a> {
             }
         };
 
-        let intermediates: Vec<X509Certificate> = match intermediates
+        let intermediates: Vec<Certificate> = match intermediates
             .iter()
-            .map(|der| X509Certificate::from_der(der).map(|(_, cert)| cert))
+            .map(|der| Certificate::from_der(der).map(|(_, cert)| cert))
             .collect::<Result<_, _>>()
         {
             Ok(intermediates) => intermediates,
@@ -65,7 +65,7 @@ impl<'a> x509_validator_core::Verifier<'a> for Verifier<'a> {
         self.validate(leaf, intermediates)
     }
 
-    fn validate(&self, leaf: X509Certificate<'a>, intermediates: Vec<X509Certificate<'a>>) -> ChainValidationResult<'a> {
+    fn validate(&self, leaf: Certificate<'a>, intermediates: Vec<Certificate<'a>>) -> ChainValidationResult<'a> {
         let mut chain = vec![leaf];
         loop {
             let current = chain.last().unwrap();
@@ -110,7 +110,7 @@ impl<'a> x509_validator_core::Verifier<'a> for Verifier<'a> {
     }
 }
 
-fn could_not_validate<'a>(chain: Vec<X509Certificate<'a>>, reason: &str) -> ChainValidationResult<'a> {
+fn could_not_validate<'a>(chain: Vec<Certificate<'a>>, reason: &str) -> ChainValidationResult<'a> {
     ChainValidationResult::CouldNotValidate(PolicyFailure::new(
         UnverifiedCertificateChain::new(chain),
         PolicyFailureReason::new(reason),

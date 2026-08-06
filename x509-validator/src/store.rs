@@ -46,7 +46,7 @@ pub fn subject_key(certificate: &Certificate) -> Vec<u8> {
 mod tests {
     use super::*;
     use crate::test_support::self_signed_ca;
-    use x509_parser::prelude::FromDer;
+    use x509_validator_core::FromDer;
 
     fn cert(subject_cn: &str) -> Certificate<'static> {
         let der = self_signed_ca(subject_cn);
