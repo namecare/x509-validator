@@ -114,7 +114,7 @@ pub const DEFAULT_PROVIDER: CryptoProvider = CryptoProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rcgen::{CertificateParams, KeyPair};
+    use x509_validator_testkit::rcgen::{CertificateParams, KeyPair};
     use x509_validator_core::FromDer;
     use x509_validator_core::Certificate;
 

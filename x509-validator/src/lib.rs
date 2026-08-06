@@ -23,8 +23,6 @@ pub mod all_of_policies;
 pub mod any_policy;
 pub mod one_of_policies;
 pub mod store;
-#[cfg(test)]
-mod test_support;
 
 pub use policy::*;
 pub use certificate_display::*;

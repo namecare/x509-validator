@@ -30,7 +30,7 @@ impl VerifierPolicy for VersionPolicy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::{issue_leaf, self_signed_ca_with};
+    use x509_validator_testkit::{issue_leaf, self_signed_ca_with};
     use x509_validator_core::FromDer;
     use x509_validator_core::Certificate;
 

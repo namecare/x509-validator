@@ -356,11 +356,11 @@ impl<'a> AnalysedCertificateHostname<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::{
+    use x509_validator_testkit::{
         issue_leaf, issue_leaf_with, issue_leaf_with_dn, issue_leaf_with_email_sans, issue_leaf_with_ip_sans, self_signed_ca_with,
     };
-    use rcgen::string::Ia5String;
-    use rcgen::{DistinguishedName, DnType, SanType};
+    use x509_validator_testkit::rcgen::string::Ia5String;
+    use x509_validator_testkit::rcgen::{DistinguishedName, DnType, SanType};
     use x509_validator_core::FromDer;
 
     fn chain_of(der: Vec<u8>) -> UnverifiedCertificateChain<'static> {

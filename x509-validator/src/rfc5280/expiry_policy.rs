@@ -52,9 +52,9 @@ impl VerifierPolicy for ExpiryPolicy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::self_signed_ca_with;
-    use rcgen::CertificateParams;
-    use time::{Duration, OffsetDateTime};
+    use x509_validator_testkit::self_signed_ca_with;
+    use x509_validator_testkit::rcgen::CertificateParams;
+    use x509_validator_testkit::time::{Duration, OffsetDateTime};
     use x509_validator_core::FromDer;
     use x509_validator_core::Certificate;
 

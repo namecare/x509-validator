@@ -79,10 +79,10 @@ fn key_usage_oid() -> Oid<'static> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::{dns_subtree, issue_leaf, name_constraints, self_signed_ca_with};
+    use x509_validator_testkit::{dns_subtree, issue_leaf, name_constraints, self_signed_ca_with};
     use crate::PolicyFailureReason;
-    use rcgen::CertificateParams;
-    use time::{Duration, OffsetDateTime};
+    use x509_validator_testkit::rcgen::CertificateParams;
+    use x509_validator_testkit::time::{Duration, OffsetDateTime};
     use x509_validator_core::FromDer;
     use x509_validator_core::Certificate;
     use x509_validator_core::oid_registry::{OID_X509_EXT_BASIC_CONSTRAINTS, OID_X509_EXT_NAME_CONSTRAINTS};
@@ -138,7 +138,7 @@ mod tests {
     fn chain_failing_only_basic_constraints_is_rejected() {
         let root = self_signed_ca_with("root", |params: &mut CertificateParams| {
             with_validity(1000, 2000)(params);
-            params.is_ca = rcgen::IsCa::NoCa;
+            params.is_ca = x509_validator_testkit::rcgen::IsCa::NoCa;
         });
         let leaf = issue_leaf("leaf", &[], &root);
         let chain = chain_of(vec![leaf, root.der]);
@@ -215,13 +215,13 @@ mod tests {
 #[cfg(test)]
 mod conformance {
     use super::*;
-    use crate::test_support::{
+    use x509_validator_testkit::{
         broken_name_constraints_extension, broken_subject_alt_name_extension, directory_name_subtree, dns_subtree,
         ipv4_subtree, issue_ca, issue_leaf, issue_leaf_with, issue_self_issued_ca, name_constraints,
         raw_name_constraints_extension, raw_subject_alt_name_extension, self_signed_ca_with, Ca, RawGeneralName,
     };
-    use rcgen::CertificateParams;
-    use time::{Duration, OffsetDateTime};
+    use x509_validator_testkit::rcgen::CertificateParams;
+    use x509_validator_testkit::time::{Duration, OffsetDateTime};
     use x509_validator_core::FromDer;
     use x509_validator_core::Certificate;
 
@@ -484,11 +484,11 @@ mod conformance {
         // bit. Absent, negative, or undecodable basicConstraints all fail.
         let ca_unconstrained = self_signed_ca_with("root", |_| {}).der;
         let ca_path_len_zero = self_signed_ca_with("root", |params: &mut CertificateParams| {
-            params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Constrained(0));
+            params.is_ca = x509_validator_testkit::rcgen::IsCa::Ca(x509_validator_testkit::rcgen::BasicConstraints::Constrained(0));
         })
         .der;
         let not_a_ca = self_signed_ca_with("root", |params: &mut CertificateParams| {
-            params.is_ca = rcgen::IsCa::NoCa;
+            params.is_ca = x509_validator_testkit::rcgen::IsCa::NoCa;
         })
         .der;
 
@@ -509,7 +509,7 @@ mod conformance {
         // An intermediate that does not assert the CA bit cannot issue.
         let root = self_signed_ca_with("root", |_| {});
         let bad_intermediate = issue_ca("intermediate", &root, None, |params: &mut CertificateParams| {
-            params.is_ca = rcgen::IsCa::NoCa;
+            params.is_ca = x509_validator_testkit::rcgen::IsCa::NoCa;
         });
         let leaf = issue_leaf("leaf", &["www.example.com"], &bad_intermediate);
         let bad_chain = chain_of(vec![leaf, bad_intermediate.der, root.der]);
@@ -531,7 +531,7 @@ mod conformance {
     #[test]
     fn root_ca_must_be_marked_as_ca() {
         let bad_root = self_signed_ca_with("root", |params: &mut CertificateParams| {
-            params.is_ca = rcgen::IsCa::NoCa;
+            params.is_ca = x509_validator_testkit::rcgen::IsCa::NoCa;
         });
         let leaf = issue_leaf("leaf", &["www.example.com"], &bad_root);
         let bad_chain = chain_of(vec![leaf, bad_root.der]);
@@ -580,7 +580,7 @@ mod conformance {
     fn path_length_constraints_on_roots_are_applied() {
         // Same rule, but the constraint lives on the trust anchor.
         let root = self_signed_ca_with("root", |params: &mut CertificateParams| {
-            params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Constrained(0));
+            params.is_ca = x509_validator_testkit::rcgen::IsCa::Ca(x509_validator_testkit::rcgen::BasicConstraints::Constrained(0));
         });
         let first_level = issue_ca("first", &root, None, |_| {});
         let second_level = issue_ca("second", &first_level, None, |_| {});
@@ -596,7 +596,7 @@ mod conformance {
         // certificates that follow, excluding the end entity itself. A
         // leaf issued directly by the root therefore fits exactly.
         let root = self_signed_ca_with("root", |params: &mut CertificateParams| {
-            params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Constrained(0));
+            params.is_ca = x509_validator_testkit::rcgen::IsCa::Ca(x509_validator_testkit::rcgen::BasicConstraints::Constrained(0));
         });
         let leaf = issue_leaf("leaf", &["www.example.com"], &root);
         let fits = chain_of(vec![leaf, root.der]);
@@ -613,7 +613,7 @@ mod conformance {
         // itself under a fresh key keeps the same subject as its issuer,
         // so that hop must not consume the budget.
         let root = self_signed_ca_with("root", |params: &mut CertificateParams| {
-            params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Constrained(0));
+            params.is_ca = x509_validator_testkit::rcgen::IsCa::Ca(x509_validator_testkit::rcgen::BasicConstraints::Constrained(0));
         });
         let self_issued = issue_self_issued_ca(&root, Some(0));
         let leaf = issue_leaf("leaf", &["www.example.com"], &self_issued);
@@ -628,7 +628,7 @@ mod conformance {
         // test above would pass even if self-issued certificates were
         // simply never counted for any reason.
         let root = self_signed_ca_with("root", |params: &mut CertificateParams| {
-            params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Constrained(0));
+            params.is_ca = x509_validator_testkit::rcgen::IsCa::Ca(x509_validator_testkit::rcgen::BasicConstraints::Constrained(0));
         });
         let other_named = issue_ca("someone-else", &root, Some(0), |_| {});
         let sub = issue_ca("sub", &other_named, Some(0), |_| {});
@@ -737,19 +737,19 @@ mod conformance {
 
     fn dns_san(name: &'static str) -> impl Fn(&mut CertificateParams) {
         move |params: &mut CertificateParams| {
-            params.subject_alt_names = vec![rcgen::SanType::DnsName(name.try_into().unwrap())];
+            params.subject_alt_names = vec![x509_validator_testkit::rcgen::SanType::DnsName(name.try_into().unwrap())];
         }
     }
 
     fn ip_san(addr: std::net::IpAddr) -> impl Fn(&mut CertificateParams) {
         move |params: &mut CertificateParams| {
-            params.subject_alt_names = vec![rcgen::SanType::IpAddress(addr)];
+            params.subject_alt_names = vec![x509_validator_testkit::rcgen::SanType::IpAddress(addr)];
         }
     }
 
     fn uri_san(uri: &'static str) -> impl Fn(&mut CertificateParams) {
         move |params: &mut CertificateParams| {
-            params.subject_alt_names = vec![rcgen::SanType::URI(uri.try_into().unwrap())];
+            params.subject_alt_names = vec![x509_validator_testkit::rcgen::SanType::URI(uri.try_into().unwrap())];
         }
     }
 
@@ -1019,7 +1019,7 @@ mod conformance {
         // rule, matching what mainstream implementations do.
         let root = self_signed_ca_with("root", |_| {});
         let intermediate = issue_ca("intermediate", &root, Some(0), |params: &mut CertificateParams| {
-            params.key_usages = vec![rcgen::KeyUsagePurpose::DigitalSignature];
+            params.key_usages = vec![x509_validator_testkit::rcgen::KeyUsagePurpose::DigitalSignature];
         });
         let leaf = issue_leaf("leaf", &["www.example.com"], &intermediate);
         let chain = chain_of(vec![leaf, intermediate.der, root.der]);
@@ -1040,7 +1040,7 @@ mod conformance {
         // list, which is what causes verification to reject the chain.
         let root = self_signed_ca_with("root", |_| {});
         let leaf = issue_leaf_with("leaf", &["www.example.com"], &root, |params: &mut CertificateParams| {
-            params.custom_extensions.push(crate::test_support::weird_critical_extension());
+            params.custom_extensions.push(x509_validator_testkit::weird_critical_extension());
         });
         let leaf_der: &'static [u8] = Box::leak(leaf.into_boxed_slice());
         let (_, parsed) = Certificate::from_der(leaf_der).unwrap();
