@@ -15,6 +15,7 @@ pub use x509_validator_core::*;
 pub use verifier::BaseVerifier;
 
 pub mod policy;
+pub mod certificate_display;
 pub mod diagnostic;
 pub mod rfc5280;
 pub mod server_identity_policy;
@@ -26,6 +27,7 @@ pub mod store;
 mod test_support;
 
 pub use policy::*;
+pub use certificate_display::*;
 pub use diagnostic::*;
 pub use rfc5280::*;
 pub use server_identity_policy::ServerIdentityPolicy;
