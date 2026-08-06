@@ -196,8 +196,259 @@ impl<'a> Iterator for ReverseDnsLabels<'a> {
 }
 
 #[cfg(test)]
+pub(crate) mod fixtures {
+    /// A conformance corpus of `(dns_name, constraint, expected_match)` rows,
+    /// adapted from the webpki and Chromium name-matching conformance suites.
+    ///
+    /// The same corpus is reused by the URI constraint tests, which wrap each
+    /// `dns_name` in a variety of URI shapes and assert the host part behaves
+    /// identically.
+    pub(crate) fn name_matching_fixtures() -> Vec<(String, String, bool)> {
+        // 31 repetitions of "example" joined by "." plus ".com.au" is exactly
+        // 254 bytes: (7 * 31) + 30 + 7, one byte over the 253-byte limit.
+        let long_domain = {
+            let mut s = vec!["example"; 31].join(".");
+            s.push_str(".com.au");
+            s
+        };
+        let label_63 = "a".repeat(63);
+        let label_64 = "a".repeat(64);
+
+        let borrowed: &[(&str, &str, bool)] = &[
+            ("", "a", false),
+            ("a", "a", true),
+            ("b", "a", false),
+            ("*.b.a", "c.b.a", false),
+            ("*.b.a", "b.a", true),
+            ("*.b.a", "b.a.", true),
+            // Wildcard not in leftmost label
+            ("d.c.b.a", "d.c.b.a", true),
+            ("d.*.b.a", "d.c.b.a", false),
+            ("d.c*.b.a", "d.c.b.a", false),
+            ("d.c*.b.a", "d.cc.b.a", false),
+            // Case sensitivity
+            ("abcdefghijklmnopqrstuvwxyz", "ABCDEFGHIJKLMNOPQRSTUVWXYZ", true),
+            ("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz", true),
+            ("aBc", "Abc", true),
+            // Digits
+            ("a1", "a1", true),
+            // A trailing dot indicates an absolute name, and absolute names can
+            // match relative names, and vice-versa.
+            ("example", "example", true),
+            ("example.", "example.", false),
+            ("example", "example.", true),
+            ("example.", "example", false),
+            ("example.com", "example.com", true),
+            ("example.com.", "example.com.", false),
+            ("example.com", "example.com.", true),
+            ("example.com.", "example.com", false),
+            ("example.com..", "example.com.", false),
+            ("example.com..", "example.com", false),
+            ("example.com...", "example.com.", false),
+            // xn-- IDN prefix
+            ("x*.b.a", "xa.b.a", false),
+            ("x*.b.a", "xna.b.a", false),
+            ("x*.b.a", "xn-a.b.a", false),
+            ("x*.b.a", "xn--a.b.a", false),
+            ("xn*.b.a", "xn--a.b.a", false),
+            ("xn-*.b.a", "xn--a.b.a", false),
+            ("xn--*.b.a", "xn--a.b.a", false),
+            ("xn*.b.a", "xn--a.b.a", false),
+            ("xn-*.b.a", "xn--a.b.a", false),
+            ("xn--*.b.a", "xn--a.b.a", false),
+            ("xn---*.b.a", "xn--a.b.a", false),
+            // "*" cannot expand to nothing.
+            ("c*.b.a", "c.b.a", false),
+            // ---------------------------------------------------------------
+            // The rest are adapted from the Chromium certificate name-matching
+            // tests, with the parameter order flipped to match this crate's
+            // signature and a few cases adjusted for intentional behavioural
+            // differences.
+            ("foo.com", "foo.com", true),
+            ("f", "f", true),
+            ("i", "h", false),
+            ("*.foo.com", "bar.foo.com", false),
+            ("*.test.fr", "www.test.fr", false),
+            ("*.test.FR", "wwW.tESt.fr", false),
+            (".uk", "f.uk", false),
+            ("?.bar.foo.com", "w.bar.foo.com", false),
+            ("(www|ftp).foo.com", "www.foo.com", false), // regex!
+            ("www.foo.com\0", "www.foo.com", false),
+            ("www.foo.com\0*.foo.com", "www.foo.com", false),
+            ("ww.house.example", "www.house.example", false),
+            ("www.test.org", "test.org", true),
+            ("*.test.org", "test.org", true),
+            ("*.org", "test.org", false),
+            // '*' must be the only character in the wildcard label
+            ("w*.bar.foo.com", ".bar.foo.com", false),
+            ("ww*ww.bar.foo.com", ".bar.foo.com", false),
+            ("ww*ww.bar.foo.com", ".bar.foo.com", false),
+            ("w*w.bar.foo.com", ".bar.foo.com", false),
+            ("w*w.bar.foo.c0m", ".bar.foo.com", false),
+            ("wa*.bar.foo.com", ".bar.foo.com", false),
+            ("*Ly.bar.foo.com", ".bar.foo.com", false),
+            ("*.test.de", "www.test.co.jp", false),
+            ("*.jp", "www.test.co.jp", false),
+            ("www.test.co.uk", "www.test.co.jp", false),
+            ("www.*.co.jp", "www.test.co.jp", false),
+            ("www.bar.foo.com", "www.bar.foo.com", true),
+            ("*.foo.com", "www.bar.foo.com", false),
+            ("*.*.foo.com", "www.bar.foo.com", false),
+            ("www.bath.org", "www.bath.org", true),
+            // IDN tests
+            ("xn--poema-9qae5a.com.br", "xn--poema-9qae5a.com.br", true),
+            ("*.xn--poema-9qae5a.com.br", "www.xn--poema-9qae5a.com.br", false),
+            ("*.xn--poema-9qae5a.com.br", "xn--poema-9qae5a.com.br", true),
+            ("xn--poema-*.com.br", "xn--poema-9qae5a.com.br", false),
+            ("xn--*-9qae5a.com.br", "xn--poema-9qae5a.com.br", false),
+            ("*--poema-9qae5a.com.br", "xn--poema-9qae5a.com.br", false),
+            // Adapted from the examples in RFC 6125 §6.4.3: *.example.com would
+            // match foo.example.com but not bar.foo.example.com or example.com.
+            ("*.example.com", "foo.example.com", false),
+            ("*.example.com", "bar.foo.example.com", false),
+            ("*.example.com", "example.com", true),
+            ("baz*.example.net", "baz1.example.net", false),
+            ("*baz.example.net", "foobaz.example.net", false),
+            ("b*z.example.net", "buzz.example.net", false),
+            // Wildcards should not be valid for public registry controlled
+            // domains, and for unknown/unrecognised domains at least three
+            // domain components must be present: there must always be at least
+            // two labels after the wildcard label.
+            ("*.test.example", ".test.example", true),
+            ("*.example.co.uk", ".example.co.uk", true),
+            ("*.example", ".example", false),
+            // The result differs from Chromium's, because Chromium takes into
+            // account the additional knowledge that "co.uk" is a TLD. We do not
+            // consult a public suffix list.
+            ("*.co.uk", ".co.uk", true),
+            ("*.com", ".com", false),
+            ("*.us", ".us", false),
+            ("*", "foo", false),
+            // IDN variants of wildcards and registry controlled domains.
+            ("*.xn--poema-9qae5a.com.br", ".xn--poema-9qae5a.com.br", true),
+            ("*.example.xn--mgbaam7a8h", ".example.xn--mgbaam7a8h", true),
+            ("*.xn--mgbaam7a8h", ".xn--mgbaam7a8h", false),
+            // Wildcards should be permissible for 'private' registry-controlled
+            // domains. (We do not know whether a domain is a private
+            // registry-controlled domain or not.)
+            ("*.appspot.com", ".appspot.com", true),
+            ("*.s3.amazonaws.com", ".s3.amazonaws.com", true),
+            // Multiple wildcards are not valid.
+            ("*.*.com", ".com", false),
+            ("*.bar.*.com", ".com", false),
+            // Absolute vs relative DNS name tests. Although not explicitly
+            // specified in RFC 6125, absolute reference names (those ending in
+            // a ".") should match either absolute or relative presented names.
+            ("foo.com.", "foo.com", false),
+            ("foo.com", "foo.com.", true),
+            ("foo.com.", "foo.com.", false),
+            ("f.", "f", false),
+            ("f", "f.", true),
+            ("f.", "f.", false),
+            ("*.bar.foo.com.", ".bar.foo.com", false),
+            ("*.bar.foo.com", ".bar.foo.com.", true),
+            ("*.bar.foo.com.", ".bar.foo.com.", false),
+            ("*.com.", "example.com", false),
+            ("*.com", "example.com.", false),
+            ("*.com.", "example.com.", false),
+            ("*.", "foo.", false),
+            ("*.", "foo", false),
+            // The result differs from Chromium's because we don't know that
+            // co.uk is a TLD.
+            ("*.co.uk.", "foo.co.uk", false),
+            ("*.co.uk.", "foo.co.uk.", false),
+            // Empty constraint matches everything
+            ("example.com", "", true),
+            ("*.foo.example.com", "", true),
+            // Longer constraint doesn't match.
+            ("example.com", "foo.example.com", false),
+            // No hyphens beginning or ending labels
+            ("-.example.com", "example.com", false),
+            ("foo.-bar.example.com", "example.com", false),
+            ("foo-.example.com", "example.com", false),
+            ("foo-bar.example.com", "example.com", true),
+            ("foo.-example.com", "-example.com", false),
+            ("foo.-bar.example.com", "foo.-bar.example.com", false),
+            ("foo.bar-.example.com", "foo.bar-.example.com", false),
+            ("foo-bar.example.com", "foo-bar.example.com", true),
+            // All numeric labels
+            ("1234567.example.com", "example.com", true),
+            ("foo.1234567.example.com", "foo.1234567.example.com", true),
+            ("foo.example.123", "foo.example.123", false),
+            // Trailing period doesn't always match
+            ("foo.com", "example.bar.", false),
+            ("foo.com", "foo.www.", false),
+        ];
+
+        let mut fixtures: Vec<(String, String, bool)> = borrowed
+            .iter()
+            .map(|&(dns_name, constraint, expected)| {
+                (dns_name.to_string(), constraint.to_string(), expected)
+            })
+            .collect();
+
+        // Long domains: 254 bytes exceeds the 253-byte name limit, so neither
+        // side is a valid name.
+        fixtures.push((long_domain.clone(), ".example.com.au".to_string(), false));
+        fixtures.push(("example.com.au".to_string(), long_domain, false));
+
+        // Long labels: 63 bytes is the maximum, 64 is one too many.
+        fixtures.push((format!("{label_63}.example.com"), "example.com".to_string(), true));
+        fixtures.push((format!("{label_64}.example.com"), "example.com".to_string(), false));
+        fixtures.push((
+            format!("{label_63}.example.com"),
+            format!("{label_63}.example.com"),
+            true,
+        ));
+        fixtures.push((
+            format!("{label_64}.example.com"),
+            format!("{label_64}.example.com"),
+            false,
+        ));
+
+        fixtures
+    }
+}
+
+#[cfg(test)]
 mod tests {
+    use super::fixtures::name_matching_fixtures;
     use super::*;
+
+    #[test]
+    fn name_matches_reference_corpus() {
+        for (dns_name, constraint, expected) in name_matching_fixtures() {
+            let actual = NameConstraintsPolicy::dns_name_matches_constraint(
+                dns_name.as_bytes(),
+                constraint.as_bytes(),
+            );
+            assert_eq!(
+                expected, actual,
+                "expected dns name {dns_name:?} matching constraint {constraint:?} to be {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn reverse_dns_labels_iterates_right_to_left() {
+        fn reverse(name: &str) -> Vec<&[u8]> {
+            ReverseDnsLabels::new(name.as_bytes()).collect()
+        }
+
+        assert_eq!(reverse("f."), vec![&b""[..], &b"f"[..]]);
+        assert_eq!(
+            reverse("www-3.example.com"),
+            vec![&b"com"[..], &b"example"[..], &b"www-3"[..]]
+        );
+        assert_eq!(
+            reverse("f....y."),
+            vec![&b""[..], &b"y"[..], &b""[..], &b""[..], &b""[..], &b"f"[..]]
+        );
+        assert_eq!(
+            reverse(".example.com"),
+            vec![&b"com"[..], &b"example"[..], &b""[..]]
+        );
+    }
 
     fn matches(dns_name: &str, constraint: &str) -> bool {
         NameConstraintsPolicy::dns_name_matches_constraint(dns_name.as_bytes(), constraint.as_bytes())
