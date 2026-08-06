@@ -324,8 +324,9 @@ mod tests {
     use crate::policy::{PolicyFailureReason, VerifierPolicy};
     use crate::crypto::{CryptoError, Digest, KeyProvider, PublicKey};
     use crate::test_support::{
-        issue_ca, issue_leaf, issue_leaf_with_aki, self_signed_ca_with, self_signed_ca_with_key_ids,
-        signing_identity, weird_critical_extension, Ski,
+        issue_ca, issue_ca_with_key, issue_ca_with_key_and_name, issue_ca_with_key_ids, issue_leaf, issue_leaf_with,
+        issue_leaf_with_aki, self_signed_ca_with, self_signed_ca_with_key_ids, signing_identity,
+        weird_critical_extension, Ski,
     };
     use rcgen::KeyPair;
     use std::sync::Mutex;
@@ -389,6 +390,86 @@ mod tests {
     fn always_valid_crypto() -> CryptoProvider {
         CryptoProvider {
             key_provider: &ALWAYS_VALID_KEY_PROVIDER,
+            sha256: &FAKE_DIGEST,
+        }
+    }
+
+    // ---- Discriminating CryptoProvider ----
+    //
+    // `always_valid_crypto` treats every candidate issuer as having signed
+    // every certificate, which makes any assertion about *which* issuer the
+    // search accepts vacuous: RFC 5280 §6.1.3(a)(1) requires the candidate's
+    // public key to actually verify the signature on the certificate below
+    // it, and a no-op verifier never enforces that.
+    //
+    // The provider below enforces it without doing asymmetric crypto. Every
+    // certificate generated for a test is registered with the DER-encoded
+    // `SubjectPublicKeyInfo` of the key that genuinely signed it, keyed by
+    // the certificate's own `tbsCertificate` bytes — which are exactly the
+    // `message` the verifier passes down. Verification then reduces to
+    // "is the candidate's SPKI the SPKI that signed this?", which
+    // discriminates precisely the way a real signature check does for these
+    // fixtures, and fails for exactly the same candidates.
+
+    /// Pairs of (`tbsCertificate` DER, DER-encoded `SubjectPublicKeyInfo` of
+    /// the key that signed it).
+    type SignerRegistry = Mutex<Vec<(Vec<u8>, Vec<u8>)>>;
+
+    /// Maps a certificate's `tbsCertificate` DER to the DER-encoded
+    /// `SubjectPublicKeyInfo` of the key that signed it.
+    fn signer_registry() -> &'static SignerRegistry {
+        static REGISTRY: std::sync::OnceLock<SignerRegistry> = std::sync::OnceLock::new();
+        REGISTRY.get_or_init(|| Mutex::new(Vec::new()))
+    }
+
+    /// Registers `der` as having been signed by `signer`, then leaks and
+    /// returns it so it can be parsed with a `'static` lifetime. Every
+    /// fixture in a test using [`discriminating_crypto`] must go through
+    /// this, or its signature will be treated as unverifiable.
+    fn leak_signed_by(der: Vec<u8>, signer: &crate::test_support::Ca) -> &'static [u8] {
+        let leaked = leak(der);
+        let cert = parse(leaked);
+        signer_registry()
+            .lock()
+            .unwrap()
+            .push((cert.tbs_certificate.as_ref().to_vec(), signer.public_key_der()));
+        leaked
+    }
+
+    #[derive(Debug)]
+    struct RegisteredSignerKey {
+        spki_der: Vec<u8>,
+    }
+
+    impl PublicKey for RegisteredSignerKey {
+        fn is_valid(&self, _signature: &[u8], message: &[u8]) -> Result<(), CryptoError> {
+            let registry = signer_registry().lock().unwrap();
+            let signed_by_this_key = registry
+                .iter()
+                .any(|(tbs, signer_spki)| tbs == message && *signer_spki == self.spki_der);
+            if signed_by_this_key {
+                Ok(())
+            } else {
+                Err(CryptoError::VerificationFailed)
+            }
+        }
+    }
+
+    #[derive(Debug)]
+    struct DiscriminatingKeyProvider;
+    impl KeyProvider for DiscriminatingKeyProvider {
+        fn public_key(&self, _algorithm: &AlgorithmIdentifier, public_key: &SubjectPublicKeyInfo) -> Result<Box<dyn PublicKey>, CryptoError> {
+            Ok(Box::new(RegisteredSignerKey {
+                spki_der: public_key.raw.to_vec(),
+            }))
+        }
+    }
+
+    static DISCRIMINATING_KEY_PROVIDER: DiscriminatingKeyProvider = DiscriminatingKeyProvider;
+
+    fn discriminating_crypto() -> CryptoProvider {
+        CryptoProvider {
+            key_provider: &DISCRIMINATING_KEY_PROVIDER,
             sha256: &FAKE_DIGEST,
         }
     }
@@ -900,6 +981,490 @@ mod tests {
         assert!(
             matches!(result, ChainValidationResultOwned::CouldNotValidate(_)),
             "a leaf with an unhandled critical extension must not validate"
+        );
+    }
+
+    #[test]
+    fn roots_with_a_matching_subject_key_identifier_are_preferred() {
+        // Two trust anchors share one subject name and one key pair, so
+        // either terminates a valid path and neither can be eliminated by a
+        // signature check. They differ only in that one carries a
+        // subjectKeyIdentifier equal to the intermediate's
+        // authorityKeyIdentifier and the other carries none at all.
+        //
+        // RFC 5280 §4.2.1.1 offers the AKI precisely as the means of
+        // selecting among issuers that share a name, and RFC 4158 §3.5.3
+        // ranks a matching key identifier above an absent one. The no-SKI
+        // anchor is inserted first, so only that ranking — rather than store
+        // insertion order — can put the matching anchor in the built chain.
+        let root_key = KeyPair::generate().expect("generate key pair");
+        let matching_root = self_signed_ca_with_key_ids("root", Some(root_key), Ski::Derived);
+        let no_ski_root = self_signed_ca_with_key_ids("root", Some(matching_root.copy_of_key_pair()), Ski::Absent);
+
+        let intermediate = issue_ca_with_key_ids("intermediate", &matching_root, None, Ski::Derived, true);
+        let leaf_der = leak(issue_leaf("leaf", &["www.example.com"], &intermediate));
+        let intermediate_der = leak(intermediate.der.clone());
+        let matching_der = leak(matching_root.der.clone());
+        let no_ski_der = leak(no_ski_root.der.clone());
+
+        let leaf = parse(leaf_der);
+        let matching_cert = parse(matching_der);
+        let no_ski_cert = parse(no_ski_der);
+        let intermediate_cert = parse(intermediate_der);
+
+        // Guard against a vacuous test: the ranking signal must really exist.
+        assert_eq!(
+            authority_key_identifier(&intermediate_cert),
+            subject_key_identifier(&matching_cert),
+            "the intermediate's AKI must equal the matching root's SKI"
+        );
+        assert_eq!(subject_key_identifier(&no_ski_cert), None, "the other root must carry no SKI");
+        assert_eq!(
+            subject_key(&matching_cert),
+            subject_key(&no_ski_cert),
+            "both roots must share a subject name so both are candidates"
+        );
+
+        // Insertion order deliberately puts the unranked root first.
+        let roots = CertificateStore::from_iter(vec![no_ski_cert, matching_cert]);
+        let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
+        let crypto = always_valid_crypto();
+        let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &crypto);
+
+        let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+        assert_chain_is(result, &[&leaf, &parse(intermediate_der), &parse(matching_der)]);
+    }
+
+    #[test]
+    fn intermediates_whose_subject_key_identifier_matches_the_subject_aki_are_preferred() {
+        // A single subject name, "intermediate", is served by two
+        // certificates in the intermediate store: one carrying a
+        // subjectKeyIdentifier equal to the leaf's authorityKeyIdentifier,
+        // one carrying none. Both share a key pair and both are validly
+        // issued by the same root, so both complete a chain and the search
+        // cannot discriminate on signatures — only the RFC 4158 §3.5.3
+        // ranking of the RFC 5280 §4.2.1.1 key-identifier hint decides.
+        //
+        // Two candidates under one subject name is also what makes the
+        // ranking observable at all: candidates are pushed onto a LIFO
+        // search stack, so the best-ranked candidate must be pushed last to
+        // be popped first. With a single candidate per name the push order
+        // is unobservable.
+        let root = self_signed_ca_with("root", |_| {});
+
+        let intermediate_key = KeyPair::generate().expect("generate key pair");
+        let matching_intermediate = issue_ca_with_key("intermediate", &root, intermediate_key, Ski::Derived, true, |_| {});
+        let no_ski_intermediate = issue_ca_with_key(
+            "intermediate",
+            &root,
+            matching_intermediate.copy_of_key_pair(),
+            Ski::Absent,
+            true,
+            |_| {},
+        );
+
+        let leaf_der = leak(issue_leaf_with_aki("leaf", &["www.example.com"], &matching_intermediate, true));
+        let matching_der = leak(matching_intermediate.der.clone());
+        let no_ski_der = leak(no_ski_intermediate.der.clone());
+        let root_der = leak(root.der.clone());
+
+        let leaf = parse(leaf_der);
+        let matching_cert = parse(matching_der);
+        let no_ski_cert = parse(no_ski_der);
+
+        // Guard against a vacuous test.
+        assert_eq!(
+            authority_key_identifier(&leaf),
+            subject_key_identifier(&matching_cert),
+            "the leaf's AKI must equal the preferred intermediate's SKI"
+        );
+        assert_eq!(subject_key_identifier(&no_ski_cert), None, "the other intermediate must carry no SKI");
+        assert_eq!(
+            subject_key(&matching_cert),
+            subject_key(&no_ski_cert),
+            "both intermediates must share a subject name so both are candidates"
+        );
+
+        let roots = CertificateStore::from_iter(vec![parse(root_der)]);
+        // Insertion order deliberately puts the unranked intermediate first.
+        let intermediates = CertificateStore::from_iter(vec![no_ski_cert, matching_cert]);
+        let crypto = always_valid_crypto();
+        let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &crypto);
+
+        let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+        assert_chain_is(result, &[&leaf, &parse(matching_der), &parse(root_der)]);
+    }
+
+    #[test]
+    fn cross_signed_root_is_supported() {
+        // Only ca2 is trusted. The path to it runs leaf -> intermediate ->
+        // ca1-as-cross-signed-by-ca2 -> ca2: the intermediate names ca1 as
+        // its issuer, and the certificate satisfying that name in the
+        // intermediate store is the cross-signed one, whose own issuer name
+        // is ca2. RFC 4158 §2.4.2 describes exactly this shape.
+        let ca1 = self_signed_ca_with("ca1", |_| {});
+        let ca2 = self_signed_ca_with("ca2", |_| {});
+        let ca1_cross_signed = ca1.cross_signed_by(&ca2);
+        let intermediate = issue_ca("intermediate", &ca1, None, |_| {});
+
+        let leaf_der = leak_signed_by(issue_leaf("leaf", &["www.example.com"], &intermediate), &intermediate);
+        let intermediate_der = leak_signed_by(intermediate.der.clone(), &ca1);
+        let cross_signed_der = leak_signed_by(ca1_cross_signed.der.clone(), &ca2);
+        let ca2_der = leak_signed_by(ca2.der.clone(), &ca2);
+
+        let leaf = parse(leaf_der);
+        let roots = CertificateStore::from_iter(vec![parse(ca2_der)]);
+        let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der), parse(cross_signed_der)]);
+        let crypto = discriminating_crypto();
+        let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &crypto);
+
+        let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+        assert_chain_is(
+            result,
+            &[&leaf, &parse(intermediate_der), &parse(cross_signed_der), &parse(ca2_der)],
+        );
+    }
+
+    #[test]
+    fn shorter_path_is_built_when_cross_signed_roots_offer_both() {
+        // Both ca1 and ca2 are trusted, and both cross-signed certificates
+        // are available as intermediates, so two paths terminate at a trust
+        // anchor: the three-certificate one through ca1 directly, and the
+        // four-certificate one through ca1-cross-signed-by-ca2.
+        //
+        // RFC 4158 §3.2 prefers the shorter path, and the search reaches it
+        // first because trust anchors are considered ahead of intermediates
+        // at each step. The extra cross-signed certificates must not divert
+        // it.
+        let ca1 = self_signed_ca_with("ca1", |_| {});
+        let ca2 = self_signed_ca_with("ca2", |_| {});
+        let ca1_cross_signed = ca1.cross_signed_by(&ca2);
+        let ca2_cross_signed = ca2.cross_signed_by(&ca1);
+        let intermediate = issue_ca("intermediate", &ca1, None, |_| {});
+
+        let leaf_der = leak_signed_by(issue_leaf("leaf", &["www.example.com"], &intermediate), &intermediate);
+        let intermediate_der = leak_signed_by(intermediate.der.clone(), &ca1);
+        let ca1_cross_der = leak_signed_by(ca1_cross_signed.der.clone(), &ca2);
+        let ca2_cross_der = leak_signed_by(ca2_cross_signed.der.clone(), &ca1);
+        let ca1_der = leak_signed_by(ca1.der.clone(), &ca1);
+        let ca2_der = leak_signed_by(ca2.der.clone(), &ca2);
+
+        let leaf = parse(leaf_der);
+        let roots = CertificateStore::from_iter(vec![parse(ca1_der), parse(ca2_der)]);
+        let intermediates = CertificateStore::from_iter(vec![
+            parse(intermediate_der),
+            parse(ca2_cross_der),
+            parse(ca1_cross_der),
+        ]);
+        let crypto = discriminating_crypto();
+        let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &crypto);
+
+        let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+        assert_chain_is(result, &[&leaf, &parse(intermediate_der), &parse(ca1_der)]);
+    }
+
+    #[test]
+    fn roots_that_did_not_sign_the_certificate_below_them_are_rejected() {
+        // The trust store holds a certificate for ca1's subject name that
+        // carries a *different* key than the one that actually signed the
+        // intermediate. RFC 5280 §6.1.3(a)(1) requires the signature on each
+        // certificate to verify under the public key of the certificate
+        // above it, so that anchor must be rejected despite matching by
+        // name, and the search must fall through to the longer path that
+        // terminates at ca2.
+        let ca1 = self_signed_ca_with("ca1", |_| {});
+        let ca2 = self_signed_ca_with("ca2", |_| {});
+        let ca1_cross_signed = ca1.cross_signed_by(&ca2);
+        let ca2_cross_signed = ca2.cross_signed_by(&ca1);
+        let intermediate = issue_ca("intermediate", &ca1, None, |_| {});
+
+        // A second certificate for ca1's name and a different key pair,
+        // issued by ca1 itself. It never signed the intermediate.
+        let ca1_with_other_key = issue_ca_with_key_and_name(
+            "ca1",
+            &ca1,
+            KeyPair::generate().expect("generate key pair"),
+            None,
+            Ski::Derived,
+            false,
+            |_| {},
+        );
+
+        let leaf_der = leak_signed_by(issue_leaf("leaf", &["www.example.com"], &intermediate), &intermediate);
+        let intermediate_der = leak_signed_by(intermediate.der.clone(), &ca1);
+        let ca1_cross_der = leak_signed_by(ca1_cross_signed.der.clone(), &ca2);
+        let ca2_cross_der = leak_signed_by(ca2_cross_signed.der.clone(), &ca1);
+        let ca1_other_der = leak_signed_by(ca1_with_other_key.der.clone(), &ca1);
+        let ca2_der = leak_signed_by(ca2.der.clone(), &ca2);
+
+        let leaf = parse(leaf_der);
+        let ca1_other_cert = parse(ca1_other_der);
+
+        // Guard against a vacuous test: the impostor anchor must match the
+        // intermediate's issuer name, and must carry a different key from
+        // the one that signed the intermediate.
+        assert_eq!(
+            subject_key(&ca1_other_cert),
+            issuer_key_of(&parse(intermediate_der)),
+            "the impostor anchor must be found by the intermediate's issuer name"
+        );
+        assert_ne!(
+            ca1_other_cert.public_key().raw,
+            parse(ca1_cross_der).public_key().raw,
+            "the impostor anchor must carry a different key than the real ca1"
+        );
+
+        // ca1 itself is deliberately absent from the trust store; only the
+        // impostor bearing its name and ca2 are trusted.
+        let roots = CertificateStore::from_iter(vec![ca1_other_cert, parse(ca2_der)]);
+        let intermediates = CertificateStore::from_iter(vec![
+            parse(ca1_cross_der),
+            parse(ca2_cross_der),
+            parse(intermediate_der),
+        ]);
+        let crypto = discriminating_crypto();
+        let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &crypto);
+
+        let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+        assert_chain_is(
+            result,
+            &[&leaf, &parse(intermediate_der), &parse(ca1_cross_der), &parse(ca2_der)],
+        );
+    }
+
+    #[test]
+    fn policy_failures_let_the_search_find_a_longer_path() {
+        // The same PKI as the shorter-path test, but with a policy that
+        // rejects any chain containing ca1. The short path is found first
+        // and fails the policy; the search must not stop there but continue
+        // through the cross-signed certificate to the longer path
+        // terminating at ca2, which the policy accepts.
+        struct ForbidCertificatePolicy {
+            forbidden_der: Vec<u8>,
+        }
+        impl VerifierPolicy for ForbidCertificatePolicy {
+            fn verifying_critical_extensions(&self) -> Vec<x509_parser::der_parser::Oid<'static>> {
+                vec![x509_parser::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS]
+            }
+            fn chain_meets_policy_requirements(&mut self, chain: &UnverifiedCertificateChain) -> crate::policy::PolicyEvaluationResult {
+                for index in 0..chain.len() {
+                    if chain[index].as_ref() == self.forbidden_der.as_slice() {
+                        return Err(PolicyFailureReason::new("chain must not contain forbidden certificate"));
+                    }
+                }
+                Ok(())
+            }
+        }
+
+        let ca1 = self_signed_ca_with("ca1", |_| {});
+        let ca2 = self_signed_ca_with("ca2", |_| {});
+        let ca1_cross_signed = ca1.cross_signed_by(&ca2);
+        let ca2_cross_signed = ca2.cross_signed_by(&ca1);
+        let intermediate = issue_ca("intermediate", &ca1, None, |_| {});
+
+        let leaf_der = leak_signed_by(issue_leaf("leaf", &["www.example.com"], &intermediate), &intermediate);
+        let intermediate_der = leak_signed_by(intermediate.der.clone(), &ca1);
+        let ca1_cross_der = leak_signed_by(ca1_cross_signed.der.clone(), &ca2);
+        let ca2_cross_der = leak_signed_by(ca2_cross_signed.der.clone(), &ca1);
+        let ca1_der = leak_signed_by(ca1.der.clone(), &ca1);
+        let ca2_der = leak_signed_by(ca2.der.clone(), &ca2);
+
+        let leaf = parse(leaf_der);
+        let roots = CertificateStore::from_iter(vec![parse(ca1_der), parse(ca2_der)]);
+        let intermediates = CertificateStore::from_iter(vec![
+            parse(intermediate_der),
+            parse(ca2_cross_der),
+            parse(ca1_cross_der),
+        ]);
+        let crypto = discriminating_crypto();
+        let policy = ForbidCertificatePolicy {
+            forbidden_der: ca1_der.to_vec(),
+        };
+        let mut verifier = BaseVerifier::with_policy_and_backend(roots, policy, &crypto);
+
+        let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+        assert_chain_is(
+            result,
+            &[&leaf, &parse(intermediate_der), &parse(ca1_cross_der), &parse(ca2_der)],
+        );
+    }
+
+    #[test]
+    fn pathological_pki_with_mutually_cross_signed_intermediates_can_still_build() {
+        // A deliberately hostile PKI. Two intermediate subject names, "T"
+        // and "X", each served by several certificates, cross-sign each
+        // other: certificates named T are issued by X and vice versa. RFC
+        // 5280 §4.1.2.4 links a certificate to its issuer by name alone, so
+        // by name this graph contains a cycle, and a depth-first search that
+        // did not recognise a repeated certificate would revisit T and X
+        // forever.
+        //
+        // The only thing that terminates the search is the loop detection
+        // that refuses to add a certificate already present in the partial
+        // chain. To force the detection to actually fire — rather than a
+        // signature check quietly pruning the cycle — the T certificates are
+        // arranged to be distinguishable from one another in each of the
+        // ways the identity comparison considers, so the search must
+        // genuinely re-offer already-visited certificates and reject them:
+        //
+        //   t1, t2: same subject name "T", same key pair, but t1 carries a
+        //           subjectAltName that t2 does not.
+        //   t3:     same subject name "T", a different key pair.
+        //   x1, x2: same subject name "X", same key pair, distinguished by
+        //           x2's subjectAltName.
+        //
+        // The leaf's AKI matches t3's SKI, and both X certificates carry the
+        // same AKI, which fixes the order in which candidates are tried and
+        // drives the search into the cycle rather than around it.
+        let root = self_signed_ca_with("root", |_| {});
+
+        let t1_t2_key = KeyPair::generate().expect("generate key pair");
+        let t3_key = KeyPair::generate().expect("generate key pair");
+        let x_key = KeyPair::generate().expect("generate key pair");
+
+        // t3's key identifier, used as the AKI of the leaf and of both X
+        // certificates. It is computed before t3 exists, from t3's key.
+        let t3_key_id = {
+            let probe = self_signed_ca_with_key_ids("probe", Some(KeyPair::from_pem(&t3_key.serialize_pem()).unwrap()), Ski::Derived);
+            probe.key_identifier()
+        };
+
+        // Signing identities for the two intermediate names, so certificates
+        // can be issued "as" T and "as" X before any certificate for either
+        // name exists — the only way to close the cycle.
+        let sign_as_t_with_t1_t2_key = signing_identity("T", KeyPair::from_pem(&t1_t2_key.serialize_pem()).unwrap(), Some(t3_key_id.clone()));
+        let sign_as_t_with_t3_key = signing_identity("T", KeyPair::from_pem(&t3_key.serialize_pem()).unwrap(), Some(t3_key_id.clone()));
+        let sign_as_x = signing_identity("X", KeyPair::from_pem(&x_key.serialize_pem()).unwrap(), None);
+
+        // t1 is issued by the root and carries the SKI of the *wrong* key,
+        // which RFC 5280 §4.2.1.2 does not forbid and chain building must
+        // tolerate. It is the only T that leads out of the cycle.
+        let t1 = issue_ca_with_key_and_name(
+            "T",
+            &root,
+            KeyPair::from_pem(&t1_t2_key.serialize_pem()).unwrap(),
+            None,
+            Ski::Exactly(vec![0xC1; 20]),
+            true,
+            |params| {
+                params.subject_alt_names = vec![rcgen::SanType::DnsName(rcgen::string::Ia5String::try_from("example.com").unwrap())];
+            },
+        );
+        // t2 shares t1's key and name but has no SAN and no SKI.
+        let t2 = issue_ca_with_key_and_name(
+            "T",
+            &sign_as_x,
+            KeyPair::from_pem(&t1_t2_key.serialize_pem()).unwrap(),
+            None,
+            Ski::Absent,
+            false,
+            |_| {},
+        );
+        // t3 uses a different key and carries the SKI the leaf points at.
+        let t3 = issue_ca_with_key_and_name(
+            "T",
+            &sign_as_x,
+            KeyPair::from_pem(&t3_key.serialize_pem()).unwrap(),
+            Some(1),
+            Ski::Derived,
+            false,
+            |_| {},
+        );
+        // x1 and x2 are both issued "as T" with the t1/t2 key, share the X
+        // key, and differ only by x2's subjectAltName.
+        let x1 = issue_ca_with_key_and_name(
+            "X",
+            &sign_as_t_with_t1_t2_key,
+            KeyPair::from_pem(&x_key.serialize_pem()).unwrap(),
+            None,
+            Ski::Absent,
+            true,
+            |_| {},
+        );
+        let x2 = issue_ca_with_key_and_name(
+            "X",
+            &sign_as_t_with_t1_t2_key,
+            KeyPair::from_pem(&x_key.serialize_pem()).unwrap(),
+            None,
+            Ski::Absent,
+            true,
+            |params| {
+                params.subject_alt_names = vec![rcgen::SanType::DnsName(rcgen::string::Ia5String::try_from("foo.example.com").unwrap())];
+            },
+        );
+        let insane_leaf_der = issue_leaf_with("insane-leaf", &[], &sign_as_t_with_t3_key, |params| {
+            params.use_authority_key_identifier_extension = true;
+        });
+
+        // Signatures: t1 by the root; t2 and t3 by the X key; x1 and x2 by
+        // the t1/t2 key; the leaf by the t3 key.
+        let root_der = leak_signed_by(root.der.clone(), &root);
+        let t1_der = leak_signed_by(t1.der.clone(), &root);
+        let t2_der = leak_signed_by(t2.der.clone(), &sign_as_x);
+        let t3_der = leak_signed_by(t3.der.clone(), &sign_as_x);
+        let x1_der = leak_signed_by(x1.der.clone(), &sign_as_t_with_t1_t2_key);
+        let x2_der = leak_signed_by(x2.der.clone(), &sign_as_t_with_t1_t2_key);
+        let leaf_der = leak_signed_by(insane_leaf_der, &sign_as_t_with_t3_key);
+
+        let leaf = parse(leaf_der);
+
+        // Guard against a vacuous test: the graph must really contain a
+        // cycle by issuer name, otherwise loop detection is never exercised.
+        assert_eq!(
+            issuer_key_of(&parse(t2_der)),
+            subject_key(&parse(x1_der)),
+            "T certificates must name X as their issuer"
+        );
+        assert_eq!(
+            issuer_key_of(&parse(x1_der)),
+            subject_key(&parse(t2_der)),
+            "X certificates must name T as their issuer, closing the cycle"
+        );
+        assert_eq!(
+            authority_key_identifier(&leaf),
+            subject_key_identifier(&parse(t3_der)),
+            "the leaf's AKI must select t3 first"
+        );
+
+        let roots = CertificateStore::from_iter(vec![parse(root_der)]);
+        let intermediates = CertificateStore::from_iter(vec![
+            parse(t1_der),
+            parse(t2_der),
+            parse(t3_der),
+            parse(x2_der),
+            parse(x1_der),
+        ]);
+        let crypto = discriminating_crypto();
+        let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &crypto);
+
+        // Bound the search explicitly. Without loop detection this PKI has
+        // no finite traversal at all, so an unbounded run would hang rather
+        // than fail. Counting diagnostic events and panicking past a
+        // generous ceiling turns "the search never terminates" into an
+        // ordinary, quickly-reported test failure. A correct search emits
+        // well under this many events; the ceiling only has to be finite.
+        const MAX_SEARCH_EVENTS: usize = 500;
+        let mut events = 0usize;
+        let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {
+            events += 1;
+            assert!(
+                events <= MAX_SEARCH_EVENTS,
+                "chain building did not terminate: exceeded {MAX_SEARCH_EVENTS} search events, \
+                 so a certificate already in the partial chain is being revisited"
+            );
+        });
+
+        assert_chain_is(
+            result,
+            &[
+                &leaf,
+                &parse(t3_der),
+                &parse(x2_der),
+                &parse(t2_der),
+                &parse(x1_der),
+                &parse(t1_der),
+                &parse(root_der),
+            ],
         );
     }
 }
