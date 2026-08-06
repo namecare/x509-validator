@@ -2,7 +2,7 @@
 pub mod aws_lc;
 
 use std::fmt::Debug;
-use x509_parser::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
+use x509_validator_core::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
 
 #[derive(thiserror::Error, Debug)]
 pub enum CryptoError {
@@ -86,7 +86,7 @@ impl CryptoProvider {
 mod tests {
     use super::*;
     use rcgen::{CertificateParams, KeyPair};
-    use x509_parser::prelude::FromDer;
+    use x509_validator_core::FromDer;
     use x509_validator_core::Certificate;
 
     /// A real self-signed certificate's `AlgorithmIdentifier` and

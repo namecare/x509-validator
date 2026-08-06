@@ -14,7 +14,10 @@ keywords = ["crypto", "x509"]
 
 [dependencies]
 x509-validator-core = { path = "../x509-validator-core" }
-x509-parser = "0.18.1"
-oid-registry = "0.8.1"
 aws-lc-rs = { version = "1.17.3" }
-aws-lc-sys = { version = "0.43.0" }
+
+# All X.509 types must come from core, never from `x509-parser` directly.
+[package.metadata.cargo_check_external_types]
+allowed_external_types = [
+    "x509_validator_core::*",
+]

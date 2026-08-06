@@ -1,5 +1,5 @@
 use crate::policy::{PolicyEvaluationResult, VerifierPolicy};
-use x509_parser::der_parser::Oid;
+use x509_validator_core::der_parser::Oid;
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
 
 /// Use this to build a policy where all of the sub-policies must be met for the overall policy to be met.

@@ -1,8 +1,8 @@
 use crate::policy::{PolicyEvaluationResult, PolicyFailureReason, VerifierPolicy};
 use std::net::{Ipv4Addr, Ipv6Addr};
-use x509_parser::der_parser::Oid;
-use x509_parser::extensions::GeneralName;
-use x509_parser::oid_registry::OID_X509_EXT_SUBJECT_ALT_NAME;
+use x509_validator_core::der_parser::Oid;
+use x509_validator_core::extensions::GeneralName;
+use x509_validator_core::oid_registry::OID_X509_EXT_SUBJECT_ALT_NAME;
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
 use x509_validator_core::Certificate;
 
@@ -361,7 +361,7 @@ mod tests {
     };
     use rcgen::string::Ia5String;
     use rcgen::{DistinguishedName, DnType, SanType};
-    use x509_parser::prelude::FromDer;
+    use x509_validator_core::FromDer;
 
     fn chain_of(der: Vec<u8>) -> UnverifiedCertificateChain<'static> {
         let der: &'static [u8] = Box::leak(der.into_boxed_slice());

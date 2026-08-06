@@ -1,6 +1,6 @@
 //! Helpers for building real DER-encoded certificates in tests.
 //!
-//! `x509_validator_core::Certificate` (`x509_parser::certificate::X509Certificate`)
+//! `x509_validator_core::Certificate`
 //! borrows from the DER bytes it was parsed from and has no public
 //! constructor, so tests can't hand-build fake instances — every test
 //! exercises a certificate produced by `rcgen` and re-parsed via

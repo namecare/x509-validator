@@ -1,9 +1,10 @@
 //! aws-lc-rs backed crypto backend.
 
 use aws_lc_rs::signature::{self, UnparsedPublicKey, VerificationAlgorithm};
-use x509_parser::asn1_rs::Any;
-use x509_parser::signature_algorithm::RsaSsaPssParams;
-use x509_parser::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
+use x509_validator_core::oid_registry;
+use x509_validator_core::asn1_rs::Any;
+use x509_validator_core::signature_algorithm::RsaSsaPssParams;
+use x509_validator_core::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
 
 use crate::crypto::{CryptoError, CryptoProvider, Digest, KeyProvider, PublicKey};
 
@@ -121,7 +122,7 @@ pub const DEFAULT_PROVIDER: CryptoProvider = CryptoProvider {
 mod tests {
     use super::*;
     use rcgen::{CertificateParams, KeyPair};
-    use x509_parser::prelude::FromDer;
+    use x509_validator_core::FromDer;
     use x509_validator_core::Certificate;
 
     /// Builds a real self-signed certificate for `key_pair` and parses it

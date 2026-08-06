@@ -629,11 +629,9 @@ version = "0.1.0"
 dependencies = [
  "aws-lc-rs",
  "aws-lc-sys",
- "oid-registry",
  "rcgen",
  "thiserror 1.0.69",
  "time",
- "x509-parser",
  "x509-validator-core",
 ]
 
@@ -642,9 +640,6 @@ name = "x509-validator-awc-lc"
 version = "0.1.0"
 dependencies = [
  "aws-lc-rs",
- "aws-lc-sys",
- "oid-registry",
- "x509-parser",
  "x509-validator-core",
 ]
 

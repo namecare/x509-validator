@@ -6,8 +6,8 @@
 //! [`format_certificate`] renders the fields an operator actually needs to
 //! identify a certificate, on a single line, and never emits raw bytes.
 
-use x509_parser::der_parser::Oid;
-use x509_parser::objects::{oid2sn, oid_registry};
+use x509_validator_core::der_parser::Oid;
+use x509_validator_core::objects::{oid2sn, oid_registry};
 use x509_validator_core::Certificate;
 
 /// Renders `cert` as a single-line, human-readable summary.
@@ -69,7 +69,7 @@ fn format_extensions(cert: &Certificate<'_>) -> String {
 mod tests {
     use super::*;
     use crate::test_support::{issue_ca, issue_leaf, self_signed_ca_with};
-    use x509_parser::prelude::FromDer;
+    use x509_validator_core::FromDer;
 
     fn leak(der: Vec<u8>) -> &'static [u8] {
         Box::leak(der.into_boxed_slice())

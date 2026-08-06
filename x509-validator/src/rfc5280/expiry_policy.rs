@@ -1,5 +1,5 @@
 use crate::{VerifierPolicy, PolicyEvaluationResult, PolicyFailureReason};
-use x509_parser::der_parser::Oid;
+use x509_validator_core::der_parser::Oid;
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
 
 pub type Timestamp = i64;
@@ -55,7 +55,7 @@ mod tests {
     use crate::test_support::self_signed_ca_with;
     use rcgen::CertificateParams;
     use time::{Duration, OffsetDateTime};
-    use x509_parser::prelude::FromDer;
+    use x509_validator_core::FromDer;
     use x509_validator_core::Certificate;
 
     fn cert_with_validity(not_before: Timestamp, not_after: Timestamp) -> Vec<u8> {

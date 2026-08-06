@@ -1,6 +1,6 @@
 use crate::{VerifierPolicy, PolicyEvaluationResult, PolicyFailureReason};
-use x509_parser::der_parser::Oid;
-use x509_parser::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS;
+use x509_validator_core::der_parser::Oid;
+use x509_validator_core::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS;
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
 
 /// id-ce-basicConstraints, RFC 5280 §4.2.1.9: 2.5.29.19.
@@ -41,7 +41,7 @@ impl VerifierPolicy for BasicConstraintsPolicy {
         }
 
         let leaf = chain.leaf();
-        let leaf_is_v1 = leaf.tbs_certificate.version == x509_parser::x509::X509Version::V1;
+        let leaf_is_v1 = leaf.tbs_certificate.version == x509_validator_core::x509::X509Version::V1;
 
         // Special case: the leaf is presented alone (i.e. a self-signed
         // trust anchor as the end-entity cert). We require that it be
@@ -62,7 +62,7 @@ impl VerifierPolicy for BasicConstraintsPolicy {
 
         for i in 1..chain.len() {
             let cert = &chain[i];
-            let is_v1 = cert.tbs_certificate.version == x509_parser::x509::X509Version::V1;
+            let is_v1 = cert.tbs_certificate.version == x509_validator_core::x509::X509Version::V1;
 
             if !is_v1 {
                 let basic_constraints = cert
@@ -109,7 +109,7 @@ mod tests {
     use super::*;
     use crate::test_support::{issue_ca, issue_leaf, self_signed_ca_with};
     use rcgen::CertificateParams;
-    use x509_parser::prelude::FromDer;
+    use x509_validator_core::FromDer;
     use x509_validator_core::Certificate;
 
     fn chain_of(ders: Vec<Vec<u8>>) -> UnverifiedCertificateChain<'static> {
