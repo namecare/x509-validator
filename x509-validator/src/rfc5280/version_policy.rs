@@ -3,8 +3,9 @@ use x509_validator_core::der_parser::Oid;
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
 use x509_validator_core::x509::X509Version;
 
-/// A sub-policy of `RFC5280Policy` that polices that version 1 certificates
-/// do not contain extensions.
+/// A sub-policy of the [`RFC5280Policy`] that polices that version 1 certificates do not contain extensions.
+///
+/// [`RFC5280Policy`]: crate::rfc5280::RFC5280Policy
 pub struct VersionPolicy;
 
 impl VerifierPolicy for VersionPolicy {

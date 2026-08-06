@@ -58,11 +58,7 @@ static UNCONFIGURED_CRYPTO_BACKEND: UnconfiguredCryptoBackend = UnconfiguredCryp
 
 impl CryptoProvider {
     /// A `CryptoProvider` whose key provider always fails with
-    /// `CryptoError::InvalidKey`. Used as the default backend for
-    /// `Verifier::new`, which has no way to accept a caller-supplied
-    /// backend; callers who need real signature verification should use
-    /// `Verifier::with_policy_and_backend` with an actual `CryptoProvider`
-    /// instead.
+    /// `CryptoError::InvalidKey`.
     pub fn default_backend() -> &'static CryptoProvider {
         static DEFAULT: CryptoProvider = CryptoProvider {
             key_provider: &UNCONFIGURED_CRYPTO_BACKEND,

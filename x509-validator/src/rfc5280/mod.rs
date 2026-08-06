@@ -16,10 +16,15 @@ use x509_validator_core::der_parser::Oid;
 use x509_validator_core::oid_registry::OID_X509_EXT_KEY_USAGE;
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
 
-/// Composes VersionPolicy + ExpiryPolicy + BasicConstraintsPolicy +
-/// NameConstraintsPolicy via plain field composition (not a macro).
-/// Claims basicConstraints, nameConstraints, and keyUsage OIDs — keyUsage
-/// is claimed but deliberately unenforced (see BasicConstraintsPolicy).
+/// A [`VerifierPolicy`] that implements the core chain verification policies from RFC 5280.
+///
+/// Almost all verifiers should use this policy as the initial component of their policy set. The policy checks the
+/// following things:
+///
+/// 1. Version. v1 certificates with extensions are rejected.
+/// 2. Expiry. Expired certificates are rejected.
+/// 3. Basic Constraints. Police the constraints contained in the basicConstraints extension.
+/// 4. Name Constraints. Police the constraints contained in the nameConstraints extension.
 pub struct RFC5280Policy {
     version_policy: VersionPolicy,
     expiry_policy: Option<ExpiryPolicy>,
@@ -37,9 +42,6 @@ impl RFC5280Policy {
         }
     }
 
-    /// A variant that skips expiry checking entirely — useful for testing
-    /// against fixed historical certificates without needing a matching
-    /// fixed validation time for every other check too.
     pub fn with_validity_check_disabled() -> Self {
         Self {
             version_policy: VersionPolicy,
@@ -55,7 +57,14 @@ impl VerifierPolicy for RFC5280Policy {
         let mut oids = self.version_policy.verifying_critical_extensions();
         oids.extend(self.basic_constraints_policy.verifying_critical_extensions());
         oids.extend(self.name_constraints_policy.verifying_critical_extensions());
-        oids.push(key_usage_oid()); // claimed but unenforced, see module docs above
+        // The presence of keyUsage here requires some explanation, because this policy doesn't _actually_ compute
+        // on it in any way.
+        //
+        // The unfortunate reality of keyUsage is that, while RFC 5280 requires us to validate it, CAs have historically
+        // done a very poor job of actually implementing it. The result is that policing KeyUsage produces minimal value
+        // in terms of increased security, but produces a substantial uptick in the number of unbuildable chains. So
+        // we _pretend_ to police the key usage, and just...don't.
+        oids.push(key_usage_oid());
         oids
     }
 
@@ -70,8 +79,6 @@ impl VerifierPolicy for RFC5280Policy {
     }
 }
 
-/// id-ce-keyUsage, RFC 5280 §4.2.1.3: 2.5.29.15. Claimed here but
-/// deliberately unenforced — see BasicConstraintsPolicy's module docs.
 fn key_usage_oid() -> Oid<'static> {
     OID_X509_EXT_KEY_USAGE
 }

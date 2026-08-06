@@ -3,47 +3,49 @@ use crate::rfc5280::name_constraints_policy::NameConstraintsPolicy;
 impl NameConstraintsPolicy {
     /// Validates that an IP address matches a constraint.
     ///
-    /// A constraint carries both a subnet base and a subnet mask
-    /// concatenated together (base first, then mask, each the same length
-    /// as the address family: 4+4 bytes for IPv4, 16+16 bytes for IPv6). It
-    /// matches an address if the address falls within the subnet defined by
-    /// the mask.
+    /// The rules for IP address constraints are fairly simple. The constraint contains both a subnet
+    /// and a subnet mask, while the `ip_address` will contain just the bytes of the address. A constraint
+    /// matches if the address is part of the subnet defined by the mask.
     ///
-    /// RFC 5280 additionally requires the mask be equivalent to one
-    /// expressible in CIDR notation — i.e. a run of set bits followed by a
-    /// run of clear bits, with no other pattern tolerated.
+    /// Additionally, RFC 5280 requires that the constraint be equivalent to a subnet defined using CIDR notation.
+    /// This implies that we do not tolerate arbitrary masks.
     pub(crate) fn ip_address_matches_constraint(ip_address: &[u8], constraint: &[u8]) -> bool {
         match (ip_address.len(), constraint.len()) {
+            // IPv4
             (4, 8) => address_is_in_subnet(ip_address, constraint),
+            // IPv6
             (16, 32) => address_is_in_subnet(ip_address, constraint),
+            // No match or an invalid format.
             _ => false,
         }
     }
 }
 
 fn is_valid_cidr_mask(mask: &[u8]) -> bool {
-    // If the first byte is zero, the mask matches nothing usable, either
-    // because it's invalid or because it's all zeros.
+    // Quick check: is the first byte zero? If it is, we can skip the rest: it matches nothing,
+    // either by way of being invalid or by being all zeros.
     if mask.first() == Some(&0) {
         return false;
     }
 
+    // A valid CIDR mask is a sequence of leading 1s, followed by a sequence of 0s.
+    // Look for the first index that isn't all 1s.
     let Some(first_interesting_index) = mask.iter().position(|&b| b != 0xff) else {
-        // Mask is all 1s. Fine.
+        // Huh, the mask is all 1s. Fine.
         return true;
     };
 
     let byte = mask[first_interesting_index];
 
-    // Count leading 1 bits in this byte.
+    // Count the leading 1s.
     let leading_one_count = (!byte).leading_zeros();
 
-    // Shifting off that many bits must leave zero.
+    // Shift off that many bits. All the bits left must be zero.
     if leading_one_count < 8 && (byte.wrapping_shl(leading_one_count)) != 0 {
         return false;
     }
 
-    // Every remaining byte must be zero.
+    // All remaining bytes must be zero.
     mask[first_interesting_index + 1..].iter().all(|&b| b == 0)
 }
 

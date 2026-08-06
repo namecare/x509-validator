@@ -9,25 +9,9 @@ fn name_constraints_oid() -> Oid<'static> {
     OID_X509_EXT_NAME_CONSTRAINTS
 }
 
-/// A sub-policy of `RFC5280Policy` that polices the nameConstraints
-/// extension.
+/// A sub-policy of the [`RFC5280Policy`] that polices the nameConstraints extension.
 ///
-/// The rules come from RFC 5280 §4.2.1.10. Notes:
-///
-/// - RFC 5280 says directoryName constraints MUST be validated, and
-///   rfc822Name/URI/dNSName/iPAddress constraints SHOULD be validated.
-///   Correct directoryName constraint validation requires the full RFC 5280
-///   name-comparison algorithm, which this crate does not implement — so
-///   any nameConstraints extension carrying a directoryName subtree is
-///   rejected outright rather than partially enforced.
-/// - Any constraint kind this crate doesn't understand is also rejected
-///   outright, rather than silently ignored.
-///
-/// The walk is recursive: starting from the root and moving toward the
-/// leaf, each CA certificate's constraints are applied to every certificate
-/// that follows it in the chain. The one exception is a lone self-signed
-/// certificate, which briefly acts as its own issuer so its own
-/// constraints are enforced against itself.
+/// [`RFC5280Policy`]: crate::rfc5280::RFC5280Policy
 pub struct NameConstraintsPolicy;
 
 impl VerifierPolicy for NameConstraintsPolicy {
@@ -36,16 +20,25 @@ impl VerifierPolicy for NameConstraintsPolicy {
     }
 
     fn chain_meets_policy_requirements(&mut self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
+        // The rules for name constraints come from https://www.rfc-editor.org/rfc/rfc5280#section-4.2.1.10.
+        //
+        // Some notes:
+        //
+        // - RFC 5280 says we MUST validate directoryName constraints, and SHOULD validate rfc822Name, URI, dNSName, and
+        //   iPAddress constraints. However, proper directoryName constraint validation requires a complex comparison
+        //   algorithm. Most implementations skip that and just compare the distinguished names by exact equality. As
+        //   such, we deliberately do not validate directoryName constraints at all: if a certificate's nameConstraints
+        //   extension contains a directoryName subtree, we reject the chain.
+        // - If there's a constraint we don't support and can't validate, we MUST reject the cert.
+        //
+        // Our algorithm is recursive: starting from the root and moving towards the leaf, for each CA
+        // cert we apply the name constraints to all of the other certificates in the chain. The one exception
+        // is for self-signed certs where, much like with basic constraints, we briefly pretend that the
+        // self-signed cert issued itself and enforce its own name constraints on it.
         if chain.len() == 1 {
-            // A lone self-signed certificate briefly acts as its own
-            // issuer, so its own constraints are enforced against itself.
             return Self::validate_name_constraints(chain, chain.leaf(), &[0]);
         }
 
-        // Walk issuers from the root (last in leaf-first ordering) back
-        // toward, but not including, the leaf; for each issuer, validate
-        // every certificate that precedes it (i.e. every certificate it
-        // issued, directly or transitively).
         for issuer_index in (1..chain.len()).rev() {
             let issuer = &chain[issuer_index];
             let subject_indices: Vec<usize> = (0..issuer_index).collect();
@@ -57,21 +50,19 @@ impl VerifierPolicy for NameConstraintsPolicy {
 }
 
 impl NameConstraintsPolicy {
-    /// Applies `issuer`'s nameConstraints (if any) to every certificate in
-    /// `chain` at each of `subject_indices` — i.e. every certificate
-    /// `issuer` issued, directly or transitively, in leaf-first ordering
-    /// (or, in the single-certificate case, the certificate itself).
     fn validate_name_constraints(
         chain: &UnverifiedCertificateChain,
         issuer: &x509_validator_core::Certificate,
         subject_indices: &[usize],
     ) -> PolicyEvaluationResult {
+        // If we couldn't decode these, fail validation.
         let constraints = issuer
             .tbs_certificate
             .name_constraints()
             .map_err(|error| PolicyFailureReason::new(format!("unable to decode name constraints from {:?}: {}", issuer, error)))?;
 
         let Some(constraints) = constraints else {
+            // No name constraints to enforce, we're done.
             return Ok(());
         };
         let constraints = &constraints.value;
@@ -92,16 +83,6 @@ impl NameConstraintsPolicy {
         Ok(())
     }
 
-    /// The unified name sequence a certificate presents for constraint
-    /// checking: the subject distinguished name (as a directoryName), then
-    /// every subjectAltName entry.
-    ///
-    /// A subjectAltName that cannot be decoded is an error, not an empty
-    /// list of names: if the names a certificate presents can't be
-    /// enumerated, no constraint can be shown to hold over them, so the
-    /// only safe answer is to refuse the chain. Treating a decode failure
-    /// as "no names" would let a malformed extension silently suppress
-    /// every name constraint that should have applied.
     fn names<'a>(cert: &'a x509_validator_core::Certificate<'a>) -> Result<Vec<GeneralName<'a>>, PolicyFailureReason> {
         let mut names = vec![GeneralName::DirectoryName(cert.subject().clone())];
 
@@ -118,10 +99,13 @@ impl NameConstraintsPolicy {
     }
 
     fn validate_excluded_subtrees(excluded_subtrees: &[GeneralSubtree], name: &GeneralName) -> PolicyEvaluationResult {
+        // For excluded trees, if _any_ match then the name is forbidden.
         for subtree in excluded_subtrees {
             let constraint = &subtree.base;
 
             if matches!(constraint, GeneralName::DirectoryName(_)) && matches!(name, GeneralName::DirectoryName(_)) {
+                // We immediately reject the chain if there is a directoryName name constraint involved: correct
+                // validation requires the full RFC 5280 comparison algorithm which we currently do not implement.
                 return Err(PolicyFailureReason::new("directoryName name constraints are not supported"));
             }
 
@@ -137,8 +121,14 @@ impl NameConstraintsPolicy {
                 }
                 (GeneralName::DirectoryName(_), GeneralName::DirectoryName(_)) => unreachable!("handled above"),
                 (n, c) if std::mem::discriminant(n) == std::mem::discriminant(c) => {
+                    // We don't support constraints on these!
+                    //
+                    // Of the set that's currently unsupported, we should probably support rfc822Name (a.k.a. email address).
+                    // For now we're omitting it, but at some point someone is going to run into this limitation and we'll want to come
+                    // back and fix it.
                     return Err(PolicyFailureReason::new("unable to validate excluded subtree, unsupported constraint kind"));
                 }
+                // We support these, but the current name isn't of that type.
                 _ => continue,
             };
 
@@ -147,6 +137,7 @@ impl NameConstraintsPolicy {
             }
         }
 
+        // No policy rejected this.
         Ok(())
     }
 
@@ -157,9 +148,12 @@ impl NameConstraintsPolicy {
             let constraint = &subtree.base;
 
             if matches!(constraint, GeneralName::DirectoryName(_)) && matches!(name, GeneralName::DirectoryName(_)) {
+                // We immediately reject the chain if there is a directoryName name constraint involved: correct
+                // validation requires the full RFC 5280 comparison algorithm which we currently do not implement.
                 return Err(PolicyFailureReason::new("directoryName name constraints are not supported"));
             }
 
+            // A match on any of these means we're good.
             let matched = match (name, constraint) {
                 (GeneralName::DNSName(name_value), GeneralName::DNSName(constraint_value)) => {
                     evaluated_at_least_one_constraint = true;
@@ -175,8 +169,15 @@ impl NameConstraintsPolicy {
                 }
                 (GeneralName::DirectoryName(_), GeneralName::DirectoryName(_)) => unreachable!("handled above"),
                 (n, c) if std::mem::discriminant(n) == std::mem::discriminant(c) => {
+                    // We don't support constraints on these!
+                    //
+                    // Of the set that's currently unsupported, we should probably support rfc822Name (a.k.a. email address).
+                    // For now we're omitting it, but at some point someone is going to run into this limitation and we'll want to come
+                    // back and fix it.
                     return Err(PolicyFailureReason::new("unable to validate permitted subtree, unsupported constraint kind"));
                 }
+                // We support these, but the current name isn't of that type. This means we didn't evaluate
+                // this constraint.
                 _ => continue,
             };
 
@@ -185,6 +186,7 @@ impl NameConstraintsPolicy {
             }
         }
 
+        // Uh-oh, nothing matched! This is only a problem if we have at least one constraint for the given type.
         if !evaluated_at_least_one_constraint {
             return Ok(());
         }

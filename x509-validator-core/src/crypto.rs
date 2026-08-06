@@ -6,11 +6,6 @@ use crate::{Any, RsaSsaPssParams};
 /// The digest size, in bits, that an RSASSA-PSS `signatureAlgorithm` is
 /// parameterised with.
 ///
-/// RSA-PSS names its digest in the algorithm parameters rather than in the
-/// signature OID, so selecting a verification algorithm means decoding those
-/// parameters first. That decoding is identical across crypto backends; only
-/// the mapping from a digest size to a backend's own algorithm handle differs.
-///
 /// Returns `None` when the parameters are absent, cannot be decoded as
 /// `RSASSA-PSS-params`, or name a digest outside the SHA-2 family this crate
 /// recognises. Note that RFC 4055 makes SHA-1 the default when the parameters
