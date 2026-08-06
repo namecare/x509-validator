@@ -630,6 +630,7 @@ dependencies = [
  "aws-lc-rs",
  "aws-lc-sys",
  "rcgen",
+ "ring",
  "thiserror 1.0.69",
  "time",
  "x509-validator-core",
@@ -648,6 +649,15 @@ name = "x509-validator-core"
 version = "0.1.0"
 dependencies = [
  "x509-parser",
+]
+
+[[package]]
+name = "x509-validator-testkit"
+version = "0.1.0"
+dependencies = [
+ "rcgen",
+ "time",
+ "x509-validator-core",
 ]
 
 [[package]]

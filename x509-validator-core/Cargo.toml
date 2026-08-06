@@ -15,8 +15,6 @@ keywords = ["crypto", "x509"]
 [dependencies]
 x509-parser = "0.18.1"
 
-# Core deliberately re-exports the parser's types as its own public API
-# (see src/lib.rs); these are the only foreign types allowed to appear.
 [package.metadata.cargo_check_external_types]
 allowed_external_types = [
     "x509_parser::*",
