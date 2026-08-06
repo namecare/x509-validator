@@ -1,0 +1,11 @@
+[package]
+name = "x509-validator-testkit"
+version = "0.1.0"
+edition = "2021"
+description = "Certificate-building helpers for x509-validator's test suites."
+publish = false
+
+[dependencies]
+rcgen = "0.14.8"
+time = "0.3"
+x509-validator-core = { path = "../x509-validator-core" }

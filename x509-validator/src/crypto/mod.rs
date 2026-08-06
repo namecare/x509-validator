@@ -1,5 +1,7 @@
 #[cfg(feature = "aws_lc")]
 pub mod aws_lc;
+#[cfg(feature = "ring")]
+pub mod ring;
 
 use std::fmt::Debug;
 use x509_validator_core::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
