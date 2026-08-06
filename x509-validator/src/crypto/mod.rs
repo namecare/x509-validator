@@ -1,3 +1,6 @@
+#[macro_use]
+mod backend;
+
 #[cfg(feature = "aws_lc")]
 pub mod aws_lc;
 #[cfg(feature = "ring")]
