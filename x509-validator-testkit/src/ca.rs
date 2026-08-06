@@ -16,12 +16,6 @@ impl Ca {
         Issuer::from_params(&self.params, &self.key_pair)
     }
 
-    /// Read access to the generator parameters for sibling modules that
-    /// build certificates from this CA's identity.
-    pub(crate) fn params(&self) -> &CertificateParams {
-        &self.params
-    }
-
     /// The DER-encoded `SubjectPublicKeyInfo` of this CA's key pair. This is
     /// byte-identical to the `subjectPublicKeyInfo` field of any certificate
     /// carrying this key, which lets a test identify "the key that signed
