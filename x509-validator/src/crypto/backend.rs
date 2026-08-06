@@ -15,14 +15,15 @@
 /// Defines a crypto backend over `$krate`, a crate exposing aws-lc-rs' and
 /// ring's shared API shape.
 ///
-/// `$krate` must be an identifier in scope at the invocation site naming that
-/// crate, since a `:path` fragment cannot be extended with `::` inside a `use`.
-/// `$backend` names the marker type carrying the backend's trait impls, and
-/// the trailing `ecdsa` groups list the `(curve, digest) => algorithm`
-/// pairings the crate provides.
+/// `$krate` is matched as a `:tt` rather than `:ident` or `:path`: both of
+/// those capture into a single opaque fragment that cannot then be extended
+/// with `::` inside a `use`, while a bare token tree stays transparent to the
+/// parser. `$backend` names the marker type carrying the backend's trait
+/// impls, and the trailing `ecdsa` groups list the `(curve, digest) =>
+/// algorithm` pairings the crate provides.
 macro_rules! backend {
     (
-        krate: $krate:ident,
+        krate: $krate:tt,
         backend: $backend:ident,
         ecdsa_p256: { $($p256_sha:literal => $p256_alg:ident),* $(,)? },
         ecdsa_p384: { $($p384_sha:literal => $p384_alg:ident),* $(,)? },
