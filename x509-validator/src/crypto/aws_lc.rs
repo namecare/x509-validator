@@ -3,7 +3,7 @@
 use aws_lc_rs::signature::{self, UnparsedPublicKey, VerificationAlgorithm};
 use x509_validator_core::oid_registry;
 use x509_validator_core::asn1_rs::Any;
-use x509_validator_core::signature_algorithm::RsaSsaPssParams;
+use x509_validator_core::crypto::rsa_pss_digest_bits;
 use x509_validator_core::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
 
 use crate::crypto::{CryptoError, CryptoProvider, Digest, KeyProvider, PublicKey};
@@ -62,18 +62,11 @@ fn ecdsa_algorithm(public_key_algorithm: &AlgorithmIdentifier, sha_len: usize) -
 }
 
 fn rsa_pss_algorithm(params: Option<&Any>) -> Option<&'static dyn VerificationAlgorithm> {
-    let params = params?;
-    let params = RsaSsaPssParams::try_from(params).ok()?;
-    let hash_algorithm = params.hash_algorithm_oid();
-
-    if *hash_algorithm == oid_registry::OID_NIST_HASH_SHA256 {
-        Some(&signature::RSA_PSS_2048_8192_SHA256)
-    } else if *hash_algorithm == oid_registry::OID_NIST_HASH_SHA384 {
-        Some(&signature::RSA_PSS_2048_8192_SHA384)
-    } else if *hash_algorithm == oid_registry::OID_NIST_HASH_SHA512 {
-        Some(&signature::RSA_PSS_2048_8192_SHA512)
-    } else {
-        None
+    match rsa_pss_digest_bits(params)? {
+        256 => Some(&signature::RSA_PSS_2048_8192_SHA256),
+        384 => Some(&signature::RSA_PSS_2048_8192_SHA384),
+        512 => Some(&signature::RSA_PSS_2048_8192_SHA512),
+        _ => None,
     }
 }
 
