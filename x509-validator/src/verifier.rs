@@ -204,28 +204,38 @@ fn issuer_key_of(cert: &Certificate) -> Vec<u8> {
 ///
 /// Ordering rule: a candidate whose `subject_key_identifier` matches
 /// `subject`'s `authority_key_identifier().key_identifier` is a strong,
-/// RFC 5280-recommended signal that this is the intended issuer (especially
-/// useful when a subject name has multiple issuing certificates in the
-/// store, e.g. during root/intermediate rollover). Such candidates sort
-/// before any candidate with no matching SKI/AKI pair. Candidates are
-/// otherwise left in their original (store insertion) order — this is a
-/// stable sort, and beyond the AKI/SKI signal the algorithm has no further
-/// basis to prefer one candidate over another, so preserving insertion
-/// order is the least surprising choice and keeps iteration deterministic
-/// for a given store.
+/// RFC 5280 §4.2.1.1-recommended signal that this is the intended issuer
+/// (especially useful when a subject name has multiple issuing certificates
+/// in the store, e.g. during root/intermediate rollover).
+///
+/// The ranking is three-way, not two-way, as RFC 4158 §3.5.3 describes: a
+/// *missing* `subjectKeyIdentifier` and a *mismatching* one are not
+/// equivalent. RFC 5280 §4.2.1.2 leaves the extension optional, so a
+/// candidate that omits it supplies no evidence either way and remains
+/// plausible; a candidate that carries one which differs from the subject's
+/// AKI supplies positive evidence that it is the wrong issuer, and so is
+/// tried last.
+///
+/// Within a rank, candidates keep their original (store insertion) order —
+/// this is a stable sort, and beyond the AKI/SKI signal the algorithm has no
+/// further basis to prefer one candidate over another, so preserving
+/// insertion order is the least surprising choice and keeps iteration
+/// deterministic for a given store.
 fn sort_by_suitability_for_issuing<'a>(candidates: &mut [Certificate<'a>], subject: &Certificate<'a>) {
     let subject_aki = authority_key_identifier(subject);
 
-    let matches_aki = |candidate: &Certificate<'a>| -> bool {
+    // 0: SKI matches the subject's AKI. 1: no SKI, so no evidence.
+    // 2: SKI present but different, i.e. evidence of the wrong issuer.
+    let rank = |candidate: &Certificate<'a>| -> u8 {
         match (subject_aki, subject_key_identifier(candidate)) {
-            (Some(aki), Some(ski)) => aki == ski,
-            _ => false,
+            (Some(aki), Some(ski)) if aki == ski => 0,
+            (_, None) => 1,
+            (None, Some(_)) => 1,
+            (Some(_), Some(_)) => 2,
         }
     };
 
-    // Stable sort: candidates matching AKI/SKI come first, tie-broken by
-    // original (store) order.
-    candidates.sort_by_key(|c| !matches_aki(c));
+    candidates.sort_by_key(rank);
 }
 
 /// True if `candidate` should not be added to `partial_chain`: it carries an
@@ -313,7 +323,13 @@ mod tests {
     use super::*;
     use crate::policy::{PolicyFailureReason, VerifierPolicy};
     use crate::crypto::{CryptoError, Digest, KeyProvider, PublicKey};
-    use crate::test_support::{issue_ca, issue_leaf, self_signed_ca_with};
+    use crate::test_support::{
+        issue_ca, issue_ca_with_key, issue_ca_with_key_and_name, issue_ca_with_key_ids, issue_leaf, issue_leaf_with,
+        issue_leaf_with_aki, self_signed_ca_with, self_signed_ca_with_key_ids, signing_identity, weird_critical_extension, Ca, Ski,
+    };
+    use rcgen::KeyPair;
+    use std::collections::HashSet;
+    use std::sync::Mutex;
     use x509_parser::prelude::FromDer;
     use x509_parser::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
 
@@ -555,5 +571,96 @@ mod tests {
                 panic!("expected eventual success, got: {reasons:?}")
             }
         }
+    }
+
+    #[test]
+    fn candidate_without_subject_key_identifier_is_preferred_over_one_whose_ski_mismatches() {
+        // RFC 5280 §4.2.1.1 makes the authorityKeyIdentifier a hint for
+        // selecting among issuers sharing a subject name, and RFC 4158 §3.5.3
+        // ranks that hint three ways rather than two: a candidate whose
+        // subjectKeyIdentifier equals the subject's AKI is the best match; a
+        // candidate carrying *no* subjectKeyIdentifier is merely uninformative
+        // (§4.2.1.2 leaves the extension optional for certificates that are
+        // not CAs, and legacy CAs omit it too); a candidate that *does* carry
+        // a subjectKeyIdentifier which differs from the AKI is positive
+        // evidence of the wrong issuer, so it must sort last.
+        //
+        // Both roots below share the subject name "root" and share one key
+        // pair, so either can validly sign the leaf and neither is skipped for
+        // a bad signature. The mismatching-SKI root is inserted first, so only
+        // a three-way ranking puts the no-SKI root ahead of it.
+        struct RecordingPolicy {
+            root_skis: Mutex<Vec<Option<Vec<u8>>>>,
+        }
+        impl VerifierPolicy for RecordingPolicy {
+            fn verifying_critical_extensions(&self) -> Vec<x509_parser::der_parser::Oid<'static>> {
+                vec![x509_parser::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS]
+            }
+            fn chain_meets_policy_requirements(&mut self, chain: &UnverifiedCertificateChain) -> crate::policy::PolicyEvaluationResult {
+                let root = &chain[chain.len() - 1];
+                self.root_skis
+                    .lock()
+                    .unwrap()
+                    .push(subject_key_identifier(root).map(<[u8]>::to_vec));
+                // Never satisfied, so every candidate is visited in order.
+                Err(PolicyFailureReason::new("recording only"))
+            }
+        }
+
+        let shared_key = KeyPair::generate().expect("generate key pair");
+        // A key identifier no certificate here actually carries, used as the
+        // leaf's AKI so that neither root can match it.
+        let unmatched_key_id = vec![0xAA; 20];
+
+        // The signing identity fixes the AKI that the issued leaf will carry.
+        let signer = signing_identity("root", shared_key, Some(unmatched_key_id.clone()));
+        let leaf_der = leak(issue_leaf_with_aki("leaf", &["www.example.com"], &signer, true));
+
+        let mismatching_ski_root = self_signed_ca_with_key_ids("root", Some(signer.copy_of_key_pair()), Ski::Exactly(vec![0xBB; 20]));
+        let no_ski_root = self_signed_ca_with_key_ids("root", Some(signer.copy_of_key_pair()), Ski::Absent);
+
+        let mismatching_der = leak(mismatching_ski_root.der.clone());
+        let no_ski_der = leak(no_ski_root.der.clone());
+
+        let leaf = parse(leaf_der);
+        let mismatching_cert = parse(mismatching_der);
+        let no_ski_cert = parse(no_ski_der);
+
+        // Guard against a vacuous test: confirm the fixtures really carry the
+        // key identifiers the ranking is supposed to react to.
+        assert_eq!(
+            authority_key_identifier(&leaf),
+            Some(unmatched_key_id.as_slice()),
+            "leaf must carry an authorityKeyIdentifier matching neither root"
+        );
+        assert_eq!(
+            subject_key_identifier(&mismatching_cert),
+            Some([0xBB; 20].as_slice()),
+            "first root must carry a non-matching subjectKeyIdentifier"
+        );
+        assert_eq!(
+            subject_key_identifier(&no_ski_cert),
+            None,
+            "second root must carry no subjectKeyIdentifier at all"
+        );
+        assert_eq!(
+            subject_key(&mismatching_cert),
+            subject_key(&no_ski_cert),
+            "both roots must share a subject name so both are candidates"
+        );
+
+        // Insertion order deliberately puts the mismatching-SKI root first.
+        let roots = CertificateStore::from_iter(vec![mismatching_cert, no_ski_cert]);
+        let intermediates: CertificateStore = CertificateStore::new();
+        let crypto = always_valid_crypto();
+        let policy = RecordingPolicy { root_skis: Mutex::new(Vec::new()) };
+        let mut verifier = BaseVerifier::with_policy_and_backend(roots, policy, &crypto);
+
+        let _ = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+
+        let visited = verifier.policy.root_skis.lock().unwrap().clone();
+        assert_eq!(visited.len(), 2, "both roots should have been offered to the policy");
+        assert_eq!(visited[0], None, "the root with no subjectKeyIdentifier must be tried first");
+        assert_eq!(visited[1], Some(vec![0xBB; 20]), "the root with a mismatching subjectKeyIdentifier must be tried last");
     }
 }
