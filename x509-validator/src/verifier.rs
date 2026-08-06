@@ -84,14 +84,10 @@ where
         diagnostic_callback: &mut dyn FnMut(VerificationDiagnostic),
     ) -> ChainValidationResultOwned<'a> {
         if has_unhandled_critical_extensions(leaf, &self.policy) {
-            let handled = self.policy.verifying_critical_extensions();
-            let oid = leaf
-                .tbs_certificate
-                .iter_extensions()
-                .find(|ext| ext.critical && !handled.contains(&ext.oid))
-                .map(|ext| ext.oid.to_owned())
-                .expect("has_unhandled_critical_extensions confirmed an unhandled critical extension exists");
-            diagnostic_callback(VerificationDiagnostic::LeafCertificateHasUnhandledCriticalExtension { oid });
+            diagnostic_callback(VerificationDiagnostic::leaf_certificate_has_unhandled_critical_extension(
+                leaf.clone(),
+                self.policy.verifying_critical_extensions(),
+            ));
             return ChainValidationResultOwned::CouldNotValidate(vec![PolicyFailureReason::new(
                 "leaf certificate has unhandled critical extension",
             )]);
@@ -104,11 +100,13 @@ where
             let chain = UnverifiedCertificateChain::new(vec![leaf.clone()]);
             match self.policy.chain_meets_policy_requirements(&chain) {
                 Ok(()) => {
-                    diagnostic_callback(VerificationDiagnostic::FoundValidCertificateChain { chain: vec![leaf.clone()] });
+                    diagnostic_callback(VerificationDiagnostic::found_valid_certificate_chain(vec![leaf.clone()]));
                     return ChainValidationResultOwned::ValidCertificate(ValidatedCertificateChain::new_unchecked(vec![leaf.clone()]));
                 }
                 Err(reason) => {
-                    diagnostic_callback(VerificationDiagnostic::LeafCertificateIsInTheRootStoreButDoesNotMeetPolicy { reason: reason.clone() });
+                    diagnostic_callback(
+                        VerificationDiagnostic::leaf_certificate_is_in_the_root_store_but_does_not_meet_policy(leaf.clone(), reason.clone()),
+                    );
                     policy_failures.push(reason);
                 }
             }
@@ -117,7 +115,7 @@ where
         let mut stack: Vec<Vec<Certificate<'a>>> = vec![vec![leaf.clone()]];
 
         while let Some(partial_chain) = stack.pop() {
-            diagnostic_callback(VerificationDiagnostic::SearchingForIssuerOfPartialChain { partial_chain: partial_chain.clone() });
+            diagnostic_callback(VerificationDiagnostic::searching_for_issuer_of_partial_chain(partial_chain.clone()));
 
             let tip = partial_chain.last().unwrap();
             let issuer_key = issuer_key_of(tip);
@@ -125,10 +123,10 @@ where
             let mut root_candidates = self.root_certificates.find_by_subject(&issuer_key).to_vec();
             sort_by_suitability_for_issuing(&mut root_candidates, tip);
             if !root_candidates.is_empty() {
-                diagnostic_callback(VerificationDiagnostic::FoundCandidateIssuersOfPartialChainInRootStore {
-                    partial_chain: partial_chain.clone(),
-                    candidates: root_candidates.clone(),
-                });
+                diagnostic_callback(VerificationDiagnostic::found_candidate_issuers_of_partial_chain_in_root_store(
+                    partial_chain.clone(),
+                    root_candidates.clone(),
+                ));
             }
             for candidate in &root_candidates {
                 if should_skip_adding_certificate(candidate, &partial_chain, self.crypto, &self.policy, diagnostic_callback) {
@@ -139,14 +137,11 @@ where
                 let chain = UnverifiedCertificateChain::new(chain_certs.clone());
                 match self.policy.chain_meets_policy_requirements(&chain) {
                     Ok(()) => {
-                        diagnostic_callback(VerificationDiagnostic::FoundValidCertificateChain { chain: chain_certs.clone() });
+                        diagnostic_callback(VerificationDiagnostic::found_valid_certificate_chain(chain_certs.clone()));
                         return ChainValidationResultOwned::ValidCertificate(ValidatedCertificateChain::new_unchecked(chain_certs));
                     }
                     Err(reason) => {
-                        diagnostic_callback(VerificationDiagnostic::ChainFailsToMeetPolicy {
-                            chain: chain_certs,
-                            reason: reason.clone(),
-                        });
+                        diagnostic_callback(VerificationDiagnostic::chain_fails_to_meet_policy(chain_certs, reason.clone()));
                         policy_failures.push(reason);
                     }
                 }
@@ -155,10 +150,12 @@ where
             let mut intermediate_candidates = intermediates.find_by_subject(&issuer_key).to_vec();
             sort_by_suitability_for_issuing(&mut intermediate_candidates, tip);
             if !intermediate_candidates.is_empty() {
-                diagnostic_callback(VerificationDiagnostic::FoundCandidateIssuersOfPartialChainInIntermediateStore {
-                    partial_chain: partial_chain.clone(),
-                    candidates: intermediate_candidates.clone(),
-                });
+                diagnostic_callback(
+                    VerificationDiagnostic::found_candidate_issuers_of_partial_chain_in_intermediate_store(
+                        partial_chain.clone(),
+                        intermediate_candidates.clone(),
+                    ),
+                );
             }
             for candidate in intermediate_candidates.into_iter().rev() {
                 if should_skip_adding_certificate(&candidate, &partial_chain, self.crypto, &self.policy, diagnostic_callback) {
@@ -170,7 +167,7 @@ where
             }
         }
 
-        diagnostic_callback(VerificationDiagnostic::CouldNotValidateLeafCertificate { reasons: policy_failures.clone() });
+        diagnostic_callback(VerificationDiagnostic::could_not_validate_leaf_certificate(leaf.clone()));
         ChainValidationResultOwned::CouldNotValidate(policy_failures)
     }
 }
@@ -249,22 +246,19 @@ fn should_skip_adding_certificate<'a>(
     diagnostic_callback: &mut dyn FnMut(VerificationDiagnostic<'a>),
 ) -> bool {
     if has_unhandled_critical_extensions(candidate, policy) {
-        let handled = policy.verifying_critical_extensions();
-        let oid = candidate
-            .tbs_certificate
-            .iter_extensions()
-            .find(|ext| ext.critical && !handled.contains(&ext.oid))
-            .map(|ext| ext.oid.to_owned())
-            .expect("has_unhandled_critical_extensions confirmed an unhandled critical extension exists");
-        diagnostic_callback(VerificationDiagnostic::IssuerHasUnhandledCriticalExtension {
-            issuer: candidate.clone(),
-            oid,
-        });
+        diagnostic_callback(VerificationDiagnostic::issuer_has_unhandled_critical_extension(
+            candidate.clone(),
+            partial_chain.to_vec(),
+            policy.verifying_critical_extensions(),
+        ));
         return true;
     }
 
     if partial_chain.iter().any(|existing| same_certificate_identity(existing, candidate)) {
-        diagnostic_callback(VerificationDiagnostic::IssuerIsAlreadyInTheChain { issuer: candidate.clone() });
+        diagnostic_callback(VerificationDiagnostic::issuer_is_already_in_the_chain(
+            partial_chain.to_vec(),
+            candidate.clone(),
+        ));
         return true;
     }
 
@@ -279,10 +273,10 @@ fn should_skip_adding_certificate<'a>(
         .is_ok();
 
     if !signature_verifies {
-        diagnostic_callback(VerificationDiagnostic::IssuerHasNotSignedCertificate {
-            issuer: candidate.clone(),
-            subject: tip.clone(),
-        });
+        diagnostic_callback(VerificationDiagnostic::issuer_has_not_signed_certificate(
+            candidate.clone(),
+            partial_chain.to_vec(),
+        ));
     }
 
     !signature_verifies

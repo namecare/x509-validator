@@ -59,11 +59,12 @@ impl VerifierPolicy for ServerIdentityPolicy {
 /// Validates that a given leaf certificate is valid for a service.
 ///
 /// This implements RFC 6125 §6: we first check the subjectAlternativeName
-/// extension. If it contains any entries we could validate against (either
-/// a DNS name or an IP address), we validate against those and never fall
-/// back to the subject's common name. If there are no matchable
-/// subjectAltName entries at all, we fall back to the (deprecated) practice
-/// of matching against the subject's common name.
+/// extension. If it contains any entries at all — of any kind, not just the
+/// DNS names and IP addresses we can match against — we validate against
+/// the matchable ones and never fall back to the subject's common name.
+/// Only when there are no subjectAltName entries whatsoever do we fall back
+/// to the (deprecated) practice of matching against the subject's common
+/// name.
 fn has_valid_identity_for_service(
     leaf: &Certificate,
     server_hostname: Option<&PreparedServerHostname>,
@@ -79,15 +80,17 @@ fn has_valid_identity_for_service(
     let mut checked_match = false;
 
     for name in &subject_alt_names {
+        // Any subjectAltName entry at all suppresses the common-name
+        // fallback, regardless of its kind.
+        checked_match = true;
+
         match name {
             GeneralName::DNSName(value) => {
-                checked_match = true;
                 if match_hostname(server_hostname, value.as_bytes()) {
                     return Ok(());
                 }
             }
             GeneralName::IPAddress(value) => {
-                checked_match = true;
                 if let (Some(server_ip), Some(certificate_ip)) = (server_ip, IpAddress::from_san_bytes(value)) {
                     if match_ip_address(server_ip, &certificate_ip) {
                         return Ok(());
@@ -99,11 +102,11 @@ fn has_valid_identity_for_service(
     }
 
     if checked_match {
-        // We had matchable SAN entries, but none of them matched.
+        // The SAN extension had entries, but none of them matched.
         return Err(PolicyFailureReason::new("none of the names in the SAN extension matched"));
     }
 
-    // No matchable subjectAltName entries — fall back to the subject's
+    // No subjectAltName entries at all — fall back to the subject's
     // common name. As distinguished names run least-significant to
     // most-significant, the last commonName attribute is the one that
     // matters.
@@ -353,7 +356,11 @@ impl<'a> AnalysedCertificateHostname<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::{issue_leaf, issue_leaf_with_ip_sans, self_signed_ca_with};
+    use crate::test_support::{
+        issue_leaf, issue_leaf_with, issue_leaf_with_dn, issue_leaf_with_email_sans, issue_leaf_with_ip_sans, self_signed_ca_with,
+    };
+    use rcgen::string::Ia5String;
+    use rcgen::{DistinguishedName, DnType, SanType};
     use x509_parser::prelude::FromDer;
 
     fn chain_of(der: Vec<u8>) -> UnverifiedCertificateChain<'static> {
@@ -486,6 +493,34 @@ mod tests {
     }
 
     #[test]
+    fn non_matchable_san_entry_still_suppresses_common_name_fallback() {
+        // The SAN extension holds only an rfc822Name, which can never match
+        // a service identity. RFC 6125 §6 nevertheless forbids falling back
+        // to the common name once any SAN entry is present, so the matching
+        // common name must not rescue this certificate.
+        let root = self_signed_ca_with("root", |_| {});
+        let der = issue_leaf_with_email_sans("www.example.com", &["admin@example.com"], &root);
+        let chain = chain_of(der);
+        let mut policy = ServerIdentityPolicy::new(Some("www.example.com"), None);
+        assert!(policy.chain_meets_policy_requirements(&chain).is_err());
+    }
+
+    #[test]
+    fn non_matchable_san_entry_alongside_matching_dns_name_still_matches() {
+        // An unmatchable entry must not prevent a sibling dNSName entry from
+        // satisfying the policy.
+        let root = self_signed_ca_with("root", |_| {});
+        let der = issue_leaf_with("leaf", &["www.example.com"], &root, |params| {
+            params
+                .subject_alt_names
+                .push(SanType::Rfc822Name(Ia5String::try_from("admin@example.com").unwrap()));
+        });
+        let chain = chain_of(der);
+        let mut policy = ServerIdentityPolicy::new(Some("www.example.com"), None);
+        assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
+    }
+
+    #[test]
     fn no_san_falls_back_to_common_name() {
         let chain = chain_of(cert_with_common_name("www.example.com"));
         let mut policy = ServerIdentityPolicy::new(Some("www.example.com"), None);
@@ -514,5 +549,258 @@ mod tests {
         let policy = ServerIdentityPolicy::new(Some("www.example.com"), None);
         let oids = policy.verifying_critical_extensions();
         assert!(oids.contains(&subject_alt_name_oid()));
+    }
+
+    /// The commonName OID (2.5.4.3) spelled out as a custom attribute type.
+    ///
+    /// `rcgen`'s `DistinguishedName` is keyed by attribute type, so the same
+    /// well-known `DnType` can only appear once. Naming the OID explicitly
+    /// yields a second, distinct key that still encodes as commonName, which
+    /// is how the multi-commonName fixture below gets built.
+    fn custom_common_name() -> DnType {
+        DnType::CustomDnType(vec![2, 5, 4, 3])
+    }
+
+    /// A certificate whose subjectAltName extension collects every awkward
+    /// dNSName shape worth exercising, in the order documented below. Its
+    /// subject also carries a commonName of `httpbin.org`, which must never
+    /// be consulted because the SAN extension is present.
+    fn weirdo_san_cert() -> Vec<u8> {
+        let root = self_signed_ca_with("root", |_| {});
+        issue_leaf_with("httpbin.org", &[], &root, |params| {
+            let names = [
+                // A plain wildcard, matchable.
+                "*.WILDCARD.EXAMPLE.com",
+                // A suffix wildcard, matchable.
+                "FO*.EXAMPLE.com",
+                // A prefix wildcard, matchable.
+                "*AR.EXAMPLE.com",
+                // An infix wildcard, matchable.
+                "B*Z.EXAMPLE.com",
+                // A trailing period, which is not significant.
+                "TRAILING.PERIOD.EXAMPLE.com.",
+                // An IDNA A-label, matchable in its encoded form only.
+                "XN--STRAE-OQA.UNICODE.EXAMPLE.com.",
+                // An IDNA A-label carrying a wildcard, which RFC 6125 §6.4.3
+                // never permits to match.
+                "XN--X*-GIA.UNICODE.EXAMPLE.com.",
+                // A wildcard outside the leftmost label, never matchable.
+                "WEIRDWILDCARD.*.EXAMPLE.com.",
+                // Two wildcards, never matchable.
+                "*.*.DOUBLE.EXAMPLE.com.",
+                // A wildcard whose *following* label is an A-label; only the
+                // wildcard label itself is restricted, so this is matchable.
+                "*.XN--STRAE-OQA.EXAMPLE.com.",
+                // An embedded NUL, which is not a legal DNS character.
+                "\u{0}",
+            ];
+            params.subject_alt_names = names
+                .iter()
+                .map(|name| SanType::DnsName(Ia5String::try_from(*name).expect("valid IA5 san")))
+                .collect();
+        })
+    }
+
+    /// A certificate with a mixture of SAN entry kinds: two dNSNames, an
+    /// rfc822Name, and both an IPv4 and an IPv6 iPAddress.
+    fn multi_san_cert() -> Vec<u8> {
+        let root = self_signed_ca_with("root", |_| {});
+        issue_leaf_with("localhost", &["localhost", "example.com"], &root, |params| {
+            params
+                .subject_alt_names
+                .push(SanType::Rfc822Name(Ia5String::try_from("user@example.com").unwrap()));
+            params.subject_alt_names.push(SanType::IpAddress("192.168.0.1".parse().unwrap()));
+            params.subject_alt_names.push(SanType::IpAddress("2001:db8::1".parse().unwrap()));
+        })
+    }
+
+    /// A certificate with no SAN extension whose subject holds two
+    /// commonName attributes; only the last one counts.
+    fn multi_cn_cert() -> Vec<u8> {
+        let root = self_signed_ca_with("root", |_| {});
+        let mut dn = DistinguishedName::new();
+        dn.push(DnType::CountryName, "US");
+        dn.push(custom_common_name(), "Ignore me");
+        dn.push(DnType::StateOrProvinceName, "Nebraska");
+        dn.push(DnType::CommonName, "localhost");
+        issue_leaf_with_dn(dn, &root, |_| {})
+    }
+
+    /// A certificate with no SAN extension and no commonName at all.
+    fn no_cn_cert() -> Vec<u8> {
+        let root = self_signed_ca_with("root", |_| {});
+        let mut dn = DistinguishedName::new();
+        dn.push(DnType::CountryName, "US");
+        dn.push(DnType::StateOrProvinceName, "Nebraska");
+        issue_leaf_with_dn(dn, &root, |_| {})
+    }
+
+    /// A certificate with no SAN extension whose commonName is a non-ASCII
+    /// U-label.
+    fn unicode_cn_cert() -> Vec<u8> {
+        let root = self_signed_ca_with("root", |_| {});
+        let mut dn = DistinguishedName::new();
+        dn.push(DnType::CommonName, "straße.org");
+        issue_leaf_with_dn(dn, &root, |_| {})
+    }
+
+    fn assert_matches(der: Vec<u8>, hostname: Option<&str>, ip: Option<&str>) {
+        let chain = chain_of(der);
+        let mut policy = ServerIdentityPolicy::new(hostname, ip);
+        assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
+    }
+
+    fn assert_does_not_match(der: Vec<u8>, hostname: Option<&str>, ip: Option<&str>) {
+        let chain = chain_of(der);
+        let mut policy = ServerIdentityPolicy::new(hostname, ip);
+        assert!(policy.chain_meets_policy_requirements(&chain).is_err());
+    }
+
+    #[test]
+    fn can_validate_hostname_in_first_san() {
+        assert_matches(multi_san_cert(), Some("localhost"), None);
+    }
+
+    #[test]
+    fn can_validate_hostname_in_second_san() {
+        assert_matches(multi_san_cert(), Some("example.com"), None);
+    }
+
+    #[test]
+    fn ignores_trailing_period_in_requested_hostname() {
+        assert_matches(multi_san_cert(), Some("example.com."), None);
+    }
+
+    #[test]
+    fn lowercases_requested_hostname_for_san() {
+        assert_matches(multi_san_cert(), Some("LoCaLhOsT"), None);
+    }
+
+    #[test]
+    fn rejects_incorrect_hostname() {
+        assert_does_not_match(multi_san_cert(), Some("httpbin.org"), None);
+    }
+
+    #[test]
+    fn accepts_ipv4_address() {
+        assert_matches(multi_san_cert(), None, Some("192.168.0.1"));
+    }
+
+    #[test]
+    fn accepts_ipv6_address() {
+        assert_matches(multi_san_cert(), None, Some("2001:db8::1"));
+    }
+
+    #[test]
+    fn rejects_incorrect_ipv4_address() {
+        assert_does_not_match(multi_san_cert(), None, Some("192.168.0.2"));
+    }
+
+    #[test]
+    fn rejects_incorrect_ipv6_address() {
+        assert_does_not_match(multi_san_cert(), None, Some("2001:db8::2"));
+    }
+
+    #[test]
+    fn accepts_plain_wildcard() {
+        assert_matches(weirdo_san_cert(), Some("this.wildcard.example.com"), None);
+    }
+
+    #[test]
+    fn accepts_suffix_wildcard() {
+        assert_matches(weirdo_san_cert(), Some("foo.example.com"), None);
+    }
+
+    #[test]
+    fn accepts_prefix_wildcard() {
+        assert_matches(weirdo_san_cert(), Some("bar.example.com"), None);
+    }
+
+    #[test]
+    fn accepts_infix_wildcard() {
+        assert_matches(weirdo_san_cert(), Some("baz.example.com"), None);
+    }
+
+    #[test]
+    fn ignores_trailing_period_in_certificate_san() {
+        assert_matches(weirdo_san_cert(), Some("trailing.period.example.com"), None);
+    }
+
+    #[test]
+    fn rejects_encoded_idna_label() {
+        // The requested hostname is a U-label; certificate names are always
+        // A-labels, so this can never match and we do not transcode.
+        assert_does_not_match(weirdo_san_cert(), Some("straße.unicode.example.com"), None);
+    }
+
+    #[test]
+    fn matches_unencoded_idna_label() {
+        assert_matches(weirdo_san_cert(), Some("xn--strae-oqa.unicode.example.com"), None);
+    }
+
+    #[test]
+    fn does_not_match_idna_label_with_wildcard() {
+        // RFC 6125 §6.4.3: a wildcard must not be combined with an A-label.
+        assert_does_not_match(weirdo_san_cert(), Some("xn--xx-gia.unicode.example.com"), None);
+    }
+
+    #[test]
+    fn does_not_match_non_leftmost_wildcards() {
+        assert_does_not_match(weirdo_san_cert(), Some("weirdwildcard.nomatch.example.com"), None);
+    }
+
+    #[test]
+    fn does_not_match_multiple_wildcards() {
+        assert_does_not_match(weirdo_san_cert(), Some("one.two.double.example.com"), None);
+    }
+
+    #[test]
+    fn rejects_wildcard_before_unencoded_idna_label() {
+        assert_does_not_match(weirdo_san_cert(), Some("foo.straße.example.com"), None);
+    }
+
+    #[test]
+    fn matches_wildcard_before_encoded_idna_label() {
+        // The A-label restriction applies only to the wildcard label itself,
+        // so an A-label in a later position is perfectly matchable.
+        assert_matches(weirdo_san_cert(), Some("foo.xn--strae-oqa.example.com"), None);
+    }
+
+    #[test]
+    fn does_not_match_san_with_embedded_nul() {
+        assert_does_not_match(weirdo_san_cert(), Some("nul\u{0}l.example.com"), None);
+    }
+
+    #[test]
+    fn falls_back_to_last_common_name() {
+        assert_matches(multi_cn_cert(), Some("localhost"), None);
+    }
+
+    #[test]
+    fn lowercases_requested_hostname_for_common_name() {
+        assert_matches(multi_cn_cert(), Some("LoCaLhOsT"), None);
+    }
+
+    #[test]
+    fn rejects_unicode_common_name_with_unencoded_idna_label() {
+        assert_does_not_match(unicode_cn_cert(), Some("straße.org"), None);
+    }
+
+    #[test]
+    fn rejects_unicode_common_name_with_encoded_idna_label() {
+        // The common name holds a U-label, so its A-label form must not match.
+        assert_does_not_match(unicode_cn_cert(), Some("xn--strae-oqa.org"), None);
+    }
+
+    #[test]
+    fn handles_missing_common_name() {
+        assert_does_not_match(no_cn_cert(), Some("localhost"), None);
+    }
+
+    #[test]
+    fn does_not_fall_back_to_common_name_when_sans_are_present() {
+        // The subject's common name is `httpbin.org`, but the SAN extension
+        // is present, so RFC 6125 §6 forbids consulting it.
+        assert_does_not_match(weirdo_san_cert(), Some("httpbin.org"), None);
     }
 }
