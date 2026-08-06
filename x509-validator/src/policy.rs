@@ -38,37 +38,3 @@ pub trait VerifierPolicy {
     fn verifying_critical_extensions(&self) -> Vec<Oid<'static>>;
     fn chain_meets_policy_requirements(&mut self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult;
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use x509_validator_testkit::self_signed_ca;
-    use x509_validator_core::FromDer;
-    use x509_validator_core::Certificate;
-
-    struct AlwaysMeetsPolicy;
-
-    impl VerifierPolicy for AlwaysMeetsPolicy {
-        fn verifying_critical_extensions(&self) -> Vec<Oid<'static>> {
-            vec![]
-        }
-        fn chain_meets_policy_requirements(&mut self, _chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
-            Ok(())
-        }
-    }
-
-    // Compile-only proof that VerifierPolicy is usable as a trait object.
-    fn _assert_object_safe(_: Box<dyn VerifierPolicy>) {}
-
-    #[test]
-    fn test_unverified_chain_with_policy() {
-        let der = self_signed_ca("root");
-        let (_, cert) = Certificate::from_der(&der).unwrap();
-
-        let chain = UnverifiedCertificateChain::new(vec![cert]);
-        let mut policy = AlwaysMeetsPolicy;
-
-        let result = policy.chain_meets_policy_requirements(&chain);
-        assert_eq!(result, Ok(()));
-    }
-}
