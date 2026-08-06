@@ -99,9 +99,80 @@ fn is_ip_address(host: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::rfc5280::dns_names::fixtures::name_matching_fixtures;
 
     fn matches(uri: &str, constraint: &str) -> bool {
         NameConstraintsPolicy::uri_name_matches_constraint(uri.as_bytes(), constraint.as_bytes())
+    }
+
+    /// URI shapes whose host part is exactly `dns_name`, so each must match a
+    /// constraint precisely when the bare `dns_name` does.
+    fn uris_that_match(dns_name: &str) -> Vec<String> {
+        vec![
+            format!("http://{dns_name}/"),
+            format!("https://{dns_name}"),
+            format!("http://user:password@{dns_name}"),
+            format!("http://{dns_name}/index.html"),
+            format!("https://{dns_name}/foo/bar/baz?x=y"),
+            format!("ftp://user:password@{dns_name}:4343/cat.txt"),
+        ]
+    }
+
+    /// URI shapes that place `dns_name` somewhere other than the host, or that
+    /// have no constrainable host at all. None of these may ever match.
+    fn uris_that_dont_match(dns_name: &str) -> Vec<String> {
+        vec![
+            // User and password parts don't match.
+            format!("http://{dns_name}:{dns_name}@sir.not.appearing.in.this.movie"),
+            // Scheme doesn't match.
+            format!("{dns_name}://sir.not.appearing.in.this.movie/"),
+            // Path doesn't match.
+            format!("http://sir.not.appearing.in.this.movie/{dns_name}/baz"),
+            // IP addresses never match.
+            "http://127.0.0.1".to_string(),
+            "http://[fe80::1]".to_string(),
+            // Neither do URIs without host components at all.
+            "/foo/bar".to_string(),
+            dns_name.to_string(),
+        ]
+    }
+
+    /// Cross-multiplies the DNS name corpus against a range of URI shapes: the
+    /// host part of a URI must behave exactly like the equivalent bare DNS
+    /// name, and the surrounding URI syntax must never leak into the match.
+    #[test]
+    fn uri_names_match_reference_hostname() {
+        for (dns_name, constraint, expected) in name_matching_fixtures() {
+            for uri in uris_that_match(&dns_name) {
+                assert_eq!(
+                    expected,
+                    matches(&uri, &constraint),
+                    "expected uri {uri:?} matching constraint {constraint:?} to be {expected} \
+                     (dns name {dns_name:?})"
+                );
+
+                // The relationship is never symmetric.
+                assert!(
+                    !matches(&constraint, &uri),
+                    "constraint {constraint:?} incorrectly matched as a uri against {uri:?} \
+                     (dns name {dns_name:?})"
+                );
+            }
+
+            if constraint.is_empty() {
+                // Everything matches the empty constraint, so the negative
+                // cases don't apply to it.
+                continue;
+            }
+
+            for uri in uris_that_dont_match(&dns_name) {
+                assert!(
+                    !matches(&uri, &constraint),
+                    "uri {uri:?} incorrectly matched constraint {constraint:?} \
+                     (dns name {dns_name:?})"
+                );
+            }
+        }
     }
 
     #[test]

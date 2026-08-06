@@ -68,6 +68,149 @@ fn address_is_in_subnet(address: &[u8], subnet: &[u8]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::net::{Ipv4Addr, Ipv6Addr};
+
+    /// Raw 4-byte encoding of a dotted-quad IPv4 address.
+    fn a4(addr: &str) -> Vec<u8> {
+        addr.parse::<Ipv4Addr>().unwrap().octets().to_vec()
+    }
+
+    /// Raw 16-byte encoding of an IPv6 address.
+    fn a6(addr: &str) -> Vec<u8> {
+        addr.parse::<Ipv6Addr>().unwrap().octets().to_vec()
+    }
+
+    /// IPv4 constraint: 4 subnet bytes followed by 4 mask bytes.
+    fn c4(subnet: &str, mask: &str) -> Vec<u8> {
+        let mut out = a4(subnet);
+        out.extend_from_slice(&a4(mask));
+        out
+    }
+
+    /// IPv6 constraint: 16 subnet bytes followed by 16 mask bytes.
+    fn c6(subnet: &str, mask: &str) -> Vec<u8> {
+        let mut out = a6(subnet);
+        out.extend_from_slice(&a6(mask));
+        out
+    }
+
+    /// A constraint of `count` 0xff bytes, used to probe length validation.
+    fn ones(count: usize) -> Vec<u8> {
+        vec![0xff; count]
+    }
+
+    #[test]
+    fn constraint_corpus() {
+        let fixtures: Vec<(Vec<u8>, Vec<u8>, bool)> = vec![
+            // Straightforward IPv4 CIDR masks.
+            (a4("17.250.78.1"), c4("17.0.0.0", "255.0.0.0"), true),
+            (a4("17.250.78.1"), c4("17.250.0.66", "255.255.0.0"), true),
+            (a4("17.250.78.1"), c4("17.250.78.0", "255.255.255.0"), true),
+            (a4("17.250.78.1"), c4("17.250.78.1", "255.255.255.255"), true),
+            (a4("18.250.78.1"), c4("17.0.0.0", "255.0.0.0"), false),
+            (a4("17.250.78.1"), c4("17.250.78.2", "255.255.255.255"), false),
+            // Masks with zero bytes in positions that break contiguity.
+            (a4("17.250.78.1"), c4("17.250.78.1", "0.0.0.255"), false),
+            (a4("17.250.78.1"), c4("17.250.78.1", "0.0.255.255"), false),
+            (a4("17.250.78.1"), c4("17.250.78.1", "0.255.255.255"), false),
+            (a4("17.250.78.1"), c4("17.250.78.1", "255.0.255.0"), false),
+            (a4("17.250.78.1"), c4("17.250.78.1", "255.255.0.255"), false),
+            // Valid CIDR masks that are not byte aligned.
+            (a4("17.250.78.1"), c4("17.0.0.0", "128.0.0.0"), true),
+            (a4("17.255.78.1"), c4("17.254.0.0", "255.254.0.0"), true),
+            (a4("17.255.78.1"), c4("17.254.0.0", "255.255.0.0"), false),
+            // Non-contiguous bit patterns inside a byte.
+            (a4("17.250.78.1"), c4("17.250.78.1", "255.255.62.0"), false),
+            (a4("17.250.78.1"), c4("17.250.78.1", "255.239.255.255"), false),
+            // An all-zero mask matches nothing.
+            (a4("17.250.78.1"), c4("0.0.0.0", "0.0.0.0"), false),
+            // Address and constraint from different families never match.
+            (a4("17.250.78.1"), c6("8000::", "8000::"), false),
+            (a6("fe80::"), c4("254.128.0.0", "255.128.0.0"), false),
+            // Straightforward IPv6 CIDR masks.
+            (a6("fe80::8d:f7d:79c5:5719"), c6("fe80::", "ffff:ffff:ffff:ffff::"), true),
+            (
+                a6("fe80::8d:f7d:79c5:5719"),
+                c6("fe80::8d:0:0:0", "ffff:ffff:ffff:ffff:ffff::"),
+                true,
+            ),
+            (
+                a6("fe80::8d:f7d:79c5:5719"),
+                c6("fe80::8d:f7d:0:0", "ffff:ffff:ffff:ffff:ffff:ffff::"),
+                true,
+            ),
+            (
+                a6("fe80::8d:f7d:79c5:5719"),
+                c6("fe80::8d:f7d:79c5:0", "ffff:ffff:ffff:ffff:ffff:ffff:ffff:0"),
+                true,
+            ),
+            (
+                a6("fe80::8d:f7d:79c5:5719"),
+                c6("fe80::8d:f7d:79c5:5719", "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff"),
+                true,
+            ),
+            (a6("fe80::8d:f7d:79c5:5719"), c6("fe81::", "ffff:ffff:ffff:ffff::"), false),
+            (
+                a6("fe80::8d:f7d:79d5:5719"),
+                c6("fe80::8d:f7d:79c5:5719", "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff"),
+                false,
+            ),
+            // IPv6 masks with zero groups in positions that break contiguity.
+            (a6("fe80::8d:f7d:79c5:5719"), c6("fe80::8d:f7d:79c5:5719", "::ffff"), false),
+            (
+                a6("fe80::8d:f7d:79c5:5719"),
+                c6("fe80::8d:f7d:79c5:5719", "::ffff:ffff"),
+                false,
+            ),
+            (
+                a6("fe80::8d:f7d:79c5:5719"),
+                c6("fe80::8d:f7d:79c5:5719", "ffff::ffff"),
+                false,
+            ),
+            (
+                a6("fe80::8d:f7d:79c5:5719"),
+                c6("fe80::8d:f7d:79c5:5719", "ffff:0:0:ffff::ffff"),
+                false,
+            ),
+            // Valid IPv6 CIDR masks that are not byte aligned.
+            (a6("fe80::8d:f7d:79c5:5719"), c6("fe80::8d:f7d:79c5:5719", "8000::"), true),
+            (a6("fe80::8d:f7d:79c5:5719"), c6("fe80::8d:f7d:79c5:5719", "fffe::"), true),
+            (
+                a6("fe80::8d:f7d:79c5:5719"),
+                c6("fe81::8d:f7d:79c5:5719", "ffff:ffff::"),
+                false,
+            ),
+            // Non-contiguous IPv6 bit patterns.
+            (
+                a6("fe80::8d:f7d:79c5:5719"),
+                c6("fe81::8d:f7d:79c5:5719", "ffff:ffff:c9c9::"),
+                false,
+            ),
+            (
+                a6("fe80::8d:f7d:79c5:5719"),
+                c6("fe81::8d:f7d:79c5:5719", "ffff:ffff:feff:ffff:ffff:ffff:ffff:ffff"),
+                false,
+            ),
+            // An all-zero IPv6 mask matches nothing.
+            (a6("fe80::8d:f7d:79c5:5719"), c6("::", "::"), false),
+            // A constraint must be exactly twice the address length.
+            (a4("17.250.78.1"), ones(1), false),
+            (a4("17.250.78.1"), ones(7), false),
+            (a4("17.250.78.1"), ones(9), false),
+            (a6("fe80::8d:f7d:79c5:5719"), ones(1), false),
+            (a6("fe80::8d:f7d:79c5:5719"), ones(31), false),
+            (a6("fe80::8d:f7d:79c5:5719"), ones(33), false),
+        ];
+
+        assert_eq!(fixtures.len(), 42, "corpus must cover every row of the conformance table");
+        for (address, constraint, expected) in &fixtures {
+            let actual = NameConstraintsPolicy::ip_address_matches_constraint(address, constraint);
+            assert_eq!(
+                actual, *expected,
+                "expected address {address:02x?} matching constraint {constraint:02x?} to be {expected}, but it was {actual}"
+            );
+        }
+    }
 
     fn v4(a: u8, b: u8, c: u8, d: u8) -> Vec<u8> {
         vec![a, b, c, d]
