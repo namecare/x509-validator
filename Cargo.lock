@@ -636,14 +636,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "x509-validator-awc-lc"
-version = "0.1.0"
-dependencies = [
- "aws-lc-rs",
- "x509-validator-core",
-]
-
-[[package]]
 name = "x509-validator-core"
 version = "0.1.0"
 dependencies = [
