@@ -324,17 +324,33 @@ mod tests {
     use crate::policy::{PolicyFailureReason, VerifierPolicy};
     use crate::crypto::{CryptoError, Digest, KeyProvider, PublicKey};
     use crate::test_support::{
-        issue_ca, issue_ca_with_key, issue_ca_with_key_and_name, issue_ca_with_key_ids, issue_leaf, issue_leaf_with,
-        issue_leaf_with_aki, self_signed_ca_with, self_signed_ca_with_key_ids, signing_identity, weird_critical_extension, Ca, Ski,
+        issue_ca, issue_leaf, issue_leaf_with_aki, self_signed_ca_with, self_signed_ca_with_key_ids,
+        signing_identity, weird_critical_extension, Ski,
     };
     use rcgen::KeyPair;
-    use std::collections::HashSet;
     use std::sync::Mutex;
     use x509_parser::prelude::FromDer;
     use x509_parser::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
 
     fn parse(der: &'static [u8]) -> Certificate<'static> {
         Certificate::from_der(der).unwrap().1
+    }
+
+    /// Asserts that `result` is a valid chain whose certificates are exactly
+    /// `expected`, in leaf-to-root order. Comparison is on the full DER of
+    /// each certificate, so this catches a chain containing the right number
+    /// of certificates in the wrong order just as readily as a wrong one.
+    fn assert_chain_is(result: ChainValidationResultOwned<'_>, expected: &[&Certificate<'_>]) {
+        match result {
+            ChainValidationResultOwned::ValidCertificate(chain) => {
+                let actual: Vec<&[u8]> = chain.iter().map(|c| c.as_ref()).collect();
+                let expected: Vec<&[u8]> = expected.iter().map(|c| c.as_ref()).collect();
+                assert_eq!(actual, expected, "chain contents or order differ from expectation");
+            }
+            ChainValidationResultOwned::CouldNotValidate(reasons) => {
+                panic!("expected a valid chain, got failures: {reasons:?}")
+            }
+        }
     }
 
     fn leak(der: Vec<u8>) -> &'static [u8] {
@@ -407,15 +423,10 @@ mod tests {
         let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &crypto);
 
         let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
-        match result {
-            ChainValidationResultOwned::ValidCertificate(chain) => {
-                let certs: Vec<&Certificate> = chain.iter().collect();
-                assert_eq!(certs.len(), 3);
-            }
-            ChainValidationResultOwned::CouldNotValidate(reasons) => {
-                panic!("expected valid chain, got failures: {reasons:?}")
-            }
-        }
+        // The chain is exactly leaf, intermediate, root — leaf-to-root order,
+        // as RFC 5280 §6.1 orders a certification path from the subject
+        // outward to the trust anchor.
+        assert_chain_is(result, &[&leaf, &parse(intermediate_der), &parse(root_der)]);
     }
 
     #[test]
@@ -662,5 +673,233 @@ mod tests {
         assert_eq!(visited.len(), 2, "both roots should have been offered to the policy");
         assert_eq!(visited[0], None, "the root with no subjectKeyIdentifier must be tried first");
         assert_eq!(visited[1], Some(vec![0xBB; 20]), "the root with a mismatching subjectKeyIdentifier must be tried last");
+    }
+
+    #[test]
+    fn missing_intermediate_fails_to_build() {
+        // The root is trusted, but the certificate linking the leaf to it is
+        // supplied nowhere, so no certification path exists.
+        let root = self_signed_ca_with("root", |_| {});
+        let intermediate = issue_ca("intermediate", &root, None, |_| {});
+        let leaf_der = leak(issue_leaf("leaf", &["www.example.com"], &intermediate));
+        let root_der = leak(root.der.clone());
+
+        let leaf = parse(leaf_der);
+        let roots = CertificateStore::from_iter(vec![parse(root_der)]);
+        let intermediates: CertificateStore = CertificateStore::new();
+        let crypto = always_valid_crypto();
+        let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &crypto);
+
+        let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+        match result {
+            ChainValidationResultOwned::CouldNotValidate(reasons) => {
+                // Nothing was ever offered to the policy, so there is no
+                // policy failure to report — only the absence of a path.
+                assert!(reasons.is_empty(), "expected no policy failures, got: {reasons:?}");
+            }
+            ChainValidationResultOwned::ValidCertificate(_) => panic!("built a chain with no intermediate available"),
+        }
+    }
+
+    #[test]
+    fn missing_root_fails_to_build() {
+        // The intermediate is available, so the search can climb one link,
+        // but the trust anchor it terminates at is not trusted.
+        let root = self_signed_ca_with("root", |_| {});
+        let intermediate = issue_ca("intermediate", &root, None, |_| {});
+        let leaf_der = leak(issue_leaf("leaf", &["www.example.com"], &intermediate));
+        let intermediate_der = leak(intermediate.der.clone());
+
+        let leaf = parse(leaf_der);
+        let roots: CertificateStore = CertificateStore::new();
+        let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
+        let crypto = always_valid_crypto();
+        let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &crypto);
+
+        let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+        match result {
+            ChainValidationResultOwned::CouldNotValidate(reasons) => {
+                assert!(reasons.is_empty(), "expected no policy failures, got: {reasons:?}");
+            }
+            ChainValidationResultOwned::ValidCertificate(_) => panic!("built a chain terminating at an untrusted root"),
+        }
+    }
+
+    #[test]
+    fn extra_roots_are_ignored() {
+        // An unrelated trust anchor sharing no subject name with anything in
+        // the path must neither be selected nor disturb the search.
+        let root = self_signed_ca_with("root", |_| {});
+        let unrelated_root = self_signed_ca_with("unrelated-root", |_| {});
+        let intermediate = issue_ca("intermediate", &root, None, |_| {});
+        let leaf_der = leak(issue_leaf("leaf", &["www.example.com"], &intermediate));
+        let intermediate_der = leak(intermediate.der.clone());
+        let root_der = leak(root.der.clone());
+        let unrelated_root_der = leak(unrelated_root.der.clone());
+
+        let leaf = parse(leaf_der);
+        let roots = CertificateStore::from_iter(vec![parse(root_der), parse(unrelated_root_der)]);
+        let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
+        let crypto = always_valid_crypto();
+        let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &crypto);
+
+        let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+        assert_chain_is(result, &[&leaf, &parse(intermediate_der), &parse(root_der)]);
+    }
+
+    #[test]
+    fn roots_also_present_in_the_intermediate_store_are_not_a_problem() {
+        // Callers routinely hand the same bundle to both stores. The roots
+        // appearing a second time as intermediate candidates must not produce
+        // a duplicated or longer path.
+        let root = self_signed_ca_with("root", |_| {});
+        let unrelated_root = self_signed_ca_with("unrelated-root", |_| {});
+        let intermediate = issue_ca("intermediate", &root, None, |_| {});
+        let leaf_der = leak(issue_leaf("leaf", &["www.example.com"], &intermediate));
+        let intermediate_der = leak(intermediate.der.clone());
+        let root_der = leak(root.der.clone());
+        let unrelated_root_der = leak(unrelated_root.der.clone());
+
+        let leaf = parse(leaf_der);
+        let roots = CertificateStore::from_iter(vec![parse(root_der), parse(unrelated_root_der)]);
+        let intermediates = CertificateStore::from_iter(vec![
+            parse(intermediate_der),
+            parse(root_der),
+            parse(unrelated_root_der),
+        ]);
+        let crypto = always_valid_crypto();
+        let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &crypto);
+
+        let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+        assert_chain_is(result, &[&leaf, &parse(intermediate_der), &parse(root_der)]);
+    }
+
+    #[test]
+    fn self_signed_certificate_is_rejected_when_not_in_the_trust_store() {
+        // A self-signed certificate is its own issuer, but being its own
+        // issuer confers no trust: RFC 5280 §6.1 requires the path to
+        // terminate at a configured trust anchor.
+        let trusted_root = self_signed_ca_with("root", |_| {});
+        let intermediate = issue_ca("intermediate", &trusted_root, None, |_| {});
+        let isolated = self_signed_ca_with("isolated-self-signed", |_| {});
+
+        let isolated_der = leak(isolated.der.clone());
+        let intermediate_der = leak(intermediate.der.clone());
+        let trusted_root_der = leak(trusted_root.der.clone());
+
+        let leaf = parse(isolated_der);
+        let roots = CertificateStore::from_iter(vec![parse(trusted_root_der)]);
+        let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
+        let crypto = always_valid_crypto();
+        let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &crypto);
+
+        let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+        assert!(
+            matches!(result, ChainValidationResultOwned::CouldNotValidate(_)),
+            "a self-signed certificate outside the trust store must not validate"
+        );
+    }
+
+    #[test]
+    fn self_signed_certificate_is_trusted_when_in_the_trust_store() {
+        // The same certificate as above, now configured as a trust anchor:
+        // the path is the anchor alone, length one.
+        let trusted_root = self_signed_ca_with("root", |_| {});
+        let intermediate = issue_ca("intermediate", &trusted_root, None, |_| {});
+        let isolated = self_signed_ca_with("isolated-self-signed", |_| {});
+
+        let isolated_der = leak(isolated.der.clone());
+        let intermediate_der = leak(intermediate.der.clone());
+        let trusted_root_der = leak(trusted_root.der.clone());
+
+        let leaf = parse(isolated_der);
+        let roots = CertificateStore::from_iter(vec![parse(trusted_root_der), parse(isolated_der)]);
+        let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
+        let crypto = always_valid_crypto();
+        let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &crypto);
+
+        let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+        assert_chain_is(result, &[&leaf]);
+    }
+
+    #[test]
+    fn trust_roots_can_be_non_self_signed_leaves() {
+        // Nothing requires a trust anchor to be a CA or to be self-signed.
+        // A non-CA leaf placed directly in the trust store validates as a
+        // path of length one, without any search.
+        let root = self_signed_ca_with("root", |_| {});
+        let intermediate = issue_ca("intermediate", &root, None, |_| {});
+        let leaf_der = leak(issue_leaf("leaf", &["www.example.com"], &intermediate));
+        let intermediate_der = leak(intermediate.der.clone());
+
+        let leaf = parse(leaf_der);
+        let roots = CertificateStore::from_iter(vec![parse(leaf_der)]);
+        let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
+        let crypto = always_valid_crypto();
+        let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &crypto);
+
+        let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+        assert_chain_is(result, &[&leaf]);
+    }
+
+    #[test]
+    fn trust_roots_can_be_non_self_signed_intermediates() {
+        // Trusting an intermediate directly terminates the path there: the
+        // chain stops at the anchor and never reaches the certificate that
+        // issued it.
+        let root = self_signed_ca_with("root", |_| {});
+        let intermediate = issue_ca("intermediate", &root, None, |_| {});
+        let leaf_der = leak(issue_leaf("leaf", &["www.example.com"], &intermediate));
+        let intermediate_der = leak(intermediate.der.clone());
+
+        let leaf = parse(leaf_der);
+        let roots = CertificateStore::from_iter(vec![parse(intermediate_der)]);
+        let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
+        let crypto = always_valid_crypto();
+        let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &crypto);
+
+        let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+        assert_chain_is(result, &[&leaf, &parse(intermediate_der)]);
+    }
+
+    #[test]
+    fn critical_extensions_are_policed_on_leaf_certificates() {
+        // RFC 5280 §4.2: a certificate consumer must reject a certificate
+        // carrying a critical extension it does not recognize. The policy
+        // here declares only basicConstraints, so the leaf's extra critical
+        // extension is unhandled and the leaf is rejected outright — even
+        // though it is itself in the trust store and would otherwise be
+        // accepted as a path of length one.
+        let trusted_root = self_signed_ca_with("root", |_| {});
+        let intermediate = issue_ca("intermediate", &trusted_root, None, |_| {});
+        let weird = self_signed_ca_with("weird-critical-extension", |params: &mut rcgen::CertificateParams| {
+            params.custom_extensions.push(weird_critical_extension());
+        });
+
+        let weird_der = leak(weird.der.clone());
+        let intermediate_der = leak(intermediate.der.clone());
+        let trusted_root_der = leak(trusted_root.der.clone());
+
+        let leaf = parse(weird_der);
+        // Guard against a vacuous test: the leaf really must carry a critical
+        // extension the policy does not list.
+        let handled = AlwaysMeetsPolicy.verifying_critical_extensions();
+        assert!(
+            leaf.tbs_certificate
+                .iter_extensions()
+                .any(|ext| ext.critical && !handled.contains(&ext.oid)),
+            "leaf must carry a critical extension outside the policy's handled set"
+        );
+
+        let roots = CertificateStore::from_iter(vec![parse(trusted_root_der), parse(weird_der)]);
+        let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
+        let crypto = always_valid_crypto();
+        let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &crypto);
+
+        let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+        assert!(
+            matches!(result, ChainValidationResultOwned::CouldNotValidate(_)),
+            "a leaf with an unhandled critical extension must not validate"
+        );
     }
 }
