@@ -5,6 +5,7 @@
 //! fake instances — every test exercises a certificate produced by `rcgen`
 //! and re-parsed via `Certificate::from_der`.
 
+pub mod bench_fixtures;
 pub mod ca;
 pub mod constraints;
 pub mod leaf;

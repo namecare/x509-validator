@@ -1,10 +1,9 @@
-//! Signature verification and digest cost, per backend.
+//! The same atomic crypto operations, run against every backend.
 //!
 //! This is the tier where the backends actually differ: everything else in
-//! the crate is shared code. Each benchmark takes the backend as a divan
-//! argument, so one run produces a row per backend per algorithm.
+//! the crate is shared code.
 
-use x509_validator_bench::{signatures, Backend, BACKENDS};
+use x509_validator_bench_compare::{signatures, Backend, BACKENDS};
 
 fn main() {
     divan::main();

@@ -1,17 +1,22 @@
-//! The certificate set the parity benchmark validates against.
+//! The certificate set the parity benchmarks validate against.
 //!
 //! The reference implementation this mirrors generates its certificates at
 //! runtime from fresh randomness on every launch, so there is no fixed data
 //! to reproduce. What is fixed there is the *specification* — key
 //! algorithms, validity windows, and extension shapes — so that is what is
 //! matched here.
+//!
+//! This lives in the testkit rather than in a bench crate because both
+//! benchmark crates need the same certificates: `compare` measures backends
+//! against them and `measure` runs the parity scenarios over them. Two
+//! copies would be two specifications, and they would drift.
 
+use crate::parse::cert;
+use crate::rcgen::{KeyPair, PKCS_ECDSA_P384_SHA384};
+use crate::{CaSpec, LeafSpec, Ski};
 use std::sync::OnceLock;
 use time::{Duration, OffsetDateTime};
 use x509_validator_core::Certificate;
-use x509_validator_testkit::parse::cert;
-use x509_validator_testkit::rcgen::{KeyPair, PKCS_ECDSA_P384_SHA384};
-use x509_validator_testkit::{CaSpec, LeafSpec, Ski};
 
 /// The instant every validity window is anchored to, and the time expiry
 /// checks are pinned to. Fixed rather than "now" so a benchmark run is not
@@ -24,60 +29,6 @@ fn reference() -> OffsetDateTime {
 
 fn days(n: i64) -> Duration {
     Duration::days(n)
-}
-
-/// A real, publicly-issued certificate chain, as a counterpart to the
-/// generated fixtures above.
-///
-/// Generated fixtures carry only the extensions the generator emits, and a
-/// key algorithm chosen to match the reference specification. Real chains
-/// carry policy OIDs, CRL and OCSP pointers, and whatever curve the issuing
-/// CA actually uses — so they parse more slowly and may verify under a
-/// different algorithm mix. This module exists so the suite reports at least
-/// one number measured against certificates nobody chose for benchmarking.
-pub mod apple {
-    use super::*;
-
-    /// Apple's receipt-signing chain: leaf → WWDR G6 → Apple Root CA - G3.
-    ///
-    /// Both signatures in this chain are ECDSA-P384: the leaf is signed by
-    /// WWDR G6's P-384 key, and WWDR G6 by the root's P-384 key. (The leaf's
-    /// *own* key is P-256, but a chain's cost is decided by the issuers'
-    /// keys, since those are what verification runs against.) That makes this
-    /// chain a P-384 worst case, where backend differences are widest.
-    pub const LEAF_DER: &[u8] = include_bytes!("../data/apple/receipt_signing_leaf.der");
-    pub const INTERMEDIATE_DER: &[u8] = include_bytes!("../data/apple/wwdr_g6_intermediate.der");
-    pub const ROOT_DER: &[u8] = include_bytes!("../data/apple/apple_root_ca_g3.der");
-
-    /// The `signedDate` of the payload these certificates signed, in seconds
-    /// (2025-09-22T22:26:05Z). Expiry is checked against this rather than the
-    /// wall clock, both so runs are reproducible and because it is the
-    /// instant a receipt verifier would actually use. The leaf expires in
-    /// October 2027; pinning here keeps the benchmark working past that.
-    pub const SIGNED_DATE: i64 = 1_758_579_965;
-
-    pub struct Chain {
-        pub leaf: Certificate<'static>,
-        pub intermediate: Certificate<'static>,
-        pub root: Certificate<'static>,
-    }
-
-    static CHAIN: OnceLock<Chain> = OnceLock::new();
-
-    /// The parsed chain, parsed once on first call.
-    pub fn chain() -> &'static Chain {
-        CHAIN.get_or_init(|| Chain {
-            leaf: parse_static(LEAF_DER),
-            intermediate: parse_static(INTERMEDIATE_DER),
-            root: parse_static(ROOT_DER),
-        })
-    }
-
-    /// Parses DER that is already `'static`, so no leaking is needed.
-    fn parse_static(der: &'static [u8]) -> Certificate<'static> {
-        use x509_validator_core::FromDer;
-        Certificate::from_der(der).expect("vendored Apple certificate parses").1
-    }
 }
 
 /// A P-384 key pair, the curve the fixture specification puts CAs on.
@@ -102,6 +53,9 @@ pub struct Parity {
 static PARITY: OnceLock<Parity> = OnceLock::new();
 
 /// The parity fixture set, built once on first call.
+///
+/// Certificate generation is expensive and must never land inside a timed
+/// region, so this is built once and reused across every benchmark.
 pub fn parity() -> &'static Parity {
     PARITY.get_or_init(build)
 }

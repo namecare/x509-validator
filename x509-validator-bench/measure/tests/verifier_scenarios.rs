@@ -13,7 +13,7 @@ use x509_validator::rfc5280::RFC5280Policy;
 use x509_validator::store::CertificateStore;
 use x509_validator::verifier::ChainValidationResultOwned;
 use x509_validator::BaseVerifier;
-use x509_validator_bench::{fixtures, DEFAULT_BACKEND};
+use x509_validator_bench_measure::{fixtures, BACKEND};
 use x509_validator_core::der_parser::Oid;
 use x509_validator_core::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS;
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
@@ -71,7 +71,7 @@ fn assert_scenario(
     let mut verifier = BaseVerifier::with_policy_and_backend(
         CertificateStore::from_iter(roots),
         RFC5280Policy::new(fixtures::REFERENCE_TIME),
-        DEFAULT_BACKEND.provider,
+        BACKEND,
     );
     let result = verifier.validate_with_diagnostics(leaf, &CertificateStore::from_iter(intermediates), &mut |_| {});
     assert_outcome(name, &result, expect);
@@ -206,7 +206,7 @@ fn policy_failure_sends_search_down_longer_path() {
             forbidden: p.ca1.as_ref().to_vec(),
             inner: RFC5280Policy::new(fixtures::REFERENCE_TIME),
         },
-        DEFAULT_BACKEND.provider,
+        BACKEND,
     );
     let intermediates = CertificateStore::from_iter(vec![
         p.intermediate1.clone(),
@@ -235,7 +235,7 @@ fn trust_root_may_be_non_self_signed_leaf() {
     let mut verifier = BaseVerifier::with_policy_and_backend(
         CertificateStore::from_iter(vec![p.localhost_leaf.clone()]),
         IgnoreBasicConstraintsPolicy,
-        DEFAULT_BACKEND.provider,
+        BACKEND,
     );
     let intermediates = CertificateStore::from_iter(vec![p.intermediate1.clone()]);
     let result = verifier.validate_with_diagnostics(&p.localhost_leaf, &intermediates, &mut |_| {});

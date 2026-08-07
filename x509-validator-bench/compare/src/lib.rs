@@ -1,9 +1,14 @@
-//! Shared fixtures and the backend registry for the benchmark suite.
+//! Shared fixtures and the backend registry for the comparison suite.
+//!
+//! This crate answers "which is faster?" — backend against backend, parser
+//! against parser. Its counterpart, `x509-validator-bench-measure`, answers
+//! "did our own code get slower?" and is the one worth tracking over time.
 //!
 //! Certificate generation is expensive and must never land inside a timed
 //! region, so everything here is built once and reused across benchmarks.
 
 pub mod fixtures;
+pub mod roots;
 pub mod signatures;
 
 use x509_validator::crypto::CryptoProvider;
@@ -47,4 +52,4 @@ pub const DEFAULT_BACKEND: Backend = Backend { name: "ring", provider: &x509_val
 #[cfg(all(feature = "rust_crypto", not(feature = "aws_lc"), not(feature = "ring")))]
 pub const DEFAULT_BACKEND: Backend = Backend { name: "rust_crypto", provider: &x509_validator::crypto::rust_crypto::DEFAULT_PROVIDER };
 #[cfg(not(any(feature = "aws_lc", feature = "ring", feature = "rust_crypto")))]
-compile_error!("x509-validator-bench requires at least one crypto backend feature: aws_lc, ring, or rust_crypto");
+compile_error!("x509-validator-bench-compare requires at least one crypto backend feature: aws_lc, ring, or rust_crypto");
