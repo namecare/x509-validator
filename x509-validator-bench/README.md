@@ -71,8 +71,13 @@ constraints: 41.36ns. RFC 5280 composite: 88.24ns.
 
 | Scenario | aws_lc | ring | rust_crypto |
 |---|---|---|---|
-| Plain chain | 202µs | 560.5µs | 1.024ms |
+| Plain chain (P-256 + P-384) | 202µs | 560.5µs | 1.024ms |
 | With cross-signed decoys | 195.5µs | 561.7µs | 1.018ms |
+| Apple receipt chain (P-384 x2) | 338.7µs | 1.086ms | 1.658ms |
+
+The Apple row uses a real, publicly-issued chain (see
+`data/apple/README.md`); the others use generated fixtures. Both of its
+verifications are P-384, which is why the spread is wider — see finding 4.
 
 ### Parity blob
 
