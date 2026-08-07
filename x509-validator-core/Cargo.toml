@@ -15,6 +15,9 @@ keywords = ["crypto", "x509"]
 [dependencies]
 x509-parser = "0.18.1"
 
+[dev-dependencies]
+x509-validator-testkit = { path = "../x509-validator-testkit" }
+
 [package.metadata.cargo_check_external_types]
 allowed_external_types = [
     "x509_parser::*",
