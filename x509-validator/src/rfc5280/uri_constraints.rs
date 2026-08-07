@@ -39,14 +39,6 @@ impl NameConstraintsPolicy {
 }
 
 /// Extracts the host from a URI's authority component, if present.
-///
-/// The authority component has the form `[userinfo@]host[:port]`. The host
-/// alone is what RFC 5280 constrains — a `userinfo@` prefix (e.g. the
-/// `user` in `https://user@example.com/`) must be stripped before
-/// comparison, otherwise a certificate could smuggle an arbitrary
-/// attacker-controlled string in front of `@` to make the presented name
-/// look like it matches a constraint it doesn't actually satisfy, or to
-/// bypass an excluded-subtree check by disguising the real host.
 fn extract_host(uri: &[u8]) -> Option<String> {
     let uri = std::str::from_utf8(uri).ok()?;
 

@@ -1,4 +1,4 @@
-//! The body shared by every crypto backend.
+//! The body shared by the aws-lc-rs and ring crypto backends.
 //!
 //! aws-lc-rs and ring expose the same shape — a `signature` module of
 //! `&'static dyn VerificationAlgorithm` constants, an `UnparsedPublicKey` that
@@ -11,6 +11,10 @@
 //! own crate path and marker type, plus the ECDSA arms it supports: aws-lc-rs
 //! offers ECDSA-with-SHA512 for both curves, ring does not, and a backend
 //! naming no arm for a pairing reports it as unsupported.
+//!
+//! The RustCrypto backend does not share this shape — its verifiers live in
+//! per-algorithm crates with no common key type — so it implements the same
+//! traits by hand rather than through this macro.
 
 /// Defines a crypto backend over `$krate`, a crate exposing aws-lc-rs' and
 /// ring's shared API shape.

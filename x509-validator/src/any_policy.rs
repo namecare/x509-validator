@@ -7,10 +7,6 @@ use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
 /// Instead try to use conditional inclusion of different policies through their concrete types.
 ///
 /// Use [`AnyPolicy`] at the top level during construction of a verifier to get a verifier of type
-/// `Verifier<AnyPolicy>` e.g.:
-/// ```ignore
-/// let verifier = Verifier::new(CertificateStore::default(), AnyPolicy::new(RFC5280Policy::new()));
-/// ```
 pub struct AnyPolicy {
     policy: Box<dyn VerifierPolicy>,
 }

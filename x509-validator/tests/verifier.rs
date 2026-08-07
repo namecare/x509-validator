@@ -9,12 +9,14 @@
 //! certificate offered by the wrong key is rejected by real arithmetic
 //! rather than by a test double.
 
-#![cfg(any(feature = "aws_lc", feature = "ring"))]
+#![cfg(any(feature = "aws_lc", feature = "ring", feature = "rust_crypto"))]
 
 #[cfg(feature = "aws_lc")]
 use x509_validator::crypto::aws_lc::DEFAULT_PROVIDER;
 #[cfg(all(feature = "ring", not(feature = "aws_lc")))]
 use x509_validator::crypto::ring::DEFAULT_PROVIDER;
+#[cfg(all(feature = "rust_crypto", not(feature = "aws_lc"), not(feature = "ring")))]
+use x509_validator::crypto::rust_crypto::DEFAULT_PROVIDER;
 
 use std::sync::{Arc, Mutex};
 

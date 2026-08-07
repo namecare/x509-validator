@@ -2,15 +2,6 @@ use crate::policy::{PolicyEvaluationResult, PolicyFailureReason, VerifierPolicy}
 use x509_validator_core::der_parser::Oid;
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
 
-/// Use this to build a policy where any one of the sub-policies must be met for the overall policy to be met.
-/// For example, the following policy requires that `RFC5280Policy` is always met, and either `PolicyA` or `PolicyB`
-/// is met. It does not require that both `PolicyA` and `PolicyB` are met.
-/// ```ignore
-/// let verifier = Verifier::new(CertificateStore::default(), AllOfPolicies::new((
-///     RFC5280Policy::new(),
-///     OneOfPolicies::new(vec![Box::new(PolicyA::new()), Box::new(PolicyB::new())]),
-/// )));
-/// ```
 pub struct OneOfPolicies {
     policies: Vec<Box<dyn VerifierPolicy>>,
 }
@@ -22,10 +13,6 @@ impl OneOfPolicies {
 }
 
 impl VerifierPolicy for OneOfPolicies {
-    /// Intersection, not union: only one sub-policy's checks actually run
-    /// for a given chain (the first one that meets policy, or none), so an
-    /// extension is only safe to claim as handled here if every sub-policy
-    /// independently understands it.
     fn verifying_critical_extensions(&self) -> Vec<Oid<'static>> {
         let mut policies = self.policies.iter();
         let Some(first) = policies.next() else {

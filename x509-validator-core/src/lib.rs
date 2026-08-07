@@ -7,14 +7,6 @@ pub mod error;
 pub mod unverified_chain;
 pub mod validated_chain;
 
-// Core is the single entry point for the X.509 types its consumers need:
-// dependent crates depend on core alone, never on `x509-parser` or
-// `oid-registry` directly.
-//
-// The domain types below are aliases rather than re-exports. Consumers name
-// the alias, so the underlying representation can be swapped for a different
-// parser (or an owned type of our own) by editing this file alone.
-
 pub use certificate::{Certificate, CertificateExt};
 
 /// An object identifier.
@@ -42,9 +34,6 @@ pub type RsaSsaPssParams<'a> = x509_parser::signature_algorithm::RsaSsaPssParams
 pub type Any<'a> = x509_parser::asn1_rs::Any<'a>;
 
 /// The certificate structure version (v1/v2/v3).
-///
-/// A plain re-export, not an alias: this is a fieldless enum consumers match
-/// on by variant, so aliasing it would not let the variants follow.
 pub use x509_parser::x509::X509Version;
 
 /// DER decoding. A trait, so it is re-exported rather than aliased.
