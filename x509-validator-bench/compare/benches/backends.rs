@@ -8,7 +8,7 @@ use x509_validator::rfc5280::RFC5280Policy;
 use x509_validator::store::CertificateStore;
 use x509_validator::verifier::ChainValidationResultOwned;
 use x509_validator::BaseVerifier;
-use x509_validator_bench::{fixtures, Backend, BACKENDS};
+use x509_validator_bench_compare::{fixtures, Backend, BACKENDS};
 
 fn main() {
     divan::main();
