@@ -7,7 +7,7 @@ use x509_validator_core::validated_chain::ValidatedCertificateChain;
 use x509_validator_core::{Certificate, CertificateExt};
 use x509_validator_core::FromDer;
 
-fn parse_certificate_store(der: &[Vec<u8>]) -> Result<CertificateStore, PolicyFailureReason> {
+fn parse_certificate_store(der: &[Vec<u8>]) -> Result<CertificateStore<'_>, PolicyFailureReason> {
     let mut store = CertificateStore::new();
     for bytes in der {
         let (_, certificate) = Certificate::from_der(bytes).map_err(|_| PolicyFailureReason::new("failed to parse certificate DER"))?;
