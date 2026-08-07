@@ -18,6 +18,28 @@ Criterion saves each run under `target/criterion/` and reports the delta
 against the previous one, so a local before/after is just two runs with the
 change in between.
 
+## HTML report
+
+Every run writes plots and an index page. Open it with:
+
+    open target/criterion/report/index.html      # macOS
+    xdg-open target/criterion/report/index.html  # Linux
+
+The index links every benchmark; each one gets a page with its probability
+density, iteration-time scatter, and — once there is a previous run to compare
+against — a before/after plot. Useful for telling a real regression from a
+noisy sample, since the distribution shows the outliers the summary line hides.
+
+Note the directory names are flattened: `verifier/trivial_chain_building`
+becomes `target/criterion/verifier_trivial_chain_building/`.
+
+Comparison plots need two runs, so the first run after `cargo clean` shows
+none. Baselines work with the report too:
+
+    cargo bench -p x509-validator-bench-measure -- --save-baseline before
+    # ...change something...
+    cargo bench -p x509-validator-bench-measure -- --baseline before
+
 ## What is covered
 
 | Bench | Benchmarks | Notes |

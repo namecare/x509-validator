@@ -14,9 +14,15 @@ time = "0.3"
 [dev-dependencies]
 # Criterion rather than divan: this suite is meant to be tracked over time by
 # a CI service, and the ones that ingest Rust benchmarks read criterion's
-# output. `html_reports` is off — nothing here reads the plots, and they cost
-# time on every run.
-criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
+# output. `html_reports` writes plots and an index page to
+# `target/criterion/report/` — see the README for how to open them.
+# `html_reports` needs `plotters` to render with; enabling it alone silently
+# produces no report.
+criterion = { version = "0.8", default-features = false, features = [
+    "cargo_bench_support",
+    "html_reports",
+    "plotters",
+] }
 
 [features]
 # One backend, chosen at compile time. A regression gate wants a single
