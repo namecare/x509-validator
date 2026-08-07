@@ -279,3 +279,137 @@ pub fn issue_self_issued_ca(issuer: &Ca, path_len_constraint: Option<u8>) -> Ca 
     let der = params.signed_by(&key_pair, &issuer.issuer()).expect("sign CA").der().to_vec();
     Ca { der, params, key_pair }
 }
+
+/// A CA built from an explicit specification rather than the defaults in
+/// [`base_params`], for callers that need to pin the key algorithm and the
+/// validity window — the two axes the older helpers fix internally.
+///
+/// The older `issue_ca*` / `self_signed_ca*` helpers remain the shorter path
+/// when those defaults are fine.
+pub struct CaSpec {
+    subject_cn: String,
+    key_pair: Option<KeyPair>,
+    not_before: Option<OffsetDateTime>,
+    not_after: Option<OffsetDateTime>,
+    path_len: Option<u8>,
+    ski: Ski,
+    include_aki: bool,
+}
+
+impl CaSpec {
+    pub fn new(subject_cn: &str) -> Self {
+        Self {
+            subject_cn: subject_cn.to_string(),
+            key_pair: None,
+            not_before: None,
+            not_after: None,
+            path_len: None,
+            ski: Ski::Derived,
+            include_aki: false,
+        }
+    }
+
+    pub fn key_pair(mut self, key_pair: KeyPair) -> Self {
+        self.key_pair = Some(key_pair);
+        self
+    }
+
+    pub fn validity(mut self, not_before: OffsetDateTime, not_after: OffsetDateTime) -> Self {
+        self.not_before = Some(not_before);
+        self.not_after = Some(not_after);
+        self
+    }
+
+    pub fn path_len(mut self, path_len: Option<u8>) -> Self {
+        self.path_len = path_len;
+        self
+    }
+
+    pub fn ski(mut self, ski: Ski) -> Self {
+        self.ski = ski;
+        self
+    }
+
+    pub fn include_aki(mut self, include_aki: bool) -> Self {
+        self.include_aki = include_aki;
+        self
+    }
+
+    /// The params and key pair this spec describes, shared by both
+    /// `self_signed` and `signed_by`.
+    fn build(self) -> (CertificateParams, KeyPair) {
+        let mut params = base_params(&self.subject_cn);
+        params.is_ca = IsCa::Ca(match self.path_len {
+            Some(n) => rcgen::BasicConstraints::Constrained(n),
+            None => rcgen::BasicConstraints::Unconstrained,
+        });
+        params.use_authority_key_identifier_extension = self.include_aki;
+        if let Some(not_before) = self.not_before {
+            params.not_before = not_before;
+        }
+        if let Some(not_after) = self.not_after {
+            params.not_after = not_after;
+        }
+        apply_ski(&mut params, self.ski, true);
+
+        let key_pair = self.key_pair.unwrap_or_else(|| KeyPair::generate().expect("generate key pair"));
+        (params, key_pair)
+    }
+
+    pub fn self_signed(self) -> Ca {
+        let (params, key_pair) = self.build();
+        let der = params.self_signed(&key_pair).expect("self-sign CA").der().to_vec();
+        Ca { der, params, key_pair }
+    }
+
+    pub fn signed_by(self, issuer: &Ca) -> Ca {
+        let (params, key_pair) = self.build();
+        let der = params.signed_by(&key_pair, &issuer.issuer()).expect("sign CA").der().to_vec();
+        Ca { der, params, key_pair }
+    }
+}
+
+#[cfg(test)]
+mod ca_spec_tests {
+    use super::*;
+    use x509_validator_core::{Certificate, FromDer};
+
+    #[test]
+    fn ca_spec_honours_key_algorithm_and_validity() {
+        let not_before = OffsetDateTime::UNIX_EPOCH + Duration::days(1);
+        let not_after = OffsetDateTime::UNIX_EPOCH + Duration::days(365);
+
+        let ca = CaSpec::new("spec root")
+            .key_pair(KeyPair::generate_for(&rcgen::PKCS_ECDSA_P384_SHA384).expect("p384 key"))
+            .validity(not_before, not_after)
+            .self_signed();
+
+        let parsed = Certificate::from_der(&ca.der).expect("parse").1;
+        let validity = parsed.tbs_certificate.validity();
+
+        assert_eq!(validity.not_before.timestamp(), not_before.unix_timestamp());
+        assert_eq!(validity.not_after.timestamp(), not_after.unix_timestamp());
+
+        // The named curve carried in the SPKI algorithm parameters, which is
+        // what "this key is P-384" actually means.
+        let curve = parsed
+            .tbs_certificate
+            .subject_pki
+            .algorithm
+            .parameters
+            .as_ref()
+            .expect("EC public key carries curve parameters")
+            .as_oid()
+            .expect("curve parameters are an OID");
+        assert_eq!(curve, x509_validator_core::oid_registry::OID_NIST_EC_P384);
+    }
+
+    #[test]
+    fn ca_spec_signed_by_chains_to_issuer() {
+        let root = CaSpec::new("spec issuer").self_signed();
+        let intermediate = CaSpec::new("spec intermediate").path_len(Some(1)).signed_by(&root);
+
+        let parsed = Certificate::from_der(&intermediate.der).expect("parse").1;
+        assert_eq!(parsed.issuer().as_raw(), Certificate::from_der(&root.der).expect("parse").1.subject().as_raw());
+    }
+}
