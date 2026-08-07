@@ -16,6 +16,5 @@ pub trait Verifier<'a> {
     fn with_raw_certificates(root_certificates: &'a [u8]) -> Self;
 
     fn validate_raw(&self, leaf: &'a [u8], intermediates: &'a [&'a [u8]]) -> ChainValidationResult<'a>;
-
     fn validate(&self, leaf: Certificate<'a>, intermediates: Vec<Certificate<'a>>) -> ChainValidationResult<'a>;
 }

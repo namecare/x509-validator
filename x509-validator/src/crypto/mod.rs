@@ -5,6 +5,8 @@ mod backend;
 pub mod aws_lc;
 #[cfg(feature = "ring")]
 pub mod ring;
+#[cfg(feature = "rust_crypto")]
+pub mod rust_crypto;
 
 use std::fmt::Debug;
 use x509_validator_core::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
