@@ -2,6 +2,9 @@
 //!
 //! Backend-independent: parsing happens before any crypto is reached. This
 //! is the natural place for a parsing regression to show up.
+//!
+//! Corpus completeness is asserted in `tests/parse.rs`, not here: this file
+//! has `harness = false`, so an in-file `#[test]` fn would never run.
 
 use x509_validator_core::{Certificate, FromDer};
 
@@ -171,18 +174,4 @@ fn parse_single_root(bencher: divan::Bencher) {
         let (_, certificate) = Certificate::from_der(divan::black_box(der)).expect("parse root");
         divan::black_box(certificate.tbs_certificate.extensions().len())
     });
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn every_root_parses_and_corpus_is_complete() {
-        assert_eq!(ROOTS.len(), 137, "corpus should hold every vendored root");
-        for der in ROOTS {
-            let (_, certificate) = Certificate::from_der(der).expect("every vendored root parses");
-            assert!(!certificate.tbs_certificate.subject.as_raw().is_empty());
-        }
-    }
 }
