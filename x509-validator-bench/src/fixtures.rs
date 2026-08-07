@@ -162,7 +162,19 @@ mod tests {
     #[test]
     fn reference_time_falls_inside_every_validity_window() {
         let p = parity();
-        for cert in [&p.ca1, &p.intermediate1, &p.localhost_leaf, &p.ca2, &p.isolated_self_signed] {
+        for cert in [
+            &p.ca1,
+            &p.ca1_cross_signed_by_ca2,
+            &p.ca1_with_alternative_private_key,
+            &p.ca2,
+            &p.ca2_cross_signed_by_ca1,
+            &p.intermediate1,
+            &p.intermediate1_without_ski_aki,
+            &p.intermediate1_with_incorrect_ski_aki,
+            &p.localhost_leaf,
+            &p.isolated_self_signed,
+            &p.isolated_self_signed_weird_critical,
+        ] {
             let validity = cert.tbs_certificate.validity();
             assert!(REFERENCE_TIME >= validity.not_before.timestamp(), "not yet valid at reference time");
             assert!(REFERENCE_TIME <= validity.not_after.timestamp(), "expired at reference time");
