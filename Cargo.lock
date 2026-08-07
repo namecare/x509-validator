@@ -1140,6 +1140,7 @@ name = "x509-validator-core"
 version = "0.1.0"
 dependencies = [
  "x509-parser",
+ "x509-validator-testkit",
 ]
 
 [[package]]
