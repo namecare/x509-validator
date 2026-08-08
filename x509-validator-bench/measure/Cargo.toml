@@ -33,6 +33,20 @@ aws_lc = ["x509-validator/aws_lc"]
 ring = ["x509-validator/ring"]
 rust_crypto = ["x509-validator/rust_crypto"]
 
+# `cargo bench` would otherwise also run `src/lib.rs` as a benchmark target
+# under the default libtest harness, which rejects criterion's flags —
+# `--baseline-lenient` fails there before a single benchmark runs. The lib has
+# no `#[bench]` functions to contribute anyway.
+[lib]
+bench = false
+
+# Every bench target needs `harness = false`: with the default harness the
+# file is compiled against libtest, which does not understand criterion's
+# command line. `parse` is as much a criterion bench as the other two.
+[[bench]]
+name = "parse"
+harness = false
+
 [[bench]]
 name = "verifier"
 harness = false
