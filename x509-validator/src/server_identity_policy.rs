@@ -227,6 +227,14 @@ impl PreparedServerHostname {
             value.pop();
         }
 
+        // The index was recorded before the trailing period was stripped, so it may now point at
+        // or past the end: a hostname of "." leaves an empty buffer still claiming a period at 0.
+        // Splitting around an index that is no longer inside the buffer would panic, and a period
+        // that is no longer present is not a label separator, so drop it.
+        if first_period_index.is_some_and(|index| index >= value.len()) {
+            first_period_index = None;
+        }
+
         Some(Self {
             bytes: value,
             first_period_index,
