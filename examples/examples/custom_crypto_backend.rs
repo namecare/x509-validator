@@ -26,8 +26,8 @@ use openssl::sign::Verifier as OpenSslVerifier;
 use x509_validator::crypto::{CryptoError, CryptoProvider, Digest, KeyProvider, PublicKey};
 use x509_validator::rfc5280::RFC5280Policy;
 use x509_validator::store::CertificateStore;
-use x509_validator::verifier::ChainValidationResultOwned;
-use x509_validator::BaseVerifier;
+use x509_validator::validator::ChainValidationResultOwned;
+use x509_validator::BaseValidator;
 use x509_validator_core::crypto::rsa_pss_digest_bits;
 use x509_validator_core::oid_registry;
 use x509_validator_core::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
@@ -171,9 +171,9 @@ fn main() {
         let intermediates = CertificateStore::from_iter([chain.intermediate.clone()]);
 
         // Only the backend argument differs from the `validate_chain` example.
-        let mut verifier = BaseVerifier::with_policy_and_backend(roots, RFC5280Policy::new(validation_time()), OPENSSL_PROVIDER);
+        let mut validator = BaseValidator::with_policy_and_backend(roots, RFC5280Policy::new(validation_time()), OPENSSL_PROVIDER);
 
-        let verdict = match verifier.validate_with_diagnostics(&chain.leaf, &intermediates, &mut |_| {}) {
+        let verdict = match validator.validate_with_diagnostics(&chain.leaf, &intermediates, &mut |_| {}) {
             ChainValidationResultOwned::ValidCertificate(valid) => {
                 format!("valid — chain of {}", valid.iter().count())
             }

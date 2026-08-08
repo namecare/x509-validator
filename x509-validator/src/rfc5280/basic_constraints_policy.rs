@@ -1,4 +1,4 @@
-use crate::{VerifierPolicy, PolicyEvaluationResult, PolicyFailureReason};
+use crate::{ValidationPolicy, PolicyEvaluationResult, PolicyFailureReason};
 use x509_validator_core::der_parser::Oid;
 use x509_validator_core::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS;
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
@@ -13,7 +13,7 @@ fn basic_constraints_oid() -> Oid<'static> {
 /// [`RFC5280Policy`]: crate::rfc5280::RFC5280Policy
 pub struct BasicConstraintsPolicy;
 
-impl VerifierPolicy for BasicConstraintsPolicy {
+impl ValidationPolicy for BasicConstraintsPolicy {
     fn verifying_critical_extensions(&self) -> Vec<Oid<'static>> {
         vec![basic_constraints_oid()]
     }

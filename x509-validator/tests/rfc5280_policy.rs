@@ -1,7 +1,7 @@
 //! RFC 5280 policy composition: that each sub-policy is wired into
 //! RFC5280Policy and can independently reject a chain.
 
-use x509_validator::{PolicyEvaluationResult, PolicyFailureReason, RFC5280Policy, Timestamp, VerifierPolicy};
+use x509_validator::{PolicyEvaluationResult, PolicyFailureReason, RFC5280Policy, Timestamp, ValidationPolicy};
 
 mod tests {
     use super::*;

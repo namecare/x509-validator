@@ -11,12 +11,12 @@ pub use expiry_policy::{ExpiryPolicy, Timestamp};
 pub use basic_constraints_policy::BasicConstraintsPolicy;
 pub use name_constraints_policy::NameConstraintsPolicy;
 
-use crate::{VerifierPolicy, PolicyEvaluationResult};
+use crate::{ValidationPolicy, PolicyEvaluationResult};
 use x509_validator_core::der_parser::Oid;
 use x509_validator_core::oid_registry::OID_X509_EXT_KEY_USAGE;
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
 
-/// A [`VerifierPolicy`] that implements the core chain verification policies from RFC 5280.
+/// A [`ValidationPolicy`] that implements the core chain verification policies from RFC 5280.
 ///
 /// Almost all verifiers should use this policy as the initial component of their policy set. The policy checks the
 /// following things:
@@ -52,7 +52,7 @@ impl RFC5280Policy {
     }
 }
 
-impl VerifierPolicy for RFC5280Policy {
+impl ValidationPolicy for RFC5280Policy {
     fn verifying_critical_extensions(&self) -> Vec<Oid<'static>> {
         let mut oids = self.version_policy.verifying_critical_extensions();
         oids.extend(self.basic_constraints_policy.verifying_critical_extensions());

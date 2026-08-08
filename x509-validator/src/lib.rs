@@ -1,18 +1,14 @@
 pub mod crypto;
 pub use crypto::*;
-pub mod verifier;
+pub mod validator;
 
 pub use x509_validator_core::*;
 
-// `verifier::BaseVerifier` (this crate's concrete, DFS chain-building
-// struct) and `x509_validator_core::Verifier` (core's backend-agnostic
-// trait) share a name only via the trait; `BaseVerifier` itself is
-// unambiguous, so it's re-exported directly here. When the `aws_lc` feature
-// is enabled, `crypto::aws_lc` also exposes a `Verifier` type alias binding
-// `BaseVerifier`'s certificate type parameter to the aws-lc-backed
-// certificate, so callers of that backend don't need to name the
-// certificate type themselves.
-pub use verifier::BaseVerifier;
+// `validator::BaseValidator` (this crate's concrete, DFS chain-building
+// struct) and `x509_validator_core::Validator` (core's backend-agnostic
+// trait) share a name only via the trait; `BaseValidator` itself is
+// unambiguous, so it's re-exported directly here.
+pub use validator::BaseValidator;
 
 pub mod policy;
 pub mod certificate_display;

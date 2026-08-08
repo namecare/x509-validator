@@ -1,7 +1,7 @@
 //! Backend-agnostic core types and traits for validating X.509 certificate chains.
 
-pub mod verifier;
-pub use verifier::*;
+pub mod validator;
+pub use validator::*;
 
 pub mod certificate;
 pub mod crypto;

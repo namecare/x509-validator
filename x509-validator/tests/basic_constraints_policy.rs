@@ -1,4 +1,4 @@
-use x509_validator::{BasicConstraintsPolicy, VerifierPolicy};
+use x509_validator::{BasicConstraintsPolicy, ValidationPolicy};
 use x509_validator_core::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS;
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
 use x509_validator_core::{Certificate, FromDer};

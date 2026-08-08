@@ -1,4 +1,4 @@
-use crate::policy::{PolicyEvaluationResult, PolicyFailureReason, VerifierPolicy};
+use crate::policy::{PolicyEvaluationResult, PolicyFailureReason, ValidationPolicy};
 use std::net::{Ipv4Addr, Ipv6Addr};
 use x509_validator_core::der_parser::Oid;
 use x509_validator_core::extensions::GeneralName;
@@ -10,7 +10,7 @@ const ASCII_PERIOD: u8 = b'.';
 const ASCII_ASTERISK: u8 = b'*';
 const ASCII_IDNA_IDENTIFIER: &[u8] = b"xn--";
 
-/// A [`VerifierPolicy`] that checks whether the leaf certificate is authoritative
+/// A [`ValidationPolicy`] that checks whether the leaf certificate is authoritative
 /// for a given hostname or IP address.
 ///
 /// This policy is most commonly used to validate the leaf certificate presented by a server
@@ -44,7 +44,7 @@ fn subject_alt_name_oid() -> Oid<'static> {
     OID_X509_EXT_SUBJECT_ALT_NAME
 }
 
-impl VerifierPolicy for ServerIdentityPolicy {
+impl ValidationPolicy for ServerIdentityPolicy {
     fn verifying_critical_extensions(&self) -> Vec<Oid<'static>> {
         vec![subject_alt_name_oid()]
     }

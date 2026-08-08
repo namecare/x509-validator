@@ -4,7 +4,7 @@
 //!
 //! A failed validation returns a list of policy failure reasons, which tells
 //! you what went wrong but not where in the search it happened. The
-//! diagnostic callback is the verbose channel: the verifier reports every
+//! diagnostic callback is the verbose channel: the validator reports every
 //! step of chain building through it — issuers considered, signatures that
 //! did not check out, chains that reached a root but failed policy.
 //!
@@ -13,8 +13,8 @@
 
 use x509_validator::rfc5280::RFC5280Policy;
 use x509_validator::store::CertificateStore;
-use x509_validator::verifier::ChainValidationResultOwned;
-use x509_validator::BaseVerifier;
+use x509_validator::validator::ChainValidationResultOwned;
+use x509_validator::BaseValidator;
 use x509_validator_examples::{demo_chain, validation_time, BACKEND};
 
 fn main() {
@@ -27,10 +27,10 @@ fn main() {
     let roots = CertificateStore::from_iter([unrelated.root.clone()]);
     let intermediates = CertificateStore::from_iter([chain.intermediate.clone()]);
 
-    let mut verifier = BaseVerifier::with_policy_and_backend(roots, RFC5280Policy::new(validation_time()), BACKEND);
+    let mut validator = BaseValidator::with_policy_and_backend(roots, RFC5280Policy::new(validation_time()), BACKEND);
 
     let mut trace = Vec::new();
-    let result = verifier.validate_with_diagnostics(&chain.leaf, &intermediates, &mut |diagnostic| {
+    let result = validator.validate_with_diagnostics(&chain.leaf, &intermediates, &mut |diagnostic| {
         trace.push(diagnostic.to_string());
     });
 
@@ -57,10 +57,10 @@ fn main() {
     // `multiline_description()` carries the same information as `Display`,
     // laid out over several lines.
     let roots = CertificateStore::from_iter([unrelated.root.clone()]);
-    let mut verifier = BaseVerifier::with_policy_and_backend(roots, RFC5280Policy::new(validation_time()), BACKEND);
+    let mut validator = BaseValidator::with_policy_and_backend(roots, RFC5280Policy::new(validation_time()), BACKEND);
 
     let mut last = None;
-    verifier.validate_with_diagnostics(&chain.leaf, &intermediates, &mut |diagnostic| {
+    validator.validate_with_diagnostics(&chain.leaf, &intermediates, &mut |diagnostic| {
         last = Some(diagnostic.multiline_description());
     });
 

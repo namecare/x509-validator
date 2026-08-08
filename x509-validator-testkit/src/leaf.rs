@@ -30,7 +30,7 @@ pub fn issue_leaf_with_ip_sans(subject_cn: &str, ip_sans: Vec<std::net::IpAddr>,
 
 /// A non-CA leaf certificate issued by a CA whose only subjectAltName
 /// entries are rfc822Name (email) entries — i.e. a SAN extension that is
-/// present but contains nothing this verifier can match a service against.
+/// present but contains nothing this validator can match a service against.
 pub fn issue_leaf_with_email_sans(subject_cn: &str, email_sans: &[&str], issuer: &Ca) -> Vec<u8> {
     let mut params = base_params(subject_cn);
     params.subject_alt_names = email_sans
@@ -112,7 +112,7 @@ impl LeafSpec {
         self
     }
 
-    /// Attaches an extension the verifier does not recognise, marked
+    /// Attaches an extension the validator does not recognise, marked
     /// critical — the shape a policy must reject as unhandled.
     pub fn critical_extension(mut self, oid: &[u64], value: Vec<u8>) -> Self {
         self.critical_extension = Some((oid.to_vec(), value));

@@ -1,4 +1,4 @@
-use x509_validator::{ExpiryPolicy, PolicyFailureReason, Timestamp, VerifierPolicy};
+use x509_validator::{ExpiryPolicy, PolicyFailureReason, Timestamp, ValidationPolicy};
 use x509_validator_testkit::chain_of;
 use x509_validator_testkit::rcgen::CertificateParams;
 use x509_validator_testkit::self_signed_ca_with;

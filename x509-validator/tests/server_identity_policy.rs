@@ -1,7 +1,7 @@
 //! Server identity matching: DNS names, IP addresses, and common-name
 //! fallback.
 
-use x509_validator::{ServerIdentityPolicy, VerifierPolicy};
+use x509_validator::{ServerIdentityPolicy, ValidationPolicy};
 use x509_validator_core::oid_registry::OID_X509_EXT_SUBJECT_ALT_NAME;
 use x509_validator_testkit::rcgen::string::Ia5String;
 use x509_validator_testkit::rcgen::{DistinguishedName, DnType, SanType};

@@ -1,18 +1,18 @@
-use crate::policy::{PolicyEvaluationResult, PolicyFailureReason, VerifierPolicy};
+use crate::policy::{PolicyEvaluationResult, PolicyFailureReason, ValidationPolicy};
 use x509_validator_core::der_parser::Oid;
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
 
 pub struct OneOfPolicies {
-    policies: Vec<Box<dyn VerifierPolicy>>,
+    policies: Vec<Box<dyn ValidationPolicy>>,
 }
 
 impl OneOfPolicies {
-    pub fn new(policies: Vec<Box<dyn VerifierPolicy>>) -> Self {
+    pub fn new(policies: Vec<Box<dyn ValidationPolicy>>) -> Self {
         Self { policies }
     }
 }
 
-impl VerifierPolicy for OneOfPolicies {
+impl ValidationPolicy for OneOfPolicies {
     fn verifying_critical_extensions(&self) -> Vec<Oid<'static>> {
         let mut policies = self.policies.iter();
         let Some(first) = policies.next() else {

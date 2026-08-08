@@ -1,7 +1,7 @@
 //! Policy evaluation cost, measured against a prebuilt chain.
 //!
 //! No crypto is involved: these call `chain_meets_policy_requirements`
-//! directly rather than going through the verifier. Policy work is a rounding
+//! directly rather than going through the validator. Policy work is a rounding
 //! error next to signature verification, which is exactly why it belongs
 //! here — a policy regression would be invisible in an end-to-end number.
 //!
@@ -11,7 +11,7 @@
 //! through those.
 
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
-use x509_validator::policy::VerifierPolicy;
+use x509_validator::policy::ValidationPolicy;
 use x509_validator::rfc5280::{BasicConstraintsPolicy, ExpiryPolicy, NameConstraintsPolicy, RFC5280Policy, VersionPolicy};
 use x509_validator::{AllOfPolicies, AnyPolicy, OneOfPolicies, ServerIdentityPolicy};
 use x509_validator_bench_measure::fixtures;
@@ -32,7 +32,7 @@ fn chain() -> UnverifiedCertificateChain<'static> {
 /// because `chain_meets_policy_requirements` takes `&mut self` and some
 /// policies carry state across calls; construction happens in the setup
 /// phase so it is not timed.
-fn bench_policy<P: VerifierPolicy>(c: &mut Criterion, id: &str, make: impl Fn() -> P) {
+fn bench_policy<P: ValidationPolicy>(c: &mut Criterion, id: &str, make: impl Fn() -> P) {
     let chain = chain();
     c.bench_function(id, |b| {
         b.iter_batched_ref(
@@ -53,7 +53,7 @@ fn policies(c: &mut Criterion) {
     bench_policy(c, "policy/any", || AnyPolicy::new(RFC5280Policy::new(fixtures::REFERENCE_TIME)));
     bench_policy(c, "policy/one_of", || {
         OneOfPolicies::new(vec![
-            Box::new(VersionPolicy) as Box<dyn VerifierPolicy>,
+            Box::new(VersionPolicy) as Box<dyn ValidationPolicy>,
             Box::new(BasicConstraintsPolicy),
         ])
     });

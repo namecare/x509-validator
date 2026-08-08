@@ -1,4 +1,4 @@
-use crate::policy::{PolicyEvaluationResult, VerifierPolicy};
+use crate::policy::{PolicyEvaluationResult, ValidationPolicy};
 use x509_validator_core::der_parser::Oid;
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
 
@@ -20,7 +20,7 @@ impl<P> AllOfPolicies<P> {
     }
 }
 
-impl<P: VerifierPolicy> VerifierPolicy for AllOfPolicies<P> {
+impl<P: ValidationPolicy> ValidationPolicy for AllOfPolicies<P> {
     fn verifying_critical_extensions(&self) -> Vec<Oid<'static>> {
         self.policy.verifying_critical_extensions()
     }

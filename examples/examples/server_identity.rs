@@ -9,15 +9,15 @@
 //!
 //! Both must hold, which is the other thing this example shows: a policy
 //! that runs two sub-policies in sequence. Combining policies is just
-//! implementing `VerifierPolicy` over the ones you want — the trait is two
+//! implementing `ValidationPolicy` over the ones you want — the trait is two
 //! methods, and the union of their handled critical extensions is what makes
 //! the pair accept certificates neither would accept alone.
 
-use x509_validator::policy::{PolicyEvaluationResult, VerifierPolicy};
+use x509_validator::policy::{PolicyEvaluationResult, ValidationPolicy};
 use x509_validator::rfc5280::RFC5280Policy;
 use x509_validator::store::CertificateStore;
-use x509_validator::verifier::ChainValidationResultOwned;
-use x509_validator::{BaseVerifier, ServerIdentityPolicy};
+use x509_validator::validator::ChainValidationResultOwned;
+use x509_validator::{BaseValidator, ServerIdentityPolicy};
 use x509_validator_core::der_parser::Oid;
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
 use x509_validator_examples::{demo_chain, validation_time, BACKEND};
@@ -38,7 +38,7 @@ impl WebPkiPolicy {
     }
 }
 
-impl VerifierPolicy for WebPkiPolicy {
+impl ValidationPolicy for WebPkiPolicy {
     /// The union: a critical extension is handled if either sub-policy
     /// handles it.
     fn verifying_critical_extensions(&self) -> Vec<Oid<'static>> {
@@ -64,9 +64,9 @@ fn main() {
         let intermediates = CertificateStore::from_iter([chain.intermediate.clone()]);
 
         let policy = WebPkiPolicy::new(validation_time(), hostname);
-        let mut verifier = BaseVerifier::with_policy_and_backend(roots, policy, BACKEND);
+        let mut validator = BaseValidator::with_policy_and_backend(roots, policy, BACKEND);
 
-        let verdict = match verifier.validate_with_diagnostics(&chain.leaf, &intermediates, &mut |_| {}) {
+        let verdict = match validator.validate_with_diagnostics(&chain.leaf, &intermediates, &mut |_| {}) {
             ChainValidationResultOwned::ValidCertificate(_) => "accepted".to_string(),
             ChainValidationResultOwned::CouldNotValidate(reasons) => {
                 let first = reasons.first().map(ToString::to_string).unwrap_or_else(|| "no reason given".into());
