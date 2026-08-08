@@ -307,7 +307,7 @@ impl fmt::Debug for VerificationDiagnostic<'_> {
 
 impl VerificationDiagnostic<'_> {
     /// Produces a human readable description of this [`VerificationDiagnostic`] over multiple lines for better readability
-    /// but includes otherwise the same information as the [`Display`] form.
+    /// but includes otherwise the same information as the [`Display`](fmt::Display) form.
     pub fn multiline_description(&self) -> String {
         match &self.storage {
             Storage::LeafCertificateHasUnhandledCriticalExtension(d) => format!(

@@ -17,7 +17,7 @@ const ASCII_IDNA_IDENTIFIER: &[u8] = b"xn--";
 /// during a TLS handshake.
 ///
 /// This policy implements the logic for service validation as specified by
-/// RFC 6125 (https://tools.ietf.org/search/rfc6125), which loosely speaking
+/// RFC 6125 (<https://tools.ietf.org/search/rfc6125>), which loosely speaking
 /// defines the common algorithm used for validating that an X.509 certificate
 /// is valid for a given service
 pub struct ServerIdentityPolicy {
@@ -58,7 +58,7 @@ impl VerifierPolicy for ServerIdentityPolicy {
 /// Validates that a given leaf certificate is valid for a service.
 ///
 /// This function implements the logic for service validation as specified by
-/// RFC 6125 (https://tools.ietf.org/search/rfc6125), which loosely speaking
+/// RFC 6125 (<https://tools.ietf.org/search/rfc6125>), which loosely speaking
 /// defines the common algorithm used for validating that an X.509 certificate
 /// is valid for a given service
 ///
