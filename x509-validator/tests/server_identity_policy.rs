@@ -68,6 +68,21 @@ fn wildcard_must_match_at_least_one_character() {
 }
 
 #[test]
+fn hostname_of_only_periods_does_not_match_a_wildcard() {
+    // Stripping the trailing period can empty the hostname while it still records the offset of a
+    // period, and matching a wildcard is what splits the hostname around that offset. Each of
+    // these must come back as an ordinary mismatch.
+    for hostname in [".", "..", "..."] {
+        let chain = chain_of(vec![cert_with_sans(&["*.example.com"])]);
+        let mut policy = ServerIdentityPolicy::new(Some(hostname), None);
+        assert!(
+            policy.chain_meets_policy_requirements(&chain).is_err(),
+            "hostname {hostname:?} must not match"
+        );
+    }
+}
+
+#[test]
 fn partial_wildcard_matches_prefix_and_suffix() {
     let chain = chain_of(vec![cert_with_sans(&["f*o.example.com"])]);
     let mut policy = ServerIdentityPolicy::new(Some("foo.example.com"), None);

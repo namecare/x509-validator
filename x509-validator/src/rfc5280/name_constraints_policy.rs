@@ -92,10 +92,34 @@ impl NameConstraintsPolicy {
             .map_err(|error| PolicyFailureReason::new(format!("unable to decode subject alternative name from {:?}: {}", cert, error)))?;
 
         if let Some(san) = san {
-            names.extend(san.value.general_names.iter().cloned());
+            for name in &san.value.general_names {
+                if matches!(name, GeneralName::Invalid(_, _)) {
+                    // The parser surfaces a name it could not decode as `Invalid` rather than
+                    // failing the extension parse. Such a name can never be compared against a
+                    // constraint, so treating it as just another entry would silently exempt it
+                    // from every subtree check. Refuse the chain instead.
+                    return Err(PolicyFailureReason::new(format!(
+                        "unable to decode a subject alternative name from {:?}",
+                        cert
+                    )));
+                }
+                names.push(name.clone());
+            }
         }
 
         Ok(names)
+    }
+
+    /// Whether a subtree's base names a form this policy cannot compare against.
+    ///
+    /// RFC 5280 requires rejecting a chain constrained by something we cannot evaluate, so this
+    /// is decided by the constraint alone: whether the certificate happens to carry a name of the
+    /// same form has no bearing on it.
+    fn constraint_kind_is_unsupported(constraint: &GeneralName) -> bool {
+        !matches!(
+            constraint,
+            GeneralName::DNSName(_) | GeneralName::IPAddress(_) | GeneralName::URI(_) | GeneralName::DirectoryName(_)
+        )
     }
 
     fn validate_excluded_subtrees(excluded_subtrees: &[GeneralSubtree], name: &GeneralName) -> PolicyEvaluationResult {
@@ -109,6 +133,15 @@ impl NameConstraintsPolicy {
                 return Err(PolicyFailureReason::new("directoryName name constraints are not supported"));
             }
 
+            if Self::constraint_kind_is_unsupported(constraint) {
+                // We don't support constraints on these!
+                //
+                // Of the set that's currently unsupported, we should probably support rfc822Name (a.k.a. email address).
+                // For now we're omitting it, but at some point someone is going to run into this limitation and we'll want to come
+                // back and fix it.
+                return Err(PolicyFailureReason::new("unable to validate excluded subtree, unsupported constraint kind"));
+            }
+
             let matched = match (name, constraint) {
                 (GeneralName::DNSName(name_value), GeneralName::DNSName(constraint_value)) => {
                     Self::dns_name_matches_constraint(name_value.as_bytes(), constraint_value.as_bytes())
@@ -120,15 +153,7 @@ impl NameConstraintsPolicy {
                     Self::uri_name_matches_constraint(name_value.as_bytes(), constraint_value.as_bytes())
                 }
                 (GeneralName::DirectoryName(_), GeneralName::DirectoryName(_)) => unreachable!("handled above"),
-                (n, c) if std::mem::discriminant(n) == std::mem::discriminant(c) => {
-                    // We don't support constraints on these!
-                    //
-                    // Of the set that's currently unsupported, we should probably support rfc822Name (a.k.a. email address).
-                    // For now we're omitting it, but at some point someone is going to run into this limitation and we'll want to come
-                    // back and fix it.
-                    return Err(PolicyFailureReason::new("unable to validate excluded subtree, unsupported constraint kind"));
-                }
-                // We support these, but the current name isn't of that type.
+                // We support this constraint's kind, but the current name isn't of that type.
                 _ => continue,
             };
 
@@ -153,6 +178,15 @@ impl NameConstraintsPolicy {
                 return Err(PolicyFailureReason::new("directoryName name constraints are not supported"));
             }
 
+            if Self::constraint_kind_is_unsupported(constraint) {
+                // We don't support constraints on these!
+                //
+                // Of the set that's currently unsupported, we should probably support rfc822Name (a.k.a. email address).
+                // For now we're omitting it, but at some point someone is going to run into this limitation and we'll want to come
+                // back and fix it.
+                return Err(PolicyFailureReason::new("unable to validate permitted subtree, unsupported constraint kind"));
+            }
+
             // A match on any of these means we're good.
             let matched = match (name, constraint) {
                 (GeneralName::DNSName(name_value), GeneralName::DNSName(constraint_value)) => {
@@ -168,16 +202,8 @@ impl NameConstraintsPolicy {
                     Self::uri_name_matches_constraint(name_value.as_bytes(), constraint_value.as_bytes())
                 }
                 (GeneralName::DirectoryName(_), GeneralName::DirectoryName(_)) => unreachable!("handled above"),
-                (n, c) if std::mem::discriminant(n) == std::mem::discriminant(c) => {
-                    // We don't support constraints on these!
-                    //
-                    // Of the set that's currently unsupported, we should probably support rfc822Name (a.k.a. email address).
-                    // For now we're omitting it, but at some point someone is going to run into this limitation and we'll want to come
-                    // back and fix it.
-                    return Err(PolicyFailureReason::new("unable to validate permitted subtree, unsupported constraint kind"));
-                }
-                // We support these, but the current name isn't of that type. This means we didn't evaluate
-                // this constraint.
+                // We support this constraint's kind, but the current name isn't of that type. This means we
+                // didn't evaluate this constraint.
                 _ => continue,
             };
 
