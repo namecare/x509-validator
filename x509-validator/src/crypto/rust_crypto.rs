@@ -144,12 +144,35 @@ impl PublicKey for RustCryptoPublicKey {
     }
 }
 
+/// The RSA modulus sizes, in bytes, this backend will verify against.
+///
+/// The other backends inherit these bounds from the named algorithms they dispatch to
+/// (`RSA_PKCS1_2048_8192_*`), while the RSA crate imposes no limit of its own. Applying the same
+/// bounds here keeps a chain's fate from depending on which backend happens to be compiled in: a
+/// factorable modulus must not verify merely because this backend was selected, and an absurdly
+/// large one must not turn verification into a denial of service.
+const MIN_RSA_MODULUS_BYTES: usize = 2048 / 8;
+const MAX_RSA_MODULUS_BYTES: usize = 8192 / 8;
+
 impl RustCryptoPublicKey {
     fn rsa_public_key(&self) -> Result<rsa::RsaPublicKey, CryptoError> {
         use rsa::pkcs8::DecodePublicKey;
+        use rsa::traits::PublicKeyParts;
 
-        rsa::RsaPublicKey::from_public_key_der(&self.spki_der)
-            .map_err(|e| CryptoError::InvalidKey(e.to_string()))
+        let key = rsa::RsaPublicKey::from_public_key_der(&self.spki_der)
+            .map_err(|e| CryptoError::InvalidKey(e.to_string()))?;
+
+        let modulus_bytes = key.size();
+        if !(MIN_RSA_MODULUS_BYTES..=MAX_RSA_MODULUS_BYTES).contains(&modulus_bytes) {
+            return Err(CryptoError::InvalidKey(format!(
+                "RSA modulus of {} bits is outside the supported range of {}-{} bits",
+                modulus_bytes * 8,
+                MIN_RSA_MODULUS_BYTES * 8,
+                MAX_RSA_MODULUS_BYTES * 8
+            )));
+        }
+
+        Ok(key)
     }
 
     /// `AssociatedOid` is what supplies the DigestInfo prefix PKCS#1 v1.5
@@ -432,6 +455,47 @@ mod tests {
     #[test]
     fn rsa_pkcs1_sha512_round_trip_verifies() {
         assert_rsa_round_trip(&rcgen::PKCS_RSA_SHA512);
+    }
+
+    /// A `RustCryptoPublicKey` wrapping a freshly generated RSA key of the given size.
+    ///
+    /// rcgen will not sign with an undersized key — its own signer rejects one outright — so an
+    /// undersized case cannot be reached through a self-signed certificate. Verification loads the
+    /// key from the SPKI on every call, so driving that path directly exercises the same bound.
+    fn rsa_key_of_size(bits: usize) -> RustCryptoPublicKey {
+        use rsa::pkcs8::EncodePublicKey;
+
+        let mut rng = rand::thread_rng();
+        let private_key = rsa::RsaPrivateKey::new(&mut rng, bits).expect("generate RSA key");
+        let spki_der = private_key
+            .to_public_key()
+            .to_public_key_der()
+            .expect("encode SPKI")
+            .as_bytes()
+            .to_vec();
+
+        RustCryptoPublicKey {
+            algorithm: Algorithm::RsaPkcs1Sha256,
+            spki_der,
+            key_bytes: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn rsa_keys_outside_the_supported_size_range_are_refused() {
+        // An undersized modulus is refused before any signature is considered, so this backend
+        // cannot trust a chain that ring and aws-lc reject on key size alone.
+        for bits in [512, 1024] {
+            let result = rsa_key_of_size(bits).rsa_public_key();
+            assert!(
+                matches!(result, Err(CryptoError::InvalidKey(_))),
+                "expected {bits}-bit key to be refused, got {result:?}"
+            );
+        }
+
+        // Guard against a vacuous test: the smallest supported size must still load, so the
+        // rejections above are the bound talking and not a broken SPKI encoding.
+        assert!(rsa_key_of_size(2048).rsa_public_key().is_ok());
     }
 
     /// RSA-PSS has no round-trip test because rcgen exposes no public
