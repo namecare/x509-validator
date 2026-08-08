@@ -19,13 +19,12 @@ A benchmark directory is any directory containing `new/estimates.json`. They
 are found by walking rather than listing, because criterion nests a level
 deeper for grouped or parameterized benchmarks.
 
-Stale directories are excluded by modification time, via `--since`.
-`target/criterion/` is never cleared on a persistent runner, so a benchmark
-that was renamed, removed, or simply not selected by this run still has its
-directory sitting there holding old numbers. Reporting those as current
-results is the failure this guards against, and it appears only on a
-persistent runner — a hosted one starts empty every time, which is exactly why
-it would otherwise go unnoticed.
+Stale directories are excluded by modification time, via `--since`. When
+`target/criterion/` carries state from before the run — a restored baseline
+cache, or a workspace that happened to persist — a benchmark that was
+renamed, removed, or simply not selected by this run still has a directory
+sitting there holding old numbers. Reporting those as current results is the
+failure this guards against.
 
 The output is a table on stdout and a compact JSON summary on stderr for the
 workflow to act on.
@@ -122,6 +121,12 @@ def main() -> int:
         help="ignore benchmarks not rewritten since this unix timestamp, "
         "dropping results left behind by earlier runs",
     )
+    parser.add_argument(
+        "--base",
+        default="master",
+        metavar="BRANCH",
+        help="branch the baseline was recorded on, named in the report",
+    )
     args = parser.parse_args()
 
     root: Path = args.root
@@ -162,7 +167,14 @@ def main() -> int:
     # A stable, invisible marker so CI can find its own previous comment and
     # edit it in place instead of stacking a new one on every push.
     out: list[str] = ["<!-- criterion-benchmark-report -->"]
-    if regressed:
+    if added and len(added) == len(benches):
+        # Every benchmark lacking a delta means there was no baseline at all
+        # — a state that must not masquerade as "no significant change".
+        out.append(
+            f"⚠️ **No `{args.base}` baseline found** — nothing was compared. "
+            f"The next benchmarked push to `{args.base}` records one."
+        )
+    elif regressed:
         noun = "benchmark" if len(regressed) == 1 else "benchmarks"
         out.append(f"🔴 **{len(regressed)} {noun} regressed** past {THRESHOLD:.0%}.")
     elif improved:
@@ -193,10 +205,15 @@ def main() -> int:
     details = [f"{len(benches)} benchmarks"]
     if added:
         details.append(f"{len(added)} new")
+    compared = (
+        f"Compared against the latest <code>{args.base}</code> baseline."
+        if len(added) < len(benches)
+        else "No baseline was available to compare against."
+    )
     out.append(
         f"<sub>{', '.join(details)}. Flagged at ≥{THRESHOLD:.0%} change with a "
         "confidence interval excluding zero; anything else is reported as noise. "
-        "Compared against the latest <code>master</code> baseline on this runner.</sub>"
+        f"{compared}</sub>"
     )
 
     print("\n".join(out))
