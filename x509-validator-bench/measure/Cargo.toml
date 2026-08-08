@@ -1,0 +1,42 @@
+[package]
+name = "x509-validator-bench-measure"
+version = "0.0.0"
+edition = "2021"
+description = "Regression benchmarks for x509-validator, mirroring the reference verifier benchmark. Not published."
+publish = false
+
+[dependencies]
+x509-validator = { path = "../../x509-validator" }
+x509-validator-core = { path = "../../x509-validator-core" }
+x509-validator-testkit = { path = "../../x509-validator-testkit" }
+time = "0.3"
+
+[dev-dependencies]
+# Criterion rather than divan: this suite is meant to be tracked over time by
+# a CI service, and the ones that ingest Rust benchmarks read criterion's
+# output. `html_reports` writes plots and an index page to
+# `target/criterion/report/` — see the README for how to open them.
+# `html_reports` needs `plotters` to render with; enabling it alone silently
+# produces no report.
+criterion = { version = "0.8", default-features = false, features = [
+    "cargo_bench_support",
+    "html_reports",
+    "plotters",
+] }
+
+[features]
+# One backend, chosen at compile time. A regression gate wants a single
+# stable number per code path; a backend axis would triple the metric count
+# and none of the extra rows would say anything about our own code.
+default = ["aws_lc"]
+aws_lc = ["x509-validator/aws_lc"]
+ring = ["x509-validator/ring"]
+rust_crypto = ["x509-validator/rust_crypto"]
+
+[[bench]]
+name = "verifier"
+harness = false
+
+[[bench]]
+name = "policies"
+harness = false
