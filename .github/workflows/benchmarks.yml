@@ -1,0 +1,131 @@
+name: Benchmarks
+
+# Regression tracking for `x509-validator-bench-measure`.
+#
+# Criterion detects regressions on its own, but only against baselines stored
+# in `target/criterion/`. Hosted runners start empty, so there is nothing to
+# compare against and every run reports "no change". The self-hosted runner is
+# what makes this work: its workspace persists, so a baseline saved on master
+# is still there when a pull request runs.
+#
+# Pull requests report and never block. Wall-clock benchmarks on any shared
+# machine carry enough noise that a gate would cost more in false reds than it
+# catches; rustls, which runs on tuned bare metal, still only comments.
+
+on:
+  push:
+    branches: [master]
+    paths: &bench_paths
+      - "x509-validator/**"
+      - "x509-validator-core/**"
+      - "x509-validator-testkit/**"
+      - "x509-validator-bench/measure/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/benchmarks.yml"
+      - ".github/scripts/criterion-report.py"
+  pull_request:
+    paths: *bench_paths
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: benchmarks-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  BENCH_CRATE: x509-validator-bench-measure
+  # Criterion stores baselines by name. `master` is written by pushes to
+  # master and read by every pull request.
+  BASELINE: master
+
+jobs:
+  benchmark:
+    name: Criterion
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+
+      # Guards the parity claim. A scenario that returns the wrong result
+      # still benchmarks something, just not what its name says — which would
+      # make the whole table meaningless while looking perfectly healthy.
+      - name: Verify benchmark scenarios
+        run: cargo test -p ${{ env.BENCH_CRATE }} --release
+
+      # On master: overwrite the baseline every PR is measured against.
+      # On a PR: compare against it, leaving it untouched.
+      #
+      # `--baseline-lenient` keeps a newly added benchmark, which has no entry
+      # in the stored baseline, from failing the run; it is reported as new.
+      - name: Run benchmarks
+        id: bench
+        run: |
+          # Recorded before the run so the report can discard results left in
+          # `target/criterion/` by earlier jobs. The runner is persistent and
+          # never clears that directory, so a removed or renamed benchmark
+          # would otherwise keep reporting its last known numbers forever.
+          echo "started=$(date +%s)" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = "push" ]; then
+            cargo bench -p "$BENCH_CRATE" -- --save-baseline "$BASELINE"
+          else
+            cargo bench -p "$BENCH_CRATE" -- --baseline-lenient "$BASELINE"
+          fi
+
+      - name: Build report
+        id: report
+        run: |
+          python3 .github/scripts/criterion-report.py \
+            --since "${{ steps.bench.outputs.started }}" \
+            > report.md 2> summary.json
+          {
+            echo "## Benchmark report"
+            echo
+            cat report.md
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "summary=$(cat summary.json)" >> "$GITHUB_OUTPUT"
+
+      # The full criterion HTML report — density plots, iteration scatter, and
+      # before/after comparisons. The summary table says a number moved; these
+      # plots are how you tell a real shift from a couple of outliers.
+      - name: Upload HTML report
+        uses: actions/upload-artifact@v4
+        with:
+          name: criterion-report-${{ github.run_id }}
+          path: target/criterion/report/
+          retention-days: 14
+
+      # Find this workflow's own earlier comment, if any, so the result is
+      # edited in place. Without this the bot stacks a fresh table on every
+      # push and the discussion becomes unreadable on a long-running PR.
+      - name: Find previous comment
+        if: github.event_name == 'pull_request'
+        id: previous
+        uses: peter-evans/find-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: github-actions[bot]
+          body-includes: <!-- criterion-benchmark-report -->
+
+      - name: Comment on pull request
+        if: github.event_name == 'pull_request'
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-id: ${{ steps.previous.outputs.comment-id }}
+          body-path: report.md
+          edit-mode: replace

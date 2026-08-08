@@ -103,20 +103,67 @@ because `harness = false` means an in-file test would never run.
 
 ## CI
 
-Not yet wired up. Criterion was chosen partly because the services that track
-Rust benchmarks over time read its output, but no gate is configured.
+`.github/workflows/benchmarks.yml` runs this suite on the self-hosted
+`ubuntu-runner` and posts a delta table on every pull request. It never fails
+the build.
 
-Worth knowing before adding one: no comparable Rust crypto or PKI project
-gates pull requests on wall-clock benchmarks. rustls — which invests more in
+That last point is deliberate. No comparable Rust crypto or PKI project gates
+pull requests on wall-clock benchmarks. rustls — which invests more in
 benchmarking than anyone in this space — runs on dedicated bare metal with
 Turbo Boost and hyper-threading disabled, and still only *comments* results on
 PRs rather than blocking them. ring, rustls-webpki, RustCrypto and quinn do no
-regression detection at all, only a job that proves the benches still compile.
-Given that crypto dominates these numbers, a wall-clock gate on a shared CI
-runner would alert on noise.
+regression detection at all. Since crypto dominates these numbers, a
+wall-clock gate would alert on noise more often than on regressions.
 
-The pragmatic first step is a smoke job (`cargo bench -- --test`) so the
-benches cannot rot, with trend tracking added later if it earns its keep.
+### How the comparison works
+
+Criterion detects regressions on its own, but only against baselines it finds
+in `target/criterion/`. A hosted runner starts empty, so there is nothing to
+compare against and every run reports "no change" — which is why services like
+Bencher exist. The self-hosted runner removes that problem: its workspace
+persists, so a baseline stays put between jobs.
+
+    push to master   cargo bench -- --save-baseline master
+    pull request     cargo bench -- --baseline-lenient master
+
+So every PR is compared against master's numbers **on the same physical
+machine**. `--baseline-lenient` rather than `--baseline` so that a newly added
+benchmark, which has no entry in the stored baseline, is reported as new
+instead of failing the run.
+
+Jobs are serialized through a `concurrency` group. Two benchmark jobs sharing
+one `target/criterion/` would overwrite each other's baselines, which corrupts
+the comparison rather than merely slowing it down.
+
+### The report
+
+`.github/scripts/criterion-report.py` reads criterion's JSON
+(`new/estimates.json`, `change/estimates.json`) rather than parsing `cargo
+bench` stdout, which is formatted for humans and reworded between versions.
+
+A benchmark is flagged only when the change clears **both** tests: at least
+10% (`REGRESSION_THRESHOLD`), and a confidence interval excluding zero. Either
+test alone misreports. Percentage alone flags jitter in the nanosecond-scale
+policy benchmarks — `policy/version` is ~3 ns, where half a nanosecond of
+drift is 15%. Significance alone flags a rock-steady 0.5% shift nobody can act
+on.
+
+The script takes `--since <epoch>` and ignores any benchmark directory not
+rewritten by the current run. `target/criterion/` is never cleared on a
+persistent runner, so a renamed, removed, or unselected benchmark otherwise
+keeps reporting its last known numbers indefinitely — a failure that shows up
+only on a persistent runner, which is what makes it easy to miss.
+
+Run it locally against your own last two runs:
+
+    cargo bench -p x509-validator-bench-measure -- --save-baseline before
+    # ...change something...
+    cargo bench -p x509-validator-bench-measure -- --baseline before
+    python3 .github/scripts/criterion-report.py
+
+The full HTML report is uploaded as a build artifact for 14 days. The table
+says a number moved; the density and iteration plots are how you tell a real
+shift from a couple of outliers.
 
 ## Fixtures
 
