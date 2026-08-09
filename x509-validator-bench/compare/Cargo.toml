@@ -12,7 +12,7 @@ x509-validator-testkit = { path = "../../x509-validator-testkit" }
 # rcgen cannot generate RSA keys, so the RSA entries in the signature corpus
 # need an RNG of their own.
 rsa = "0.9.10"
-rand = "0.8"
+rand = "0.10"
 time = "0.3"
 
 [dev-dependencies]
