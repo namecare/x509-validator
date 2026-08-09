@@ -10,7 +10,7 @@ fn leaf_and_ca_chain_is_accepted() {
     let root = self_signed_ca_with("root", |_| {});
     let leaf = issue_leaf("leaf", &["www.example.com"], &root);
     let chain = chain_of(vec![leaf, root.der]);
-    let mut policy = BasicConstraintsPolicy;
+    let policy = BasicConstraintsPolicy;
     assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
 }
 
@@ -18,7 +18,7 @@ fn leaf_and_ca_chain_is_accepted() {
 fn self_signed_leaf_used_as_trust_anchor_must_be_a_ca() {
     let root = self_signed_ca_with("root", |_| {});
     let chain = chain_of(vec![root.der]);
-    let mut policy = BasicConstraintsPolicy;
+    let policy = BasicConstraintsPolicy;
     assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
 }
 
@@ -30,7 +30,7 @@ fn self_signed_leaf_without_ca_bit_is_rejected() {
         params.is_ca = x509_validator_testkit::rcgen::IsCa::NoCa;
     });
     let chain = chain_of(vec![this.der]);
-    let mut policy = BasicConstraintsPolicy;
+    let policy = BasicConstraintsPolicy;
     assert!(policy.chain_meets_policy_requirements(&chain).is_err());
 }
 
@@ -55,7 +55,7 @@ fn non_ca_intermediate_is_rejected() {
             Certificate::parse(root_der).unwrap()
         },
     ]);
-    let mut policy = BasicConstraintsPolicy;
+    let policy = BasicConstraintsPolicy;
     assert!(policy.chain_meets_policy_requirements(&chain).is_err());
 }
 
@@ -65,7 +65,7 @@ fn path_length_constraint_satisfied_is_accepted() {
     let intermediate = issue_ca("intermediate", &root, Some(1), |_| {});
     let leaf = issue_leaf("leaf", &["www.example.com"], &intermediate);
     let chain = chain_of(vec![leaf, intermediate.der, root.der]);
-    let mut policy = BasicConstraintsPolicy;
+    let policy = BasicConstraintsPolicy;
     assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
 }
 
@@ -76,7 +76,7 @@ fn path_length_constraint_violated_is_rejected() {
     let intermediate2 = issue_ca("intermediate2", &intermediate1, None, |_| {});
     let leaf = issue_leaf("leaf", &["www.example.com"], &intermediate2);
     let chain = chain_of(vec![leaf, intermediate2.der, intermediate1.der, root.der]);
-    let mut policy = BasicConstraintsPolicy;
+    let policy = BasicConstraintsPolicy;
     assert!(policy.chain_meets_policy_requirements(&chain).is_err());
 }
 
@@ -90,7 +90,7 @@ fn self_issued_intermediate_does_not_count_against_path_length() {
     let self_issued = issue_ca("intermediate", &intermediate, Some(0), |_| {});
     let leaf = issue_leaf("leaf", &["www.example.com"], &self_issued);
     let chain = chain_of(vec![leaf, self_issued.der, intermediate.der, root.der]);
-    let mut policy = BasicConstraintsPolicy;
+    let policy = BasicConstraintsPolicy;
     assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
 }
 

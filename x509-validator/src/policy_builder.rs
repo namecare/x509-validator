@@ -25,7 +25,7 @@ impl<A: ValidationPolicy, B: ValidationPolicy> ValidationPolicy for Tuple2<A, B>
         exts
     }
 
-    fn chain_meets_policy_requirements(&mut self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
+    fn chain_meets_policy_requirements(&self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
         self.first.chain_meets_policy_requirements(chain)?;
         self.second.chain_meets_policy_requirements(chain)
     }
@@ -48,7 +48,7 @@ impl<A: ValidationPolicy, B: ValidationPolicy> ValidationPolicy for Either<A, B>
         }
     }
 
-    fn chain_meets_policy_requirements(&mut self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
+    fn chain_meets_policy_requirements(&self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
         match self {
             Self::First(a) => a.chain_meets_policy_requirements(chain),
             Self::Second(b) => b.chain_meets_policy_requirements(chain),
@@ -75,8 +75,8 @@ impl<P: ValidationPolicy> ValidationPolicy for WrappedOptional<P> {
         self.wrapped.as_ref().map(|p| p.verifying_critical_extensions()).unwrap_or_default()
     }
 
-    fn chain_meets_policy_requirements(&mut self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
-        match &mut self.wrapped {
+    fn chain_meets_policy_requirements(&self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
+        match &self.wrapped {
             Some(p) => p.chain_meets_policy_requirements(chain),
             None => Ok(()),
         }
@@ -170,7 +170,7 @@ impl<A: ValidationPolicy, B: ValidationPolicy> ValidationPolicy for OneOfTuple2<
         first.into_iter().filter(|oid| second.contains(oid)).collect()
     }
 
-    fn chain_meets_policy_requirements(&mut self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
+    fn chain_meets_policy_requirements(&self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
         match self.first.chain_meets_policy_requirements(chain) {
             Ok(()) => Ok(()),
             Err(first_reason) => match self.second.chain_meets_policy_requirements(chain) {
@@ -199,8 +199,8 @@ impl<P: ValidationPolicy> ValidationPolicy for OneOfWrappedOptional<P> {
         self.wrapped.as_ref().map(|p| p.verifying_critical_extensions()).unwrap_or_default()
     }
 
-    fn chain_meets_policy_requirements(&mut self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
-        match &mut self.wrapped {
+    fn chain_meets_policy_requirements(&self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
+        match &self.wrapped {
             Some(p) => p.chain_meets_policy_requirements(chain),
             None => Err(PolicyFailureReason::new("alternative is disabled")),
         }

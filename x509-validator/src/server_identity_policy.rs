@@ -49,7 +49,7 @@ impl ValidationPolicy for ServerIdentityPolicy {
         vec![subject_alt_name_oid()]
     }
 
-    fn chain_meets_policy_requirements(&mut self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
+    fn chain_meets_policy_requirements(&self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
         // We only validate the leaf node in this policy.
         has_valid_identity_for_service(chain.leaf(), self.server_hostname.as_ref(), self.server_ip.as_ref())
     }

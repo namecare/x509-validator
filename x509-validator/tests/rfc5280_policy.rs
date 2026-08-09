@@ -23,7 +23,7 @@ mod tests {
         let leaf = issue_leaf("leaf", &["www.example.com"], &root);
         let chain = chain_of(vec![leaf, root.der]);
 
-        let mut policy = RFC5280Policy::new(1500);
+        let policy = RFC5280Policy::new(1500);
         assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
     }
 
@@ -39,7 +39,7 @@ mod tests {
         let leaf = issue_leaf("leaf", &["www.example.com"], &root);
         let chain = chain_of(vec![leaf, root.der]);
 
-        let mut policy = RFC5280Policy::new(1500);
+        let policy = RFC5280Policy::new(1500);
         assert_eq!(
             policy.chain_meets_policy_requirements(&chain).unwrap_err(),
             PolicyFailureReason::new("name is in an excluded subtree")
@@ -55,7 +55,7 @@ mod tests {
         let leaf = issue_leaf("leaf", &[], &root);
         let chain = chain_of(vec![leaf, root.der]);
 
-        let mut policy = RFC5280Policy::new(1500);
+        let policy = RFC5280Policy::new(1500);
         assert!(policy.chain_meets_policy_requirements(&chain).is_err());
     }
 
@@ -65,7 +65,7 @@ mod tests {
         let leaf = issue_leaf("leaf", &[], &root);
         let chain = chain_of(vec![leaf, root.der]);
 
-        let mut policy = RFC5280Policy::new(9999);
+        let policy = RFC5280Policy::new(9999);
         assert_eq!(
             policy.chain_meets_policy_requirements(&chain).unwrap_err(),
             PolicyFailureReason::new("certificate has expired")
@@ -79,13 +79,13 @@ mod tests {
         let chain = chain_of(vec![leaf, root.der]);
 
         // The same chain at the same "now" is rejected with expiry enabled.
-        let mut enabled = RFC5280Policy::new(9999);
+        let enabled = RFC5280Policy::new(9999);
         assert!(enabled.chain_meets_policy_requirements(&chain).is_err());
 
         let root2 = self_signed_ca_with("root", with_validity(1000, 2000));
         let leaf2 = issue_leaf("leaf", &[], &root2);
         let chain2 = chain_of(vec![leaf2, root2.der]);
-        let mut disabled = RFC5280Policy::with_validity_check_disabled();
+        let disabled = RFC5280Policy::with_validity_check_disabled();
         assert_eq!(disabled.chain_meets_policy_requirements(&chain2), Ok(()));
     }
 
@@ -98,7 +98,7 @@ mod tests {
         let leaf = issue_leaf("leaf", &["www.example.com"], &root);
         let chain = chain_of(vec![leaf, root.der]);
 
-        let mut policy = RFC5280Policy::with_validity_check_disabled();
+        let policy = RFC5280Policy::with_validity_check_disabled();
         assert_eq!(
             policy.chain_meets_policy_requirements(&chain).unwrap_err(),
             PolicyFailureReason::new("name is in an excluded subtree")
@@ -305,7 +305,7 @@ mod conformance {
 
         // The same chain must pass once validity checking is switched off,
         // which also proves nothing *else* about the chain is at fault.
-        let mut disabled = RFC5280Policy::with_validity_check_disabled();
+        let disabled = RFC5280Policy::with_validity_check_disabled();
         assert_eq!(disabled.chain_meets_policy_requirements(&chain), Ok(()), "{position:?}");
     }
 
@@ -365,8 +365,8 @@ mod conformance {
         // the verdict must track the timestamp it was handed.
         let chain = chain_with_validity_at(Position::Leaf, 1000, 2000);
 
-        let mut before_expiry = RFC5280Policy::new(1500);
-        let mut after_expiry = RFC5280Policy::new(2500);
+        let before_expiry = RFC5280Policy::new(1500);
+        let after_expiry = RFC5280Policy::new(2500);
 
         // Interleave the evaluations to show neither policy's answer
         // depends on when, or in what order, it is invoked.
@@ -927,7 +927,7 @@ mod conformance {
         let leaf = issue_leaf("leaf", &["www.example.com"], &intermediate);
         let chain = chain_of(vec![leaf, intermediate.der, root.der]);
 
-        let mut policy = RFC5280Policy::new(NOW);
+        let policy = RFC5280Policy::new(NOW);
         assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
 
         // And the OID is claimed, which is what stops the critical

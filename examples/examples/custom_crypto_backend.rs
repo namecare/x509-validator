@@ -22,7 +22,7 @@ use openssl::sign::Verifier as OpenSslVerifier;
 use x509_validator::crypto::{CryptoError, SignatureVerifier};
 use x509_validator::rfc5280::RFC5280Policy;
 use x509_validator::store::CertificateStore;
-use x509_validator::validator::ChainValidationResultOwned;
+use x509_validator::validator::ChainValidationResult;
 use x509_validator::{rsa_pss_digest_bits, BaseValidator};
 use x509_validator_core::oid_registry;
 use x509_validator_core::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
@@ -136,16 +136,16 @@ fn main() {
         let intermediates = CertificateStore::from_iter([chain.intermediate.clone()]);
 
         // Only the backend argument differs from the `validate_chain` example.
-        let mut validator = BaseValidator::with_policy_and_backend(roots, RFC5280Policy::new(validation_time()), &OPENSSL_PROVIDER);
+        let validator = BaseValidator::with_policy_and_backend(roots, RFC5280Policy::new(validation_time()), &OPENSSL_PROVIDER);
 
         let verdict = match validator.validate_with_diagnostics(&chain.leaf, &intermediates, &mut |_| {}) {
-            ChainValidationResultOwned::ValidCertificate(valid) => {
+            ChainValidationResult::ValidCertificate(valid) => {
                 format!("valid — chain of {}", valid.iter().count())
             }
-            ChainValidationResultOwned::CouldNotValidate(reasons) if reasons.is_empty() => {
+            ChainValidationResult::CouldNotValidate(reasons) if reasons.is_empty() => {
                 "rejected — no chain to a trusted root could be built".to_string()
             }
-            ChainValidationResultOwned::CouldNotValidate(reasons) => {
+            ChainValidationResult::CouldNotValidate(reasons) => {
                 let listed = reasons.iter().map(ToString::to_string).collect::<Vec<_>>().join("; ");
                 format!("rejected — {listed}")
             }

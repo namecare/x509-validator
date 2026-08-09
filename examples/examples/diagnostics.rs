@@ -13,7 +13,7 @@
 
 use x509_validator::rfc5280::RFC5280Policy;
 use x509_validator::store::CertificateStore;
-use x509_validator::validator::ChainValidationResultOwned;
+use x509_validator::validator::ChainValidationResult;
 use x509_validator::BaseValidator;
 use x509_validator_examples::{demo_chain, validation_time, BACKEND};
 
@@ -27,7 +27,7 @@ fn main() {
     let roots = CertificateStore::from_iter([unrelated.root.clone()]);
     let intermediates = CertificateStore::from_iter([chain.intermediate.clone()]);
 
-    let mut validator = BaseValidator::with_policy_and_backend(roots, RFC5280Policy::new(validation_time()), BACKEND);
+    let validator = BaseValidator::with_policy_and_backend(roots, RFC5280Policy::new(validation_time()), BACKEND);
 
     let mut trace = Vec::new();
     let result = validator.validate_with_diagnostics(&chain.leaf, &intermediates, &mut |diagnostic| {
@@ -40,10 +40,10 @@ fn main() {
     }
 
     match result {
-        ChainValidationResultOwned::ValidCertificate(valid) => {
+        ChainValidationResult::ValidCertificate(valid) => {
             println!("\nunexpectedly valid — chain of {}", valid.iter().count());
         }
-        ChainValidationResultOwned::CouldNotValidate(reasons) => {
+        ChainValidationResult::CouldNotValidate(reasons) => {
             println!("\nverdict: rejected");
             if reasons.is_empty() {
                 println!("  no policy failures recorded — no chain reached a trusted root");
@@ -57,7 +57,7 @@ fn main() {
     // `multiline_description()` carries the same information as `Display`,
     // laid out over several lines.
     let roots = CertificateStore::from_iter([unrelated.root.clone()]);
-    let mut validator = BaseValidator::with_policy_and_backend(roots, RFC5280Policy::new(validation_time()), BACKEND);
+    let validator = BaseValidator::with_policy_and_backend(roots, RFC5280Policy::new(validation_time()), BACKEND);
 
     let mut last = None;
     validator.validate_with_diagnostics(&chain.leaf, &intermediates, &mut |diagnostic| {
