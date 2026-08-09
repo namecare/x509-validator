@@ -5,15 +5,21 @@ use crate::store::CertificateStore;
 use x509_validator_core::error::PolicyFailure;
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
 use x509_validator_core::validated_chain::ValidatedCertificateChain;
-use x509_validator_core::validator::Validator;
+use x509_validator_core::validator::Validator as ValidatorTrait;
 
 // Re-exported so consumers of this crate can name the validation result
-// alongside `BaseValidator`, rather than reaching into core for it.
+// alongside `Validator`, rather than reaching into core for it.
 pub use x509_validator_core::validator::ChainValidationResult;
 use x509_validator_core::{Certificate, CertificateExt};
 
-/// Validates an X.509 certificate chain against a set of root certificates and a [`ValidationPolicy`].
-pub struct BaseValidator<'a, P> {
+/// Validates an X.509 certificate chain against a set of root certificates and
+/// a [`ValidationPolicy`], using the crypto backend selected by this crate's
+/// feature flags.
+///
+/// ```ignore
+/// let validator = x509_validator::Validator::with_policy(roots, policy);
+/// ```
+pub struct Validator<'a, P> {
     /// The trusted root certificates used to anchor chain validation.
     root_certificates: CertificateStore<'a>,
     crypto: &'a dyn SignatureVerifier,
@@ -21,7 +27,7 @@ pub struct BaseValidator<'a, P> {
     policy: P,
 }
 
-impl<'a, P> BaseValidator<'a, P>
+impl<'a, P> Validator<'a, P>
 where
     P: ValidationPolicy,
 {
@@ -43,7 +49,7 @@ where
     ///
     /// This is the constructor to reach for: the backend is chosen once in
     /// `Cargo.toml`, so call sites name only the roots and the policy. Use
-    /// [`BaseValidator::with_policy_and_backend`] to override the backend for a
+    /// [`Validator::with_policy_and_backend`] to override the backend for a
     /// single validator.
     ///
     /// - Parameters:
@@ -181,7 +187,7 @@ where
     }
 }
 
-impl<'a, P> Validator<'a> for BaseValidator<'a, P>
+impl<'a, P> ValidatorTrait<'a> for Validator<'a, P>
 where
     P: ValidationPolicy,
 {

@@ -17,7 +17,7 @@ use x509_validator::policy::{PolicyEvaluationResult, ValidationPolicy};
 use x509_validator::rfc5280::RFC5280Policy;
 use x509_validator::store::CertificateStore;
 use x509_validator::validator::ChainValidationResult;
-use x509_validator::{BaseValidator, ServerIdentityPolicy};
+use x509_validator::{Validator, ServerIdentityPolicy};
 use x509_validator_core::der_parser::Oid;
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
 use x509_validator_examples::{demo_chain, validation_time, BACKEND};
@@ -64,7 +64,7 @@ fn main() {
         let intermediates = CertificateStore::from_iter([chain.intermediate.clone()]);
 
         let policy = WebPkiPolicy::new(validation_time(), hostname);
-        let validator = BaseValidator::with_policy_and_backend(roots, policy, BACKEND);
+        let validator = Validator::with_policy_and_backend(roots, policy, BACKEND);
 
         let verdict = match validator.validate_with_diagnostics(&chain.leaf, &intermediates, &mut |_| {}) {
             ChainValidationResult::ValidCertificate(_) => "accepted".to_string(),

@@ -12,7 +12,7 @@ use x509_validator::policy::{PolicyEvaluationResult, PolicyFailureReason, Valida
 use x509_validator::rfc5280::RFC5280Policy;
 use x509_validator::store::CertificateStore;
 use x509_validator::validator::ChainValidationResult;
-use x509_validator::BaseValidator;
+use x509_validator::Validator;
 use x509_validator_bench_measure::{fixtures, BACKEND};
 use x509_validator_core::der_parser::Oid;
 use x509_validator_core::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS;
@@ -68,7 +68,7 @@ fn assert_scenario(
     leaf: &Certificate<'static>,
     expect: Expect,
 ) {
-    let validator = BaseValidator::with_policy_and_backend(
+    let validator = Validator::with_policy_and_backend(
         CertificateStore::from_iter(roots),
         RFC5280Policy::new(fixtures::REFERENCE_TIME),
         BACKEND,
@@ -200,7 +200,7 @@ fn rejects_root_that_did_not_sign() {
 #[test]
 fn policy_failure_sends_search_down_longer_path() {
     let p = fixtures::parity();
-    let validator = BaseValidator::with_policy_and_backend(
+    let validator = Validator::with_policy_and_backend(
         CertificateStore::from_iter(vec![p.ca1.clone(), p.ca2.clone()]),
         FailIfCertInChainPolicy {
             forbidden: p.ca1.as_ref().to_vec(),
@@ -232,7 +232,7 @@ fn self_signed_certificate_in_trust_store_validates() {
 #[test]
 fn trust_root_may_be_non_self_signed_leaf() {
     let p = fixtures::parity();
-    let validator = BaseValidator::with_policy_and_backend(
+    let validator = Validator::with_policy_and_backend(
         CertificateStore::from_iter(vec![p.localhost_leaf.clone()]),
         IgnoreBasicConstraintsPolicy,
         BACKEND,
