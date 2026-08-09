@@ -25,7 +25,7 @@ impl<P: ValidationPolicy> ValidationPolicy for OneOfPolicies<P> {
         self.policy.verifying_critical_extensions()
     }
 
-    fn chain_meets_policy_requirements(&mut self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
+    fn chain_meets_policy_requirements(&self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
         self.policy.chain_meets_policy_requirements(chain)
     }
 }

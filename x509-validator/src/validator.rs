@@ -2,18 +2,15 @@ use crate::crypto::SignatureVerifier;
 use crate::diagnostic::VerificationDiagnostic;
 use crate::policy::{PolicyFailureReason, ValidationPolicy};
 use crate::store::CertificateStore;
+use x509_validator_core::error::PolicyFailure;
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
 use x509_validator_core::validated_chain::ValidatedCertificateChain;
-use x509_validator_core::{Certificate, CertificateExt};
+use x509_validator_core::validator::Validator;
 
-fn parse_certificate_store(der: &[Vec<u8>]) -> Result<CertificateStore<'_>, PolicyFailureReason> {
-    let mut store = CertificateStore::new();
-    for bytes in der {
-        let certificate = Certificate::parse(bytes).map_err(|_| PolicyFailureReason::new("failed to parse certificate DER"))?;
-        store.append(certificate);
-    }
-    Ok(store)
-}
+// Re-exported so consumers of this crate can name the validation result
+// alongside `BaseValidator`, rather than reaching into core for it.
+pub use x509_validator_core::validator::ChainValidationResult;
+use x509_validator_core::{Certificate, CertificateExt};
 
 /// Validates an X.509 certificate chain against a set of root certificates and a [`ValidationPolicy`].
 pub struct BaseValidator<'a, P> {
@@ -66,29 +63,15 @@ where
     ///
     /// - Parameters:
     ///   - leaf: The leaf certificate to validate.
-    ///   - intermediates: The DER-encoded intermediate certificates that may form part of the chain.
-    /// - Returns: A [`ChainValidationResultOwned`] indicating whether the certificate is valid.
-    pub fn validate(&mut self, leaf: &Certificate<'a>, intermediates: &'a [Vec<u8>]) -> ChainValidationResultOwned<'a> {
-        let store = match parse_certificate_store(intermediates) {
-            Ok(store) => store,
-            Err(reason) => return ChainValidationResultOwned::CouldNotValidate(vec![reason]),
-        };
-        self.validate_with_diagnostics(leaf, &store, &mut |_: VerificationDiagnostic| {})
-    }
-
-    /// Validates a leaf certificate by building chains through intermediate certificates to the root store.
-    ///
-    /// - Parameters:
-    ///   - leaf: The leaf certificate to validate.
     ///   - intermediates: A store of intermediate certificates that may form part of the chain.
     ///   - diagnostic_callback: A closure invoked with diagnostic events during validation.
-    /// - Returns: A [`ChainValidationResultOwned`] indicating whether the certificate is valid.
+    /// - Returns: A [`ChainValidationResult`] indicating whether the certificate is valid.
     pub fn validate_with_diagnostics(
-        &mut self,
+        &self,
         leaf: &Certificate<'a>,
         intermediates: &CertificateStore<'a>,
         diagnostic_callback: &mut dyn FnMut(VerificationDiagnostic),
-    ) -> ChainValidationResultOwned<'a> {
+    ) -> ChainValidationResult<'a> {
         // First check: does this leaf certificate contain critical extensions that are not satisfied by the policy?
         // If so, reject the chain.
         if has_unhandled_critical_extensions(leaf, &self.policy) {
@@ -96,8 +79,9 @@ where
                 leaf.clone(),
                 self.policy.verifying_critical_extensions(),
             ));
-            return ChainValidationResultOwned::CouldNotValidate(vec![PolicyFailureReason::new(
-                "leaf certificate has unhandled critical extension",
+            return ChainValidationResult::CouldNotValidate(vec![PolicyFailure::new(
+                UnverifiedCertificateChain::new(vec![leaf.clone()]),
+                PolicyFailureReason::new("leaf certificate has unhandled critical extension"),
             )]);
         }
 
@@ -116,13 +100,13 @@ where
                 Ok(()) => {
                     // We're good!
                     diagnostic_callback(VerificationDiagnostic::found_valid_certificate_chain(vec![leaf.clone()]));
-                    return ChainValidationResultOwned::ValidCertificate(ValidatedCertificateChain::new_unchecked(vec![leaf.clone()]));
+                    return ChainValidationResult::ValidCertificate(ValidatedCertificateChain::new_unchecked(vec![leaf.clone()]));
                 }
                 Err(reason) => {
                     diagnostic_callback(
                         VerificationDiagnostic::leaf_certificate_is_in_the_root_store_but_does_not_meet_policy(leaf.clone(), reason.clone()),
                     );
-                    policy_failures.push(reason);
+                    policy_failures.push(PolicyFailure::new(chain, reason));
                 }
             }
         }
@@ -159,11 +143,11 @@ where
                     Ok(()) => {
                         // We're good!
                         diagnostic_callback(VerificationDiagnostic::found_valid_certificate_chain(chain_certs.clone()));
-                        return ChainValidationResultOwned::ValidCertificate(ValidatedCertificateChain::new_unchecked(chain_certs));
+                        return ChainValidationResult::ValidCertificate(ValidatedCertificateChain::new_unchecked(chain_certs));
                     }
                     Err(reason) => {
                         diagnostic_callback(VerificationDiagnostic::chain_fails_to_meet_policy(chain_certs, reason.clone()));
-                        policy_failures.push(reason);
+                        policy_failures.push(PolicyFailure::new(chain, reason));
                     }
                 }
             }
@@ -193,16 +177,34 @@ where
         }
 
         diagnostic_callback(VerificationDiagnostic::could_not_validate_leaf_certificate(leaf.clone()));
-        ChainValidationResultOwned::CouldNotValidate(policy_failures)
+        ChainValidationResult::CouldNotValidate(policy_failures)
     }
 }
 
-/// The result of validating a certificate chain.
-pub enum ChainValidationResultOwned<'a> {
-    /// The certificate chain is valid and trusted.
-    ValidCertificate(ValidatedCertificateChain<'a>),
-    /// The certificate chain could not be validated, with the associated policy failures.
-    CouldNotValidate(Vec<PolicyFailureReason>),
+impl<'a, P> Validator<'a> for BaseValidator<'a, P>
+where
+    P: ValidationPolicy,
+{
+    fn validate(&self, leaf: Certificate<'a>, intermediates: Vec<Certificate<'a>>) -> ChainValidationResult<'a> {
+        let store = CertificateStore::from_iter(intermediates);
+        self.validate_with_diagnostics(&leaf, &store, &mut |_: VerificationDiagnostic| {})
+    }
+
+    fn validate_raw(&self, leaf: &'a [u8], intermediates: &'a [&'a [u8]]) -> ChainValidationResult<'a> {
+        let Ok(leaf) = Certificate::parse(leaf) else {
+            return ChainValidationResult::CouldNotValidate(Vec::new());
+        };
+        let mut parsed = Vec::with_capacity(intermediates.len());
+        for der in intermediates {
+            // An unparseable intermediate is skipped rather than fatal: chain
+            // building may still reach a root through the certificates that
+            // did parse.
+            if let Ok(certificate) = Certificate::parse(der) {
+                parsed.push(certificate);
+            }
+        }
+        self.validate(leaf, parsed)
+    }
 }
 
 fn has_unhandled_critical_extensions(cert: &Certificate, policy: &impl ValidationPolicy) -> bool {

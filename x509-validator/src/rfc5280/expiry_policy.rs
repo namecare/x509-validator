@@ -26,7 +26,7 @@ impl ValidationPolicy for ExpiryPolicy {
         vec![]
     }
 
-    fn chain_meets_policy_requirements(&mut self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
+    fn chain_meets_policy_requirements(&self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
         // This is an easy check: confirm all the certs are valid.
         //
         // Note that we do this computation on the TBSCertificate Validity struct, not the public date fields. This is

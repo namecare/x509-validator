@@ -20,7 +20,7 @@ use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use x509_validator::policy::{PolicyEvaluationResult, PolicyFailureReason, ValidationPolicy};
 use x509_validator::rfc5280::RFC5280Policy;
 use x509_validator::store::CertificateStore;
-use x509_validator::validator::ChainValidationResultOwned;
+use x509_validator::validator::ChainValidationResult;
 use x509_validator::BaseValidator;
 use x509_validator_bench_measure::{fixtures, BACKEND};
 use x509_validator_core::der_parser::Oid;
@@ -40,7 +40,7 @@ impl ValidationPolicy for FailIfCertInChainPolicy {
         vec![OID_X509_EXT_BASIC_CONSTRAINTS]
     }
 
-    fn chain_meets_policy_requirements(&mut self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
+    fn chain_meets_policy_requirements(&self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
         if chain.iter().any(|cert| cert.as_ref() == self.forbidden.as_slice()) {
             return Err(PolicyFailureReason::new("chain contains forbidden certificate"));
         }
@@ -56,7 +56,7 @@ impl ValidationPolicy for IgnoreBasicConstraintsPolicy {
         vec![OID_X509_EXT_BASIC_CONSTRAINTS]
     }
 
-    fn chain_meets_policy_requirements(&mut self, _chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
+    fn chain_meets_policy_requirements(&self, _chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
         Ok(())
     }
 }
@@ -76,10 +76,10 @@ struct Scenario {
 /// allocates a `HashMap` and a subject key per certificate, which is setup
 /// cost, not validation cost, and does not belong in the timed region.
 fn validate(roots: CertificateStore<'static>, intermediates: &CertificateStore<'static>, leaf: &Certificate<'static>) -> usize {
-    let mut validator = BaseValidator::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::REFERENCE_TIME), BACKEND);
+    let validator = BaseValidator::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::REFERENCE_TIME), BACKEND);
     match validator.validate_with_diagnostics(leaf, intermediates, &mut |_| {}) {
-        ChainValidationResultOwned::ValidCertificate(chain) => chain.iter().count(),
-        ChainValidationResultOwned::CouldNotValidate(reasons) => reasons.len(),
+        ChainValidationResult::ValidCertificate(chain) => chain.iter().count(),
+        ChainValidationResult::CouldNotValidate(reasons) => reasons.len(),
     }
 }
 
@@ -180,7 +180,7 @@ fn successful(c: &mut Criterion) {
                 )
             },
             |(roots, intermediates)| {
-                let mut validator = BaseValidator::with_policy_and_backend(
+                let validator = BaseValidator::with_policy_and_backend(
                     roots,
                     FailIfCertInChainPolicy {
                         forbidden: p.ca1.as_ref().to_vec(),
@@ -189,8 +189,8 @@ fn successful(c: &mut Criterion) {
                     BACKEND,
                 );
                 match validator.validate_with_diagnostics(&p.localhost_leaf, &intermediates, &mut |_| {}) {
-                    ChainValidationResultOwned::ValidCertificate(chain) => chain.iter().count(),
-                    ChainValidationResultOwned::CouldNotValidate(reasons) => reasons.len(),
+                    ChainValidationResult::ValidCertificate(chain) => chain.iter().count(),
+                    ChainValidationResult::CouldNotValidate(reasons) => reasons.len(),
                 }
             },
             BatchSize::SmallInput,
@@ -214,10 +214,10 @@ fn successful(c: &mut Criterion) {
                 )
             },
             |(roots, intermediates)| {
-                let mut validator = BaseValidator::with_policy_and_backend(roots, IgnoreBasicConstraintsPolicy, BACKEND);
+                let validator = BaseValidator::with_policy_and_backend(roots, IgnoreBasicConstraintsPolicy, BACKEND);
                 match validator.validate_with_diagnostics(&p.localhost_leaf, &intermediates, &mut |_| {}) {
-                    ChainValidationResultOwned::ValidCertificate(chain) => chain.iter().count(),
-                    ChainValidationResultOwned::CouldNotValidate(reasons) => reasons.len(),
+                    ChainValidationResult::ValidCertificate(chain) => chain.iter().count(),
+                    ChainValidationResult::CouldNotValidate(reasons) => reasons.len(),
                 }
             },
             BatchSize::SmallInput,
@@ -329,7 +329,7 @@ fn all_scenarios(c: &mut Criterion) {
                         p.ca1_cross_signed_by_ca2.clone(),
                     ],
                 );
-                let mut validator = BaseValidator::with_policy_and_backend(
+                let validator = BaseValidator::with_policy_and_backend(
                     roots,
                     FailIfCertInChainPolicy {
                         forbidden: p.ca1.as_ref().to_vec(),
@@ -338,8 +338,8 @@ fn all_scenarios(c: &mut Criterion) {
                     BACKEND,
                 );
                 count += match validator.validate_with_diagnostics(&p.localhost_leaf, &intermediates, &mut |_| {}) {
-                    ChainValidationResultOwned::ValidCertificate(chain) => chain.iter().count(),
-                    ChainValidationResultOwned::CouldNotValidate(reasons) => reasons.len(),
+                    ChainValidationResult::ValidCertificate(chain) => chain.iter().count(),
+                    ChainValidationResult::CouldNotValidate(reasons) => reasons.len(),
                 };
             }
             let (r, i) = stores(
@@ -349,10 +349,10 @@ fn all_scenarios(c: &mut Criterion) {
             count += validate(r, &i, &p.isolated_self_signed);
             {
                 let (roots, intermediates) = stores(vec![p.localhost_leaf.clone()], vec![p.intermediate1.clone()]);
-                let mut validator = BaseValidator::with_policy_and_backend(roots, IgnoreBasicConstraintsPolicy, BACKEND);
+                let validator = BaseValidator::with_policy_and_backend(roots, IgnoreBasicConstraintsPolicy, BACKEND);
                 count += match validator.validate_with_diagnostics(&p.localhost_leaf, &intermediates, &mut |_| {}) {
-                    ChainValidationResultOwned::ValidCertificate(chain) => chain.iter().count(),
-                    ChainValidationResultOwned::CouldNotValidate(reasons) => reasons.len(),
+                    ChainValidationResult::ValidCertificate(chain) => chain.iter().count(),
+                    ChainValidationResult::CouldNotValidate(reasons) => reasons.len(),
                 };
             }
             let (r, i) = stores(vec![p.intermediate1.clone()], vec![p.intermediate1.clone()]);

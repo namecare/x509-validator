@@ -4,14 +4,14 @@
 //! `benches/validator.rs` has `harness = false`, so a `#[test]` fn placed
 //! there would silently never run. This file is the deliverable that makes
 //! the parity benchmark trustworthy: a scenario that quietly produces the
-//! wrong `ChainValidationResultOwned` variant still benchmarks something,
+//! wrong `ChainValidationResult` variant still benchmarks something,
 //! but it stops being the scenario it is named after, and the comparison to
 //! the reference implementation becomes meaningless.
 
 use x509_validator::policy::{PolicyEvaluationResult, PolicyFailureReason, ValidationPolicy};
 use x509_validator::rfc5280::RFC5280Policy;
 use x509_validator::store::CertificateStore;
-use x509_validator::validator::ChainValidationResultOwned;
+use x509_validator::validator::ChainValidationResult;
 use x509_validator::BaseValidator;
 use x509_validator_bench_measure::{fixtures, BACKEND};
 use x509_validator_core::der_parser::Oid;
@@ -31,7 +31,7 @@ impl ValidationPolicy for FailIfCertInChainPolicy {
         vec![OID_X509_EXT_BASIC_CONSTRAINTS]
     }
 
-    fn chain_meets_policy_requirements(&mut self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
+    fn chain_meets_policy_requirements(&self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
         if chain.iter().any(|cert| cert.as_ref() == self.forbidden.as_slice()) {
             return Err(PolicyFailureReason::new("chain contains forbidden certificate"));
         }
@@ -47,7 +47,7 @@ impl ValidationPolicy for IgnoreBasicConstraintsPolicy {
         vec![OID_X509_EXT_BASIC_CONSTRAINTS]
     }
 
-    fn chain_meets_policy_requirements(&mut self, _chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
+    fn chain_meets_policy_requirements(&self, _chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
         Ok(())
     }
 }
@@ -68,7 +68,7 @@ fn assert_scenario(
     leaf: &Certificate<'static>,
     expect: Expect,
 ) {
-    let mut validator = BaseValidator::with_policy_and_backend(
+    let validator = BaseValidator::with_policy_and_backend(
         CertificateStore::from_iter(roots),
         RFC5280Policy::new(fixtures::REFERENCE_TIME),
         BACKEND,
@@ -77,14 +77,14 @@ fn assert_scenario(
     assert_outcome(name, &result, expect);
 }
 
-fn assert_outcome(name: &str, result: &ChainValidationResultOwned, expect: Expect) {
+fn assert_outcome(name: &str, result: &ChainValidationResult, expect: Expect) {
     match (result, expect) {
-        (ChainValidationResultOwned::ValidCertificate(_), Expect::Valid) => {}
-        (ChainValidationResultOwned::CouldNotValidate(_), Expect::Invalid) => {}
-        (ChainValidationResultOwned::ValidCertificate(_), Expect::Invalid) => {
+        (ChainValidationResult::ValidCertificate(_), Expect::Valid) => {}
+        (ChainValidationResult::CouldNotValidate(_), Expect::Invalid) => {}
+        (ChainValidationResult::ValidCertificate(_), Expect::Invalid) => {
             panic!("scenario `{name}` was expected to fail validation but produced ValidCertificate");
         }
-        (ChainValidationResultOwned::CouldNotValidate(reasons), Expect::Valid) => {
+        (ChainValidationResult::CouldNotValidate(reasons), Expect::Valid) => {
             panic!("scenario `{name}` was expected to validate but produced CouldNotValidate({reasons:?})");
         }
     }
@@ -200,7 +200,7 @@ fn rejects_root_that_did_not_sign() {
 #[test]
 fn policy_failure_sends_search_down_longer_path() {
     let p = fixtures::parity();
-    let mut validator = BaseValidator::with_policy_and_backend(
+    let validator = BaseValidator::with_policy_and_backend(
         CertificateStore::from_iter(vec![p.ca1.clone(), p.ca2.clone()]),
         FailIfCertInChainPolicy {
             forbidden: p.ca1.as_ref().to_vec(),
@@ -232,7 +232,7 @@ fn self_signed_certificate_in_trust_store_validates() {
 #[test]
 fn trust_root_may_be_non_self_signed_leaf() {
     let p = fixtures::parity();
-    let mut validator = BaseValidator::with_policy_and_backend(
+    let validator = BaseValidator::with_policy_and_backend(
         CertificateStore::from_iter(vec![p.localhost_leaf.clone()]),
         IgnoreBasicConstraintsPolicy,
         BACKEND,

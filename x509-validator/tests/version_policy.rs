@@ -6,7 +6,7 @@ fn v3_certificate_with_extensions_is_accepted() {
     let root = self_signed_ca_with("root", |_| {});
     let leaf = issue_leaf("leaf", &["www.example.com"], &root);
     let chain = chain_of(vec![leaf, root.der]);
-    let mut policy = VersionPolicy;
+    let policy = VersionPolicy;
     assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
 }
 
@@ -20,6 +20,6 @@ fn one_bad_certificate_in_a_chain_fails_the_whole_chain() {
     let root = self_signed_ca_with("root", |_| {});
     let leaf = issue_leaf("leaf", &["www.example.com"], &root);
     let chain = chain_of(vec![leaf, root.der]);
-    let mut policy = VersionPolicy;
+    let policy = VersionPolicy;
     assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
 }

@@ -18,7 +18,7 @@ impl ValidationPolicy for BasicConstraintsPolicy {
         vec![basic_constraints_oid()]
     }
 
-    fn chain_meets_policy_requirements(&mut self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
+    fn chain_meets_policy_requirements(&self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
         // The rules for BasicConstraints come from https://www.rfc-editor.org/rfc/rfc5280#section-4.2.1.9,
         // but roughly can be summarised as:
         //

@@ -11,7 +11,7 @@ fn chain_without_name_constraints_is_accepted() {
     let root = self_signed_ca_with("root", |_| {});
     let leaf = issue_leaf("leaf", &["www.example.com"], &root);
     let chain = chain_of(vec![leaf, root.der]);
-    let mut policy = NameConstraintsPolicy;
+    let policy = NameConstraintsPolicy;
     assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
 }
 
@@ -22,7 +22,7 @@ fn leaf_name_in_permitted_subtree_is_accepted() {
     });
     let leaf = issue_leaf("leaf", &["www.example.com"], &root);
     let chain = chain_of(vec![leaf, root.der]);
-    let mut policy = NameConstraintsPolicy;
+    let policy = NameConstraintsPolicy;
     assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
 }
 
@@ -33,7 +33,7 @@ fn leaf_name_outside_permitted_subtree_is_rejected() {
     });
     let leaf = issue_leaf("leaf", &["www.evil.com"], &root);
     let chain = chain_of(vec![leaf, root.der]);
-    let mut policy = NameConstraintsPolicy;
+    let policy = NameConstraintsPolicy;
     assert!(policy.chain_meets_policy_requirements(&chain).is_err());
 }
 
@@ -44,7 +44,7 @@ fn leaf_name_in_excluded_subtree_is_rejected() {
     });
     let leaf = issue_leaf("leaf", &["www.example.com"], &root);
     let chain = chain_of(vec![leaf, root.der]);
-    let mut policy = NameConstraintsPolicy;
+    let policy = NameConstraintsPolicy;
     assert_eq!(
         policy.chain_meets_policy_requirements(&chain).unwrap_err(),
         PolicyFailureReason::new("name is in an excluded subtree")
@@ -59,7 +59,7 @@ fn constraints_apply_transitively_through_intermediate() {
     let intermediate = x509_validator_testkit::issue_ca("intermediate", &root, None, |_| {});
     let leaf = issue_leaf("leaf", &["www.evil.com"], &intermediate);
     let chain = chain_of(vec![leaf, intermediate.der, root.der]);
-    let mut policy = NameConstraintsPolicy;
+    let policy = NameConstraintsPolicy;
     assert!(policy.chain_meets_policy_requirements(&chain).is_err());
 }
 
@@ -70,7 +70,7 @@ fn self_signed_single_certificate_enforces_its_own_constraints() {
         params.name_constraints = Some(name_constraints(vec![dns_subtree("example.com")], vec![]));
     });
     let chain = chain_of(vec![root.der]);
-    let mut policy = NameConstraintsPolicy;
+    let policy = NameConstraintsPolicy;
     assert!(policy.chain_meets_policy_requirements(&chain).is_err());
 }
 
@@ -83,7 +83,7 @@ fn directory_name_constraint_is_rejected_outright() {
     });
     let leaf = issue_leaf("leaf", &["www.example.com"], &root);
     let chain = chain_of(vec![leaf, root.der]);
-    let mut policy = NameConstraintsPolicy;
+    let policy = NameConstraintsPolicy;
     assert_eq!(
         policy.chain_meets_policy_requirements(&chain).unwrap_err(),
         PolicyFailureReason::new("directoryName name constraints are not supported")
@@ -123,7 +123,7 @@ fn name_that_cannot_be_decoded_is_rejected_rather_than_skipped() {
 
     // An undecodable name can never be compared against the permitted subtree, so it must fail the
     // chain rather than slip past unexamined.
-    let mut policy = NameConstraintsPolicy;
+    let policy = NameConstraintsPolicy;
     assert!(policy.chain_meets_policy_requirements(&chain).is_err());
 }
 
@@ -143,7 +143,7 @@ fn unsupported_constraint_kind_is_rejected_even_with_no_name_of_that_kind() {
         let leaf = issue_leaf("leaf", &["www.example.com"], &root);
         let chain = chain_of(vec![leaf, root.der]);
 
-        let mut policy = NameConstraintsPolicy;
+        let policy = NameConstraintsPolicy;
         assert_eq!(
             policy.chain_meets_policy_requirements(&chain).unwrap_err(),
             PolicyFailureReason::new(expected)

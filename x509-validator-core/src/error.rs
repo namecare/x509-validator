@@ -19,7 +19,7 @@ impl fmt::Display for PolicyFailureReason {
 
 impl fmt::Debug for PolicyFailureReason {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Debug::fmt(&self.0, f)
+        write!(f, "{}", self.0)
     }
 }
 
@@ -36,5 +36,20 @@ impl<'a> PolicyFailure<'a> {
             chain,
             policy_failure_reason,
         }
+    }
+}
+
+impl fmt::Display for PolicyFailure<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.policy_failure_reason)
+    }
+}
+
+impl fmt::Debug for PolicyFailure<'_> {
+    /// Shows the reason and the chain's length, but not every certificate:
+    /// a chain's full `Debug` output is large enough to bury the reason,
+    /// which is what a failed assertion is usually reporting.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} (chain of {})", self.policy_failure_reason, self.chain.len())
     }
 }

@@ -16,7 +16,7 @@
 use x509_validator::policy::{PolicyEvaluationResult, ValidationPolicy};
 use x509_validator::rfc5280::RFC5280Policy;
 use x509_validator::store::CertificateStore;
-use x509_validator::validator::ChainValidationResultOwned;
+use x509_validator::validator::ChainValidationResult;
 use x509_validator::{BaseValidator, ServerIdentityPolicy};
 use x509_validator_core::der_parser::Oid;
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
@@ -47,7 +47,7 @@ impl ValidationPolicy for WebPkiPolicy {
         oids
     }
 
-    fn chain_meets_policy_requirements(&mut self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
+    fn chain_meets_policy_requirements(&self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
         self.rfc5280.chain_meets_policy_requirements(chain)?;
         self.identity.chain_meets_policy_requirements(chain)
     }
@@ -64,11 +64,11 @@ fn main() {
         let intermediates = CertificateStore::from_iter([chain.intermediate.clone()]);
 
         let policy = WebPkiPolicy::new(validation_time(), hostname);
-        let mut validator = BaseValidator::with_policy_and_backend(roots, policy, BACKEND);
+        let validator = BaseValidator::with_policy_and_backend(roots, policy, BACKEND);
 
         let verdict = match validator.validate_with_diagnostics(&chain.leaf, &intermediates, &mut |_| {}) {
-            ChainValidationResultOwned::ValidCertificate(_) => "accepted".to_string(),
-            ChainValidationResultOwned::CouldNotValidate(reasons) => {
+            ChainValidationResult::ValidCertificate(_) => "accepted".to_string(),
+            ChainValidationResult::CouldNotValidate(reasons) => {
                 let first = reasons.first().map(ToString::to_string).unwrap_or_else(|| "no reason given".into());
                 format!("rejected — {first}")
             }

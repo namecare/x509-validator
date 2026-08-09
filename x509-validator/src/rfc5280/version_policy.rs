@@ -13,7 +13,7 @@ impl ValidationPolicy for VersionPolicy {
         vec![]
     }
 
-    fn chain_meets_policy_requirements(&mut self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
+    fn chain_meets_policy_requirements(&self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
         for certificate in chain.iter() {
             let is_v1 = certificate.tbs_certificate.version == X509Version::V1;
             let has_extensions = !certificate.tbs_certificate.extensions().is_empty();

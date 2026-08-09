@@ -10,7 +10,7 @@
 
 use x509_validator::rfc5280::RFC5280Policy;
 use x509_validator::store::CertificateStore;
-use x509_validator::validator::ChainValidationResultOwned;
+use x509_validator::validator::ChainValidationResult;
 use x509_validator::BaseValidator;
 use x509_validator_examples::{demo_chain, validation_time, BACKEND};
 
@@ -24,17 +24,17 @@ fn main() {
     let intermediates = CertificateStore::from_iter([chain.intermediate.clone()]);
 
     let policy = RFC5280Policy::new(validation_time());
-    let mut validator = BaseValidator::with_policy_and_backend(roots, policy, BACKEND);
+    let validator = BaseValidator::with_policy_and_backend(roots, policy, BACKEND);
 
     match validator.validate_with_diagnostics(&chain.leaf, &intermediates, &mut |_| {}) {
-        ChainValidationResultOwned::ValidCertificate(valid) => {
+        ChainValidationResult::ValidCertificate(valid) => {
             println!("valid — chain of {} certificates:", valid.iter().count());
             // Leaf first, root last.
             for cert in valid.iter() {
                 println!("  {}", cert.tbs_certificate.subject);
             }
         }
-        ChainValidationResultOwned::CouldNotValidate(reasons) => {
+        ChainValidationResult::CouldNotValidate(reasons) => {
             println!("rejected — {} policy failure(s):", reasons.len());
             for reason in reasons {
                 println!("  {reason}");
@@ -45,18 +45,18 @@ fn main() {
     // The same leaf without its intermediate available: there is no path to
     // the root, so chain building fails even though the leaf itself is fine.
     let roots = CertificateStore::from_iter([chain.root.clone()]);
-    let mut validator = BaseValidator::with_policy_and_backend(roots, RFC5280Policy::new(validation_time()), BACKEND);
+    let validator = BaseValidator::with_policy_and_backend(roots, RFC5280Policy::new(validation_time()), BACKEND);
 
     let result = validator.validate_with_diagnostics(&chain.leaf, &CertificateStore::new(), &mut |_| {});
     println!(
         "\nwithout the intermediate: {}",
         match result {
-            ChainValidationResultOwned::ValidCertificate(_) => "valid".to_string(),
+            ChainValidationResult::ValidCertificate(_) => "valid".to_string(),
             // An empty reason list means no candidate chain reached a root,
             // so the policy was never asked.
-            ChainValidationResultOwned::CouldNotValidate(reasons) if reasons.is_empty() =>
+            ChainValidationResult::CouldNotValidate(reasons) if reasons.is_empty() =>
                 "rejected — no chain to a trusted root could be built".to_string(),
-            ChainValidationResultOwned::CouldNotValidate(reasons) => {
+            ChainValidationResult::CouldNotValidate(reasons) => {
                 let listed = reasons.iter().map(ToString::to_string).collect::<Vec<_>>().join("; ");
                 format!("rejected — {listed}")
             }

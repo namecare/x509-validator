@@ -19,7 +19,7 @@ impl ValidationPolicy for NameConstraintsPolicy {
         vec![name_constraints_oid()]
     }
 
-    fn chain_meets_policy_requirements(&mut self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
+    fn chain_meets_policy_requirements(&self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
         // The rules for name constraints come from https://www.rfc-editor.org/rfc/rfc5280#section-4.2.1.10.
         //
         // Some notes:
