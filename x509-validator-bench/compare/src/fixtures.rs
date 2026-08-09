@@ -35,7 +35,7 @@ pub mod apple {
     /// The `signedDate` of the payload these certificates signed, in seconds
     /// (2025-09-22T22:26:05Z). Expiry is checked against this rather than the
     /// wall clock, both so runs are reproducible and because it is the
-    /// instant a receipt verifier would actually use. The leaf expires in
+    /// instant a receipt validator would actually use. The leaf expires in
     /// October 2027; pinning here keeps the benchmark working past that.
     pub const SIGNED_DATE: i64 = 1_758_579_965;
 

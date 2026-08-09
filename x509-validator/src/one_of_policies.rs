@@ -1,44 +1,31 @@
-use crate::policy::{PolicyEvaluationResult, PolicyFailureReason, VerifierPolicy};
+use crate::policy::{PolicyEvaluationResult, ValidationPolicy};
 use x509_validator_core::der_parser::Oid;
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
 
-pub struct OneOfPolicies {
-    policies: Vec<Box<dyn VerifierPolicy>>,
+/// Use this to build a policy where at least one of the sub-policies must be met for the overall policy
+/// to be met.
+///
+/// Compose alternatives with the [`one_of!`](crate::one_of) macro, which builds the appropriate nested
+/// [`OneOfTuple2`](crate::policy_builder::OneOfTuple2) chain to pass here: the first alternative is tried,
+/// and only if it fails is the second tried, with both failure reasons reported if both fail. Extensions
+/// claimed as understood are the intersection of every alternative's claims — a critical extension is only
+/// considered handled here if every alternative would have handled it.
+pub struct OneOfPolicies<P> {
+    policy: P,
 }
 
-impl OneOfPolicies {
-    pub fn new(policies: Vec<Box<dyn VerifierPolicy>>) -> Self {
-        Self { policies }
+impl<P> OneOfPolicies<P> {
+    pub fn new(policy: P) -> Self {
+        Self { policy }
     }
 }
 
-impl VerifierPolicy for OneOfPolicies {
+impl<P: ValidationPolicy> ValidationPolicy for OneOfPolicies<P> {
     fn verifying_critical_extensions(&self) -> Vec<Oid<'static>> {
-        let mut policies = self.policies.iter();
-        let Some(first) = policies.next() else {
-            return Vec::new();
-        };
-        let mut common = first.verifying_critical_extensions();
-        for policy in policies {
-            let handled = policy.verifying_critical_extensions();
-            common.retain(|oid| handled.contains(oid));
-        }
-        common
+        self.policy.verifying_critical_extensions()
     }
 
     fn chain_meets_policy_requirements(&mut self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
-        if self.policies.is_empty() {
-            return Err(PolicyFailureReason::new("no policies specified in OneOfPolicies"));
-        }
-
-        let mut reasons = Vec::new();
-        for policy in &mut self.policies {
-            match policy.chain_meets_policy_requirements(chain) {
-                Ok(()) => return Ok(()),
-                Err(reason) => reasons.push(reason.to_string()),
-            }
-        }
-
-        Err(PolicyFailureReason::new(reasons.join(" and ")))
+        self.policy.chain_meets_policy_requirements(chain)
     }
 }

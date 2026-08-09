@@ -1,4 +1,4 @@
-use crate::{VerifierPolicy, PolicyEvaluationResult, PolicyFailureReason};
+use crate::{ValidationPolicy, PolicyEvaluationResult, PolicyFailureReason};
 use x509_validator_core::der_parser::Oid;
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
 
@@ -21,7 +21,7 @@ impl ExpiryPolicy {
     }
 }
 
-impl VerifierPolicy for ExpiryPolicy {
+impl ValidationPolicy for ExpiryPolicy {
     fn verifying_critical_extensions(&self) -> Vec<Oid<'static>> {
         vec![]
     }

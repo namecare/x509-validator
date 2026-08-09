@@ -224,7 +224,7 @@ impl fmt::Display for VerificationDiagnostic<'_> {
             ),
             Storage::LeafCertificateIsInTheRootStoreButDoesNotMeetPolicy(d) => write!(
                 f,
-                "Leaf certificate is in the root store of the verifier but it does by itself not meet the policy. \
+                "Leaf certificate is in the root store of the validator but it does by itself not meet the policy. \
                  Reason: {} Leaf Certificate: {}",
                 d.failure_reason,
                 format_certificate(&d.leaf_certificate),
@@ -307,7 +307,7 @@ impl fmt::Debug for VerificationDiagnostic<'_> {
 
 impl VerificationDiagnostic<'_> {
     /// Produces a human readable description of this [`VerificationDiagnostic`] over multiple lines for better readability
-    /// but includes otherwise the same information as the [`Display`] form.
+    /// but includes otherwise the same information as the [`Display`](fmt::Display) form.
     pub fn multiline_description(&self) -> String {
         match &self.storage {
             Storage::LeafCertificateHasUnhandledCriticalExtension(d) => format!(
@@ -317,7 +317,7 @@ impl VerificationDiagnostic<'_> {
                 format_certificate(&d.leaf_certificate),
             ),
             Storage::LeafCertificateIsInTheRootStoreButDoesNotMeetPolicy(d) => format!(
-                "Leaf certificate is in the root store of the verifier but it does by itself not meet the \
+                "Leaf certificate is in the root store of the validator but it does by itself not meet the \
                  policy.\n\nReason:\n{}\n\nLeaf Certificate:\n{}",
                 d.failure_reason,
                 format_certificate(&d.leaf_certificate),

@@ -1,0 +1,28 @@
+[package]
+name = "x509-validator-examples"
+version = "0.0.0"
+edition = "2021"
+description = "Runnable examples for x509-validator. Not published."
+publish = false
+
+[dependencies]
+x509-validator = { path = "../x509-validator", features = ["aws_lc"] }
+x509-validator-core = { path = "../x509-validator-core" }
+
+# The examples validate certificates, so they need certificates to validate.
+# Generating them here keeps every example self-contained: `cargo run
+# --example <name>` works from a clean checkout with no fixture files to
+# fetch and no expiry dates to go stale.
+x509-validator-testkit = { path = "../x509-validator-testkit" }
+time = "0.3"
+
+# Backs the `custom_crypto_backend` example, and generates the RSA keys the
+# certificate generator cannot. Not a dependency of x509-validator itself —
+# the point of that example is that a backend is something a caller supplies,
+# from whichever crypto library they already link against.
+openssl = "0.10"
+
+# Examples live in `examples/` and are the whole point of this crate; there
+# is no library to build.
+[lib]
+path = "src/lib.rs"

@@ -1,4 +1,4 @@
-use x509_validator::{VerifierPolicy, VersionPolicy};
+use x509_validator::{ValidationPolicy, VersionPolicy};
 use x509_validator_testkit::{chain_of, issue_leaf, self_signed_ca_with};
 
 #[test]

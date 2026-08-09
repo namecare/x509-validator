@@ -372,7 +372,7 @@ impl CaSpec {
 #[cfg(test)]
 mod ca_spec_tests {
     use super::*;
-    use x509_validator_core::{Certificate, FromDer};
+    use x509_validator_core::{Certificate, CertificateExt};
 
     #[test]
     fn ca_spec_honours_key_algorithm_and_validity() {
@@ -384,7 +384,7 @@ mod ca_spec_tests {
             .validity(not_before, not_after)
             .self_signed();
 
-        let parsed = Certificate::from_der(&ca.der).expect("parse").1;
+        let parsed = Certificate::parse(&ca.der).expect("parse");
         let validity = parsed.tbs_certificate.validity();
 
         assert_eq!(validity.not_before.timestamp(), not_before.unix_timestamp());
@@ -409,7 +409,7 @@ mod ca_spec_tests {
         let root = CaSpec::new("spec issuer").self_signed();
         let intermediate = CaSpec::new("spec intermediate").path_len(Some(1)).signed_by(&root);
 
-        let parsed = Certificate::from_der(&intermediate.der).expect("parse").1;
-        assert_eq!(parsed.issuer().as_raw(), Certificate::from_der(&root.der).expect("parse").1.subject().as_raw());
+        let parsed = Certificate::parse(&intermediate.der).expect("parse");
+        assert_eq!(parsed.issuer().as_raw(), Certificate::parse(&root.der).expect("parse").subject().as_raw());
     }
 }

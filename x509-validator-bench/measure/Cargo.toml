@@ -2,7 +2,7 @@
 name = "x509-validator-bench-measure"
 version = "0.0.0"
 edition = "2021"
-description = "Regression benchmarks for x509-validator, mirroring the reference verifier benchmark. Not published."
+description = "Regression benchmarks for x509-validator, mirroring the reference validator benchmark. Not published."
 publish = false
 
 [dependencies]
@@ -48,7 +48,7 @@ name = "parse"
 harness = false
 
 [[bench]]
-name = "verifier"
+name = "validator"
 harness = false
 
 [[bench]]

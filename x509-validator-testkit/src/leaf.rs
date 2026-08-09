@@ -30,7 +30,7 @@ pub fn issue_leaf_with_ip_sans(subject_cn: &str, ip_sans: Vec<std::net::IpAddr>,
 
 /// A non-CA leaf certificate issued by a CA whose only subjectAltName
 /// entries are rfc822Name (email) entries — i.e. a SAN extension that is
-/// present but contains nothing this verifier can match a service against.
+/// present but contains nothing this validator can match a service against.
 pub fn issue_leaf_with_email_sans(subject_cn: &str, email_sans: &[&str], issuer: &Ca) -> Vec<u8> {
     let mut params = base_params(subject_cn);
     params.subject_alt_names = email_sans
@@ -112,7 +112,7 @@ impl LeafSpec {
         self
     }
 
-    /// Attaches an extension the verifier does not recognise, marked
+    /// Attaches an extension the validator does not recognise, marked
     /// critical — the shape a policy must reject as unhandled.
     pub fn critical_extension(mut self, oid: &[u64], value: Vec<u8>) -> Self {
         self.critical_extension = Some((oid.to_vec(), value));
@@ -163,7 +163,7 @@ impl LeafSpec {
 mod leaf_spec_tests {
     use super::*;
     use time::{Duration, OffsetDateTime};
-    use x509_validator_core::{Certificate, FromDer};
+    use x509_validator_core::{Certificate, CertificateExt};
 
     #[test]
     fn leaf_spec_honours_validity_and_sans() {
@@ -176,7 +176,7 @@ mod leaf_spec_tests {
             .validity(not_before, not_after)
             .signed_by(&root);
 
-        let parsed = Certificate::from_der(&der).expect("parse").1;
+        let parsed = Certificate::parse(&der).expect("parse");
         assert_eq!(parsed.tbs_certificate.validity().not_before.timestamp(), not_before.unix_timestamp());
         assert_eq!(parsed.tbs_certificate.validity().not_after.timestamp(), not_after.unix_timestamp());
     }
@@ -189,7 +189,7 @@ mod leaf_spec_tests {
             .critical_extension(&[1, 2, 3, 4, 5], vec![1, 2, 3, 4, 5])
             .signed_by(&root);
 
-        let parsed = Certificate::from_der(&der).expect("parse").1;
+        let parsed = Certificate::parse(&der).expect("parse");
         assert!(parsed.tbs_certificate.extensions().iter().any(|e| e.critical && e.oid.to_id_string() == "1.2.3.4.5"));
     }
 }

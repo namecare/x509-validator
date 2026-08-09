@@ -1,23 +1,22 @@
 use crate::crypto::CryptoProvider;
 use crate::diagnostic::VerificationDiagnostic;
-use crate::policy::{PolicyFailureReason, VerifierPolicy};
+use crate::policy::{PolicyFailureReason, ValidationPolicy};
 use crate::store::CertificateStore;
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
 use x509_validator_core::validated_chain::ValidatedCertificateChain;
 use x509_validator_core::{Certificate, CertificateExt};
-use x509_validator_core::FromDer;
 
 fn parse_certificate_store(der: &[Vec<u8>]) -> Result<CertificateStore<'_>, PolicyFailureReason> {
     let mut store = CertificateStore::new();
     for bytes in der {
-        let (_, certificate) = Certificate::from_der(bytes).map_err(|_| PolicyFailureReason::new("failed to parse certificate DER"))?;
+        let certificate = Certificate::parse(bytes).map_err(|_| PolicyFailureReason::new("failed to parse certificate DER"))?;
         store.append(certificate);
     }
     Ok(store)
 }
 
-/// Validates an X.509 certificate chain against a set of root certificates and a [`VerifierPolicy`].
-pub struct BaseVerifier<'a, P> {
+/// Validates an X.509 certificate chain against a set of root certificates and a [`ValidationPolicy`].
+pub struct BaseValidator<'a, P> {
     /// The trusted root certificates used to anchor chain validation.
     root_certificates: CertificateStore<'a>,
     crypto: &'a CryptoProvider,
@@ -25,11 +24,11 @@ pub struct BaseVerifier<'a, P> {
     policy: P,
 }
 
-impl<'a, P> BaseVerifier<'a, P>
+impl<'a, P> BaseValidator<'a, P>
 where
-    P: VerifierPolicy,
+    P: ValidationPolicy,
 {
-    /// Creates a verifier with the given root certificates and policy.
+    /// Creates a validator with the given root certificates and policy.
     ///
     /// - Parameters:
     ///   - root_certificates: The trusted root certificates.
@@ -185,7 +184,7 @@ pub enum ChainValidationResultOwned<'a> {
     CouldNotValidate(Vec<PolicyFailureReason>),
 }
 
-fn has_unhandled_critical_extensions(cert: &Certificate, policy: &impl VerifierPolicy) -> bool {
+fn has_unhandled_critical_extensions(cert: &Certificate, policy: &impl ValidationPolicy) -> bool {
     let handled = policy.verifying_critical_extensions();
     cert.tbs_certificate.iter_extensions().any(|ext| ext.critical && !handled.contains(&ext.oid))
 }
@@ -213,7 +212,7 @@ fn should_skip_adding_certificate<'a>(
     candidate: &Certificate<'a>,
     partial_chain: &[Certificate<'a>],
     crypto: &CryptoProvider,
-    policy: &impl VerifierPolicy,
+    policy: &impl ValidationPolicy,
     diagnostic_callback: &mut dyn FnMut(VerificationDiagnostic<'a>),
 ) -> bool {
     // We want to confirm that the certificate has no unhandled critical extensions. If it does, we can't build the chain.
