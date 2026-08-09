@@ -8,9 +8,21 @@
 //! reported the same way as one that was checked and found wanting.
 
 use x509_validator::crypto::default_provider;
+use x509_validator_core::{Certificate, CertificateExt};
+use x509_validator_testkit::rcgen::{CertificateParams, KeyPair};
+
+/// A real self-signed certificate, giving the tests a genuine
+/// signature to hand the default provider. rcgen's default algorithm is
+/// ECDSA P-256 / SHA-256, which every backend supports.
+fn self_signed_certificate() -> Certificate<'static> {
+    let key_pair = KeyPair::generate().expect("generate key pair");
+    let der = CertificateParams::default().self_signed(&key_pair).expect("self-sign").der().to_vec();
+    let der: &'static [u8] = Box::leak(der.into_boxed_slice());
+    Certificate::parse(der).expect("parse certificate")
+}
 
 /// With exactly one backend enabled, the default provider is that backend and
-/// really computes, rather than being a placeholder that defers a panic.
+/// really verifies, rather than being a placeholder that defers a panic.
 #[cfg(any(
     all(feature = "aws_lc", not(feature = "ring"), not(feature = "rust_crypto")),
     all(feature = "ring", not(feature = "aws_lc"), not(feature = "rust_crypto")),
@@ -18,13 +30,16 @@ use x509_validator::crypto::default_provider;
 ))]
 #[test]
 fn single_backend_feature_determines_a_working_provider() {
-    // SHA-256 of the empty input, from FIPS 180-4. Any real backend produces
-    // it; the undetermined-backend provider panics instead.
-    let expected = [
-        0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14, 0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24, 0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93,
-        0x4c, 0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55,
-    ];
-    assert_eq!(default_provider().sha256.hash(b""), expected);
+    let cert = self_signed_certificate();
+
+    let result = default_provider().verify_signature(
+        &cert.signature_algorithm,
+        cert.public_key(),
+        cert.tbs_certificate.as_ref(),
+        cert.signature_value.as_ref(),
+    );
+
+    assert!(result.is_ok(), "expected the self-signature to verify, got {result:?}");
 }
 
 /// With no backend enabled, or several, the default provider panics on use.
@@ -37,7 +52,19 @@ fn single_backend_feature_determines_a_working_provider() {
 )))]
 #[test]
 fn undetermined_backend_panics_naming_the_features() {
-    let panic = std::panic::catch_unwind(|| default_provider().sha256.hash(b"")).expect_err("expected a panic, got a digest");
+    let cert = self_signed_certificate();
+
+    // `AssertUnwindSafe`: the certificate is only read, and the test ends
+    // with the catch, so no witnessed broken invariant can escape.
+    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        default_provider().verify_signature(
+            &cert.signature_algorithm,
+            cert.public_key(),
+            cert.tbs_certificate.as_ref(),
+            cert.signature_value.as_ref(),
+        )
+    }))
+    .expect_err("expected a panic, got a verification result");
 
     let message = panic
         .downcast_ref::<String>()

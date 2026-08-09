@@ -1,8 +1,8 @@
 //! The body shared by the aws-lc-rs and ring crypto backends.
 //!
 //! aws-lc-rs and ring expose the same shape — a `signature` module of
-//! `&'static dyn VerificationAlgorithm` constants, an `UnparsedPublicKey` that
-//! pairs one with key bytes, and a `digest` module — so mapping X.509
+//! `&'static dyn VerificationAlgorithm` constants and an `UnparsedPublicKey`
+//! that pairs one with key bytes — so mapping X.509
 //! algorithm identifiers onto them is the same code twice over, differing only
 //! in which crate the names resolve to and in which algorithms the crate
 //! actually ships.
@@ -35,10 +35,8 @@ macro_rules! backend {
         use $krate::signature::{self, UnparsedPublicKey, VerificationAlgorithm};
         use x509_validator_core::oid_registry;
         use x509_validator_core::asn1_rs::Any;
-        use x509_validator_core::crypto::rsa_pss_digest_bits;
         use x509_validator_core::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
-
-        use crate::crypto::{CryptoError, CryptoProvider, Digest, KeyProvider, PublicKey};
+        use crate::crypto::{CryptoError, CryptoProvider, KeyProvider, PublicKey, rsa_pss_digest_bits};
 
         /// Maps an X.509 `signatureAlgorithm` OID (plus, for ECDSA, the
         /// signer's public-key curve OID) to this backend's matching
@@ -113,14 +111,6 @@ macro_rules! backend {
         #[derive(Debug)]
         struct $backend;
 
-        impl Digest for $backend {
-            fn hash(&self, data: &[u8]) -> Vec<u8> {
-                $krate::digest::digest(&$krate::digest::SHA256, data)
-                    .as_ref()
-                    .to_vec()
-            }
-        }
-
         /// `UnparsedPublicKey` already pairs an algorithm with key bytes and
         /// verifies against them, so it serves as the `PublicKey` itself
         /// rather than being wrapped in one.
@@ -154,7 +144,6 @@ macro_rules! backend {
 
         pub const DEFAULT_PROVIDER: CryptoProvider = CryptoProvider {
             key_provider: &$backend,
-            sha256: &$backend,
         };
     };
 }

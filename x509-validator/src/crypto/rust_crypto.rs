@@ -15,11 +15,11 @@
 use signature::Verifier;
 
 use x509_validator_core::asn1_rs::Any;
-use x509_validator_core::crypto::rsa_pss_digest_bits;
 use x509_validator_core::oid_registry;
 use x509_validator_core::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
 
-use crate::crypto::{CryptoError, CryptoProvider, Digest, KeyProvider, PublicKey};
+use crate::crypto::{CryptoError, CryptoProvider, KeyProvider, PublicKey};
+use crate::rsa_pss_digest_bits;
 
 /// The verification algorithms this backend provides.
 ///
@@ -276,14 +276,6 @@ impl RustCryptoPublicKey {
 #[derive(Debug)]
 struct RustCrypto;
 
-impl Digest for RustCrypto {
-    fn hash(&self, data: &[u8]) -> Vec<u8> {
-        use sha2::Digest as _;
-
-        sha2::Sha256::digest(data).to_vec()
-    }
-}
-
 impl KeyProvider for RustCrypto {
     fn public_key(
         &self,
@@ -304,7 +296,6 @@ impl KeyProvider for RustCrypto {
 
 pub const DEFAULT_PROVIDER: CryptoProvider = CryptoProvider {
     key_provider: &RustCrypto,
-    sha256: &RustCrypto,
 };
 
 #[cfg(test)]
@@ -380,12 +371,6 @@ mod tests {
 
         let result = RustCrypto.public_key(&algorithm, cert.public_key());
         assert!(matches!(result, Err(CryptoError::InvalidKey(_))));
-    }
-
-    #[test]
-    fn digest_returns_32_bytes() {
-        let hash = RustCrypto.hash(b"some data");
-        assert_eq!(hash.len(), 32);
     }
 
     /// Self-signs under `algorithm` and checks the resulting signature

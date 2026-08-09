@@ -4,7 +4,6 @@ pub mod validator;
 pub use validator::*;
 
 pub mod certificate;
-pub mod crypto;
 pub mod error;
 pub mod unverified_chain;
 pub mod validated_chain;

@@ -72,10 +72,4 @@ mod tests {
         let result = AwsLc.public_key(&algorithm, cert.public_key());
         assert!(matches!(result, Err(CryptoError::InvalidKey(_))));
     }
-
-    #[test]
-    fn digest_returns_32_bytes() {
-        let hash = AwsLc.hash(b"some data");
-        assert_eq!(hash.len(), 32);
-    }
 }
