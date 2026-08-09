@@ -60,7 +60,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo registry
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry/index
@@ -82,7 +82,7 @@ jobs:
       # measures, and the report states loudly that nothing was compared.
       - name: Restore baseline
         if: github.event_name == 'pull_request'
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ${{ env.BASELINE_DIR }}
           key: criterion-baseline-${{ github.base_ref }}-
@@ -156,7 +156,7 @@ jobs:
       # so this is "save this report as the latest for this branch".
       - name: Save baseline
         if: github.event_name == 'push'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: ${{ env.BASELINE_DIR }}
           key: criterion-baseline-${{ github.ref_name }}-${{ github.sha }}
