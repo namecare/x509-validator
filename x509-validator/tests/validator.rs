@@ -1,4 +1,4 @@
-//! Chain-building conformance for `BaseVerifier`, run against a real
+//! Chain-building conformance for `BaseValidator`, run against a real
 //! crypto backend.
 //!
 //! Every certificate here is genuinely signed by the key of the certificate
@@ -21,14 +21,14 @@ use x509_validator::crypto::rust_crypto::DEFAULT_PROVIDER;
 use std::sync::{Arc, Mutex};
 
 use x509_validator::diagnostic::VerificationDiagnostic;
-use x509_validator::policy::{PolicyEvaluationResult, PolicyFailureReason, VerifierPolicy};
+use x509_validator::policy::{PolicyEvaluationResult, PolicyFailureReason, ValidationPolicy};
 use x509_validator::store::{subject_key, CertificateStore};
-use x509_validator::verifier::ChainValidationResultOwned;
-use x509_validator::BaseVerifier;
+use x509_validator::validator::ChainValidationResultOwned;
+use x509_validator::BaseValidator;
 use x509_validator_core::extensions::ParsedExtension;
 use x509_validator_core::oid_registry::{OID_X509_EXT_AUTHORITY_KEY_IDENTIFIER, OID_X509_EXT_BASIC_CONSTRAINTS, OID_X509_EXT_SUBJECT_KEY_IDENTIFIER};
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
-use x509_validator_core::{Certificate, FromDer};
+use x509_validator_core::{Certificate, CertificateExt};
 use x509_validator_testkit::rcgen::KeyPair;
 use x509_validator_testkit::{
     cert, issue_ca, issue_ca_with_key, issue_ca_with_key_and_name, issue_ca_with_key_ids, issue_leaf, issue_leaf_with, issue_leaf_with_aki, leak,
@@ -36,7 +36,7 @@ use x509_validator_testkit::{
 };
 
 fn parse(der: &'static [u8]) -> Certificate<'static> {
-    Certificate::from_der(der).unwrap().1
+    Certificate::parse(der).unwrap()
 }
 
 /// The `subjectKeyIdentifier` bytes of `cert`, if present and parseable.
@@ -87,7 +87,7 @@ fn assert_chain_is(result: ChainValidationResultOwned<'_>, expected: &[&Certific
 /// A policy that accepts every chain, so that a test's outcome is decided
 /// purely by chain building and signature verification.
 struct AlwaysMeetsPolicy;
-impl VerifierPolicy for AlwaysMeetsPolicy {
+impl ValidationPolicy for AlwaysMeetsPolicy {
     fn verifying_critical_extensions(&self) -> Vec<x509_validator_core::der_parser::Oid<'static>> {
         // The generator always marks basicConstraints critical, so a policy
         // claiming no extensions at all would reject every generated
@@ -110,9 +110,9 @@ fn trivial_chain_succeeds_leaf_intermediate_root() {
     let leaf = parse(leaf_der);
     let roots = CertificateStore::from_iter(vec![parse(root_der)]);
     let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
-    let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
+    let mut validator = BaseValidator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
-    let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+    let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
     // The chain is exactly leaf, intermediate, root — leaf-to-root order,
     // as RFC 5280 §6.1 orders a certification path from the subject
     // outward to the trust anchor.
@@ -128,9 +128,9 @@ fn missing_issuer_fails() {
     let leaf = parse(leaf_der);
     let roots: CertificateStore = CertificateStore::new();
     let intermediates: CertificateStore = CertificateStore::new();
-    let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
+    let mut validator = BaseValidator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
-    let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+    let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
     assert!(matches!(result, ChainValidationResultOwned::CouldNotValidate(_)));
 }
 
@@ -141,9 +141,9 @@ fn leaf_directly_in_root_store_is_accepted_immediately() {
     let leaf = parse(root_der);
     let roots = CertificateStore::from_iter(vec![parse(root_der)]);
     let intermediates: CertificateStore = CertificateStore::new();
-    let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
+    let mut validator = BaseValidator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
-    let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+    let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
     match result {
         ChainValidationResultOwned::ValidCertificate(chain) => {
             let certs: Vec<&Certificate> = chain.iter().collect();
@@ -187,9 +187,9 @@ fn candidate_with_non_verifying_signature_is_skipped() {
 
     let roots = CertificateStore::from_iter(vec![impostor_cert]);
     let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
-    let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
+    let mut validator = BaseValidator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
-    let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+    let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
     assert!(matches!(result, ChainValidationResultOwned::CouldNotValidate(_)));
 }
 
@@ -213,9 +213,9 @@ fn candidate_with_unhandled_critical_extension_is_skipped() {
     let leaf = parse(leaf_der);
     let roots = CertificateStore::from_iter(vec![parse(root_der)]);
     let intermediates: CertificateStore = CertificateStore::new();
-    let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
+    let mut validator = BaseValidator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
-    let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+    let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
     assert!(matches!(result, ChainValidationResultOwned::CouldNotValidate(_)));
 }
 
@@ -230,7 +230,7 @@ fn policy_failure_on_first_root_candidate_continues_search() {
     struct RequireRootPolicy {
         right_root_der: Vec<u8>,
     }
-    impl VerifierPolicy for RequireRootPolicy {
+    impl ValidationPolicy for RequireRootPolicy {
         fn verifying_critical_extensions(&self) -> Vec<x509_validator_core::der_parser::Oid<'static>> {
             vec![OID_X509_EXT_BASIC_CONSTRAINTS]
         }
@@ -258,9 +258,9 @@ fn policy_failure_on_first_root_candidate_continues_search() {
     let policy = RequireRootPolicy {
         right_root_der: right_root_der.to_vec(),
     };
-    let mut verifier = BaseVerifier::with_policy_and_backend(roots, policy, &DEFAULT_PROVIDER);
+    let mut validator = BaseValidator::with_policy_and_backend(roots, policy, &DEFAULT_PROVIDER);
 
-    let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+    let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
     assert_chain_is(result, &[&leaf, &parse(right_root_der)]);
 }
 
@@ -281,12 +281,12 @@ fn candidate_without_subject_key_identifier_is_preferred_over_one_whose_ski_mism
     // a bad signature. The mismatching-SKI root is inserted first, so only
     // a three-way ranking puts the no-SKI root ahead of it.
     // The recording buffer is shared rather than owned by the policy: the
-    // verifier takes the policy by value and does not hand it back, so the
+    // validator takes the policy by value and does not hand it back, so the
     // test keeps its own handle on the record.
     struct RecordingPolicy {
         root_skis: Arc<Mutex<Vec<Option<Vec<u8>>>>>,
     }
-    impl VerifierPolicy for RecordingPolicy {
+    impl ValidationPolicy for RecordingPolicy {
         fn verifying_critical_extensions(&self) -> Vec<x509_validator_core::der_parser::Oid<'static>> {
             vec![OID_X509_EXT_BASIC_CONSTRAINTS]
         }
@@ -343,9 +343,9 @@ fn candidate_without_subject_key_identifier_is_preferred_over_one_whose_ski_mism
     let policy = RecordingPolicy {
         root_skis: Arc::clone(&root_skis),
     };
-    let mut verifier = BaseVerifier::with_policy_and_backend(roots, policy, &DEFAULT_PROVIDER);
+    let mut validator = BaseValidator::with_policy_and_backend(roots, policy, &DEFAULT_PROVIDER);
 
-    let _ = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+    let _ = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
 
     let visited = root_skis.lock().unwrap().clone();
     assert_eq!(visited.len(), 2, "both roots should have been offered to the policy");
@@ -365,9 +365,9 @@ fn missing_intermediate_fails_to_build() {
     let leaf = parse(leaf_der);
     let roots = CertificateStore::from_iter(vec![parse(root_der)]);
     let intermediates: CertificateStore = CertificateStore::new();
-    let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
+    let mut validator = BaseValidator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
-    let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+    let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
     match result {
         ChainValidationResultOwned::CouldNotValidate(reasons) => {
             // Nothing was ever offered to the policy, so there is no
@@ -390,9 +390,9 @@ fn missing_root_fails_to_build() {
     let leaf = parse(leaf_der);
     let roots: CertificateStore = CertificateStore::new();
     let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
-    let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
+    let mut validator = BaseValidator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
-    let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+    let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
     match result {
         ChainValidationResultOwned::CouldNotValidate(reasons) => {
             assert!(reasons.is_empty(), "expected no policy failures, got: {reasons:?}");
@@ -416,9 +416,9 @@ fn extra_roots_are_ignored() {
     let leaf = parse(leaf_der);
     let roots = CertificateStore::from_iter(vec![parse(root_der), parse(unrelated_root_der)]);
     let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
-    let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
+    let mut validator = BaseValidator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
-    let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+    let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
     assert_chain_is(result, &[&leaf, &parse(intermediate_der), &parse(root_der)]);
 }
 
@@ -438,9 +438,9 @@ fn roots_also_present_in_the_intermediate_store_are_not_a_problem() {
     let leaf = parse(leaf_der);
     let roots = CertificateStore::from_iter(vec![parse(root_der), parse(unrelated_root_der)]);
     let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der), parse(root_der), parse(unrelated_root_der)]);
-    let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
+    let mut validator = BaseValidator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
-    let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+    let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
     assert_chain_is(result, &[&leaf, &parse(intermediate_der), &parse(root_der)]);
 }
 
@@ -460,9 +460,9 @@ fn self_signed_certificate_is_rejected_when_not_in_the_trust_store() {
     let leaf = parse(isolated_der);
     let roots = CertificateStore::from_iter(vec![parse(trusted_root_der)]);
     let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
-    let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
+    let mut validator = BaseValidator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
-    let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+    let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
     assert!(
         matches!(result, ChainValidationResultOwned::CouldNotValidate(_)),
         "a self-signed certificate outside the trust store must not validate"
@@ -484,9 +484,9 @@ fn self_signed_certificate_is_trusted_when_in_the_trust_store() {
     let leaf = parse(isolated_der);
     let roots = CertificateStore::from_iter(vec![parse(trusted_root_der), parse(isolated_der)]);
     let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
-    let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
+    let mut validator = BaseValidator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
-    let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+    let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
     assert_chain_is(result, &[&leaf]);
 }
 
@@ -503,9 +503,9 @@ fn trust_roots_can_be_non_self_signed_leaves() {
     let leaf = parse(leaf_der);
     let roots = CertificateStore::from_iter(vec![parse(leaf_der)]);
     let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
-    let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
+    let mut validator = BaseValidator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
-    let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+    let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
     assert_chain_is(result, &[&leaf]);
 }
 
@@ -522,9 +522,9 @@ fn trust_roots_can_be_non_self_signed_intermediates() {
     let leaf = parse(leaf_der);
     let roots = CertificateStore::from_iter(vec![parse(intermediate_der)]);
     let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
-    let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
+    let mut validator = BaseValidator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
-    let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+    let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
     assert_chain_is(result, &[&leaf, &parse(intermediate_der)]);
 }
 
@@ -557,9 +557,9 @@ fn critical_extensions_are_policed_on_leaf_certificates() {
 
     let roots = CertificateStore::from_iter(vec![parse(trusted_root_der), parse(weird_der)]);
     let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
-    let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
+    let mut validator = BaseValidator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
-    let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+    let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
     assert!(
         matches!(result, ChainValidationResultOwned::CouldNotValidate(_)),
         "a leaf with an unhandled critical extension must not validate"
@@ -610,9 +610,9 @@ fn roots_with_a_matching_subject_key_identifier_are_preferred() {
     // Insertion order deliberately puts the unranked root first.
     let roots = CertificateStore::from_iter(vec![no_ski_cert, matching_cert]);
     let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
-    let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
+    let mut validator = BaseValidator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
-    let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+    let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
     assert_chain_is(result, &[&leaf, &parse(intermediate_der), &parse(matching_der)]);
 }
 
@@ -662,9 +662,9 @@ fn intermediates_whose_subject_key_identifier_matches_the_subject_aki_are_prefer
     let roots = CertificateStore::from_iter(vec![parse(root_der)]);
     // Insertion order deliberately puts the unranked intermediate first.
     let intermediates = CertificateStore::from_iter(vec![no_ski_cert, matching_cert]);
-    let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
+    let mut validator = BaseValidator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
-    let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+    let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
     assert_chain_is(result, &[&leaf, &parse(matching_der), &parse(root_der)]);
 }
 
@@ -688,9 +688,9 @@ fn cross_signed_root_is_supported() {
     let leaf = parse(leaf_der);
     let roots = CertificateStore::from_iter(vec![parse(ca2_der)]);
     let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der), parse(cross_signed_der)]);
-    let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
+    let mut validator = BaseValidator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
-    let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+    let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
     assert_chain_is(result, &[&leaf, &parse(intermediate_der), &parse(cross_signed_der), &parse(ca2_der)]);
 }
 
@@ -721,9 +721,9 @@ fn shorter_path_is_built_when_cross_signed_roots_offer_both() {
     let leaf = parse(leaf_der);
     let roots = CertificateStore::from_iter(vec![parse(ca1_der), parse(ca2_der)]);
     let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der), parse(ca2_cross_der), parse(ca1_cross_der)]);
-    let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
+    let mut validator = BaseValidator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
-    let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+    let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
     assert_chain_is(result, &[&leaf, &parse(intermediate_der), &parse(ca1_der)]);
 }
 
@@ -774,9 +774,9 @@ fn roots_that_did_not_sign_the_certificate_below_them_are_rejected() {
     // impostor bearing its name and ca2 are trusted.
     let roots = CertificateStore::from_iter(vec![ca1_other_cert, parse(ca2_der)]);
     let intermediates = CertificateStore::from_iter(vec![parse(ca1_cross_der), parse(ca2_cross_der), parse(intermediate_der)]);
-    let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
+    let mut validator = BaseValidator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
-    let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+    let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
     assert_chain_is(result, &[&leaf, &parse(intermediate_der), &parse(ca1_cross_der), &parse(ca2_der)]);
 }
 
@@ -790,7 +790,7 @@ fn policy_failures_let_the_search_find_a_longer_path() {
     struct ForbidCertificatePolicy {
         forbidden_der: Vec<u8>,
     }
-    impl VerifierPolicy for ForbidCertificatePolicy {
+    impl ValidationPolicy for ForbidCertificatePolicy {
         fn verifying_critical_extensions(&self) -> Vec<x509_validator_core::der_parser::Oid<'static>> {
             vec![OID_X509_EXT_BASIC_CONSTRAINTS]
         }
@@ -823,9 +823,9 @@ fn policy_failures_let_the_search_find_a_longer_path() {
     let policy = ForbidCertificatePolicy {
         forbidden_der: ca1_der.to_vec(),
     };
-    let mut verifier = BaseVerifier::with_policy_and_backend(roots, policy, &DEFAULT_PROVIDER);
+    let mut validator = BaseValidator::with_policy_and_backend(roots, policy, &DEFAULT_PROVIDER);
 
-    let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+    let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
     assert_chain_is(result, &[&leaf, &parse(intermediate_der), &parse(ca1_cross_der), &parse(ca2_der)]);
 }
 
@@ -970,7 +970,7 @@ fn pathological_pki_with_mutually_cross_signed_intermediates_can_still_build() {
 
     let roots = CertificateStore::from_iter(vec![parse(root_der)]);
     let intermediates = CertificateStore::from_iter(vec![parse(t1_der), parse(t2_der), parse(t3_der), parse(x2_der), parse(x1_der)]);
-    let mut verifier = BaseVerifier::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
+    let mut validator = BaseValidator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
     // Bound the search explicitly. Without loop detection this PKI has
     // no finite traversal at all, so an unbounded run would hang rather
@@ -980,7 +980,7 @@ fn pathological_pki_with_mutually_cross_signed_intermediates_can_still_build() {
     // well under this many events; the ceiling only has to be finite.
     const MAX_SEARCH_EVENTS: usize = 500;
     let mut events = 0usize;
-    let result = verifier.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {
+    let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {
         events += 1;
         assert!(
             events <= MAX_SEARCH_EVENTS,

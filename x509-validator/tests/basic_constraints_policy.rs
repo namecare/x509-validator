@@ -1,7 +1,7 @@
-use x509_validator::{BasicConstraintsPolicy, VerifierPolicy};
+use x509_validator::{BasicConstraintsPolicy, ValidationPolicy};
 use x509_validator_core::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS;
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
-use x509_validator_core::{Certificate, FromDer};
+use x509_validator_core::{Certificate, CertificateExt};
 use x509_validator_testkit::rcgen::CertificateParams;
 use x509_validator_testkit::{chain_of, issue_ca, issue_leaf, self_signed_ca_with};
 
@@ -41,18 +41,18 @@ fn non_ca_intermediate_is_rejected() {
     // another cert anyway — its basicConstraints has no CA bit set.
     let intermediate = issue_leaf("intermediate", &[], &root);
     let intermediate_der: &'static [u8] = Box::leak(intermediate.clone().into_boxed_slice());
-    let intermediate_cert = Certificate::from_der(intermediate_der).unwrap().1;
+    let intermediate_cert = Certificate::parse(intermediate_der).unwrap();
     let leaf = issue_leaf("leaf", &["www.example.com"], &root);
 
     let chain = UnverifiedCertificateChain::new(vec![
         {
             let leaf_der: &'static [u8] = Box::leak(leaf.into_boxed_slice());
-            Certificate::from_der(leaf_der).unwrap().1
+            Certificate::parse(leaf_der).unwrap()
         },
         intermediate_cert,
         {
             let root_der: &'static [u8] = Box::leak(root.der.into_boxed_slice());
-            Certificate::from_der(root_der).unwrap().1
+            Certificate::parse(root_der).unwrap()
         },
     ]);
     let mut policy = BasicConstraintsPolicy;

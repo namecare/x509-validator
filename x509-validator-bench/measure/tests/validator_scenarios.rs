@@ -1,18 +1,18 @@
 //! Confirms every scenario in the parity benchmark actually produces the
 //! outcome its name claims.
 //!
-//! `benches/verifier.rs` has `harness = false`, so a `#[test]` fn placed
+//! `benches/validator.rs` has `harness = false`, so a `#[test]` fn placed
 //! there would silently never run. This file is the deliverable that makes
 //! the parity benchmark trustworthy: a scenario that quietly produces the
 //! wrong `ChainValidationResultOwned` variant still benchmarks something,
 //! but it stops being the scenario it is named after, and the comparison to
 //! the reference implementation becomes meaningless.
 
-use x509_validator::policy::{PolicyEvaluationResult, PolicyFailureReason, VerifierPolicy};
+use x509_validator::policy::{PolicyEvaluationResult, PolicyFailureReason, ValidationPolicy};
 use x509_validator::rfc5280::RFC5280Policy;
 use x509_validator::store::CertificateStore;
-use x509_validator::verifier::ChainValidationResultOwned;
-use x509_validator::BaseVerifier;
+use x509_validator::validator::ChainValidationResultOwned;
+use x509_validator::BaseValidator;
 use x509_validator_bench_measure::{fixtures, BACKEND};
 use x509_validator_core::der_parser::Oid;
 use x509_validator_core::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS;
@@ -26,7 +26,7 @@ struct FailIfCertInChainPolicy {
     inner: RFC5280Policy,
 }
 
-impl VerifierPolicy for FailIfCertInChainPolicy {
+impl ValidationPolicy for FailIfCertInChainPolicy {
     fn verifying_critical_extensions(&self) -> Vec<Oid<'static>> {
         vec![OID_X509_EXT_BASIC_CONSTRAINTS]
     }
@@ -42,7 +42,7 @@ impl VerifierPolicy for FailIfCertInChainPolicy {
 /// Accepts every chain, so an outcome is decided purely by chain building.
 struct IgnoreBasicConstraintsPolicy;
 
-impl VerifierPolicy for IgnoreBasicConstraintsPolicy {
+impl ValidationPolicy for IgnoreBasicConstraintsPolicy {
     fn verifying_critical_extensions(&self) -> Vec<Oid<'static>> {
         vec![OID_X509_EXT_BASIC_CONSTRAINTS]
     }
@@ -60,7 +60,7 @@ enum Expect {
 }
 
 /// Runs one scenario with the plain `RFC5280Policy` and asserts the outcome
-/// matches what the scenario's name in `benches/verifier.rs` claims.
+/// matches what the scenario's name in `benches/validator.rs` claims.
 fn assert_scenario(
     name: &str,
     roots: Vec<Certificate<'static>>,
@@ -68,12 +68,12 @@ fn assert_scenario(
     leaf: &Certificate<'static>,
     expect: Expect,
 ) {
-    let mut verifier = BaseVerifier::with_policy_and_backend(
+    let mut validator = BaseValidator::with_policy_and_backend(
         CertificateStore::from_iter(roots),
         RFC5280Policy::new(fixtures::REFERENCE_TIME),
         BACKEND,
     );
-    let result = verifier.validate_with_diagnostics(leaf, &CertificateStore::from_iter(intermediates), &mut |_| {});
+    let result = validator.validate_with_diagnostics(leaf, &CertificateStore::from_iter(intermediates), &mut |_| {});
     assert_outcome(name, &result, expect);
 }
 
@@ -200,7 +200,7 @@ fn rejects_root_that_did_not_sign() {
 #[test]
 fn policy_failure_sends_search_down_longer_path() {
     let p = fixtures::parity();
-    let mut verifier = BaseVerifier::with_policy_and_backend(
+    let mut validator = BaseValidator::with_policy_and_backend(
         CertificateStore::from_iter(vec![p.ca1.clone(), p.ca2.clone()]),
         FailIfCertInChainPolicy {
             forbidden: p.ca1.as_ref().to_vec(),
@@ -213,7 +213,7 @@ fn policy_failure_sends_search_down_longer_path() {
         p.ca2_cross_signed_by_ca1.clone(),
         p.ca1_cross_signed_by_ca2.clone(),
     ]);
-    let result = verifier.validate_with_diagnostics(&p.localhost_leaf, &intermediates, &mut |_| {});
+    let result = validator.validate_with_diagnostics(&p.localhost_leaf, &intermediates, &mut |_| {});
     assert_outcome("a policy failure sends the search down a longer path", &result, Expect::Valid);
 }
 
@@ -232,13 +232,13 @@ fn self_signed_certificate_in_trust_store_validates() {
 #[test]
 fn trust_root_may_be_non_self_signed_leaf() {
     let p = fixtures::parity();
-    let mut verifier = BaseVerifier::with_policy_and_backend(
+    let mut validator = BaseValidator::with_policy_and_backend(
         CertificateStore::from_iter(vec![p.localhost_leaf.clone()]),
         IgnoreBasicConstraintsPolicy,
         BACKEND,
     );
     let intermediates = CertificateStore::from_iter(vec![p.intermediate1.clone()]);
-    let result = verifier.validate_with_diagnostics(&p.localhost_leaf, &intermediates, &mut |_| {});
+    let result = validator.validate_with_diagnostics(&p.localhost_leaf, &intermediates, &mut |_| {});
     assert_outcome("a trust root may be a non-self-signed leaf", &result, Expect::Valid);
 }
 

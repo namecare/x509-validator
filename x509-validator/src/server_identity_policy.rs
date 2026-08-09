@@ -1,4 +1,4 @@
-use crate::policy::{PolicyEvaluationResult, PolicyFailureReason, VerifierPolicy};
+use crate::policy::{PolicyEvaluationResult, PolicyFailureReason, ValidationPolicy};
 use std::net::{Ipv4Addr, Ipv6Addr};
 use x509_validator_core::der_parser::Oid;
 use x509_validator_core::extensions::GeneralName;
@@ -10,14 +10,14 @@ const ASCII_PERIOD: u8 = b'.';
 const ASCII_ASTERISK: u8 = b'*';
 const ASCII_IDNA_IDENTIFIER: &[u8] = b"xn--";
 
-/// A [`VerifierPolicy`] that checks whether the leaf certificate is authoritative
+/// A [`ValidationPolicy`] that checks whether the leaf certificate is authoritative
 /// for a given hostname or IP address.
 ///
 /// This policy is most commonly used to validate the leaf certificate presented by a server
 /// during a TLS handshake.
 ///
 /// This policy implements the logic for service validation as specified by
-/// RFC 6125 (https://tools.ietf.org/search/rfc6125), which loosely speaking
+/// RFC 6125 (<https://tools.ietf.org/search/rfc6125>), which loosely speaking
 /// defines the common algorithm used for validating that an X.509 certificate
 /// is valid for a given service
 pub struct ServerIdentityPolicy {
@@ -44,7 +44,7 @@ fn subject_alt_name_oid() -> Oid<'static> {
     OID_X509_EXT_SUBJECT_ALT_NAME
 }
 
-impl VerifierPolicy for ServerIdentityPolicy {
+impl ValidationPolicy for ServerIdentityPolicy {
     fn verifying_critical_extensions(&self) -> Vec<Oid<'static>> {
         vec![subject_alt_name_oid()]
     }
@@ -58,7 +58,7 @@ impl VerifierPolicy for ServerIdentityPolicy {
 /// Validates that a given leaf certificate is valid for a service.
 ///
 /// This function implements the logic for service validation as specified by
-/// RFC 6125 (https://tools.ietf.org/search/rfc6125), which loosely speaking
+/// RFC 6125 (<https://tools.ietf.org/search/rfc6125>), which loosely speaking
 /// defines the common algorithm used for validating that an X.509 certificate
 /// is valid for a given service
 ///

@@ -6,8 +6,8 @@
 
 use x509_validator::rfc5280::RFC5280Policy;
 use x509_validator::store::CertificateStore;
-use x509_validator::verifier::ChainValidationResultOwned;
-use x509_validator::BaseVerifier;
+use x509_validator::validator::ChainValidationResultOwned;
+use x509_validator::BaseValidator;
 use x509_validator_bench_compare::{fixtures, Backend, BACKENDS};
 
 fn main() {
@@ -24,8 +24,8 @@ fn validate_three_cert_chain(bencher: divan::Bencher, backend: Backend) {
     // error path and every number would be meaningless.
     let roots = CertificateStore::from_iter(vec![parity.ca1.clone()]);
     let intermediates = CertificateStore::from_iter(vec![parity.intermediate1.clone()]);
-    let mut verifier = BaseVerifier::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::REFERENCE_TIME), backend.provider);
-    let result = verifier.validate_with_diagnostics(&parity.localhost_leaf, &intermediates, &mut |_| {});
+    let mut validator = BaseValidator::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::REFERENCE_TIME), backend.provider);
+    let result = validator.validate_with_diagnostics(&parity.localhost_leaf, &intermediates, &mut |_| {});
     assert!(
         matches!(result, ChainValidationResultOwned::ValidCertificate(_)),
         "three-cert chain must validate successfully for {}, but validation failed",
@@ -42,8 +42,8 @@ fn validate_three_cert_chain(bencher: divan::Bencher, backend: Backend) {
             (roots, intermediates)
         })
         .bench_values(|(roots, intermediates)| {
-            let mut verifier = BaseVerifier::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::REFERENCE_TIME), backend.provider);
-            divan::black_box(verifier.validate_with_diagnostics(divan::black_box(&parity.localhost_leaf), &intermediates, &mut |_| {}))
+            let mut validator = BaseValidator::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::REFERENCE_TIME), backend.provider);
+            divan::black_box(validator.validate_with_diagnostics(divan::black_box(&parity.localhost_leaf), &intermediates, &mut |_| {}))
         });
 }
 
@@ -61,8 +61,8 @@ fn validate_apple_receipt_chain(bencher: divan::Bencher, backend: Backend) {
 
     let roots = CertificateStore::from_iter(vec![chain.root.clone()]);
     let intermediates = CertificateStore::from_iter(vec![chain.intermediate.clone()]);
-    let mut verifier = BaseVerifier::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::apple::SIGNED_DATE), backend.provider);
-    let result = verifier.validate_with_diagnostics(&chain.leaf, &intermediates, &mut |_| {});
+    let mut validator = BaseValidator::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::apple::SIGNED_DATE), backend.provider);
+    let result = validator.validate_with_diagnostics(&chain.leaf, &intermediates, &mut |_| {});
     assert!(
         matches!(result, ChainValidationResultOwned::ValidCertificate(_)),
         "the Apple receipt chain must validate successfully for {}, but validation failed",
@@ -76,8 +76,8 @@ fn validate_apple_receipt_chain(bencher: divan::Bencher, backend: Backend) {
             (roots, intermediates)
         })
         .bench_values(|(roots, intermediates)| {
-            let mut verifier = BaseVerifier::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::apple::SIGNED_DATE), backend.provider);
-            divan::black_box(verifier.validate_with_diagnostics(divan::black_box(&chain.leaf), &intermediates, &mut |_| {}))
+            let mut validator = BaseValidator::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::apple::SIGNED_DATE), backend.provider);
+            divan::black_box(validator.validate_with_diagnostics(divan::black_box(&chain.leaf), &intermediates, &mut |_| {}))
         });
 }
 
@@ -93,8 +93,8 @@ fn validate_with_cross_signed_candidates(bencher: divan::Bencher, backend: Backe
         parity.ca1_cross_signed_by_ca2.clone(),
         parity.ca2_cross_signed_by_ca1.clone(),
     ]);
-    let mut verifier = BaseVerifier::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::REFERENCE_TIME), backend.provider);
-    let result = verifier.validate_with_diagnostics(&parity.localhost_leaf, &intermediates, &mut |_| {});
+    let mut validator = BaseValidator::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::REFERENCE_TIME), backend.provider);
+    let result = validator.validate_with_diagnostics(&parity.localhost_leaf, &intermediates, &mut |_| {});
     assert!(
         matches!(result, ChainValidationResultOwned::ValidCertificate(_)),
         "chain with cross-signed decoys must validate successfully for {}, but validation failed",
@@ -112,7 +112,7 @@ fn validate_with_cross_signed_candidates(bencher: divan::Bencher, backend: Backe
             (roots, intermediates)
         })
         .bench_values(|(roots, intermediates)| {
-            let mut verifier = BaseVerifier::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::REFERENCE_TIME), backend.provider);
-            divan::black_box(verifier.validate_with_diagnostics(divan::black_box(&parity.localhost_leaf), &intermediates, &mut |_| {}))
+            let mut validator = BaseValidator::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::REFERENCE_TIME), backend.provider);
+            divan::black_box(validator.validate_with_diagnostics(divan::black_box(&parity.localhost_leaf), &intermediates, &mut |_| {}))
         });
 }

@@ -1,5 +1,5 @@
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
-use x509_validator_core::{Certificate, FromDer};
+use x509_validator_core::{Certificate, CertificateExt};
 
 /// Leaks DER bytes to obtain the `'static` lifetime that borrowed
 /// `Certificate` values require. Tests are short-lived processes, so the
@@ -10,7 +10,7 @@ pub fn leak(der: Vec<u8>) -> &'static [u8] {
 
 /// Parses owned DER into a `Certificate` borrowing leaked bytes.
 pub fn cert(der: Vec<u8>) -> Certificate<'static> {
-    Certificate::from_der(leak(der)).expect("parse certificate").1
+    Certificate::parse(leak(der)).expect("parse certificate")
 }
 
 /// Builds an unverified chain from DER, in leaf-to-root order.

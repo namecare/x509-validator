@@ -1,7 +1,7 @@
 //! RFC 5280 policy composition: that each sub-policy is wired into
 //! RFC5280Policy and can independently reject a chain.
 
-use x509_validator::{PolicyEvaluationResult, PolicyFailureReason, RFC5280Policy, Timestamp, VerifierPolicy};
+use x509_validator::{PolicyEvaluationResult, PolicyFailureReason, RFC5280Policy, Timestamp, ValidationPolicy};
 
 mod tests {
     use super::*;
@@ -130,7 +130,7 @@ mod conformance {
     use x509_validator::{BasicConstraintsPolicy, ExpiryPolicy, NameConstraintsPolicy, VersionPolicy};
     use x509_validator_core::oid_registry::OID_X509_EXT_KEY_USAGE;
     use x509_validator_core::Certificate;
-    use x509_validator_core::FromDer;
+    use x509_validator_core::CertificateExt;
     use x509_validator_testkit::rcgen::CertificateParams;
     use x509_validator_testkit::time::{Duration, OffsetDateTime};
     use x509_validator_testkit::{
@@ -232,7 +232,7 @@ mod conformance {
         let root = self_signed_ca_with("root", |_| {});
         let leaf = issue_leaf("leaf", &["www.example.com"], &root);
         let leaf_der: &'static [u8] = Box::leak(leaf.into_boxed_slice());
-        let (_, parsed) = Certificate::from_der(leaf_der).unwrap();
+        let parsed = Certificate::parse(leaf_der).unwrap();
 
         assert!(
             !parsed.tbs_certificate.extensions().is_empty(),
@@ -946,7 +946,7 @@ mod conformance {
             params.custom_extensions.push(x509_validator_testkit::weird_critical_extension());
         });
         let leaf_der: &'static [u8] = Box::leak(leaf.into_boxed_slice());
-        let (_, parsed) = Certificate::from_der(leaf_der).unwrap();
+        let parsed = Certificate::parse(leaf_der).unwrap();
 
         let handled = RFC5280Policy::new(NOW).verifying_critical_extensions();
 

@@ -89,7 +89,7 @@ impl CryptoProvider {
 mod tests {
     use super::*;
     use x509_validator_testkit::rcgen::{CertificateParams, KeyPair};
-    use x509_validator_core::FromDer;
+    use x509_validator_core::CertificateExt;
     use x509_validator_core::Certificate;
 
     /// A real self-signed certificate's `AlgorithmIdentifier` and
@@ -99,7 +99,7 @@ mod tests {
         let key_pair = KeyPair::generate().expect("generate key pair");
         let der = CertificateParams::default().self_signed(&key_pair).expect("self-sign").der().to_vec();
         let der: &'static [u8] = Box::leak(der.into_boxed_slice());
-        let cert = Certificate::from_der(der).unwrap().1;
+        let cert = Certificate::parse(der).expect("parse certificate");
         (cert.signature_algorithm, cert.tbs_certificate.subject_pki)
     }
 

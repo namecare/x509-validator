@@ -1,27 +1,27 @@
 //! The parity benchmark: every validation scenario from the reference
-//! implementation's verifier benchmark, case for case.
+//! implementation's validator benchmark, case for case.
 //!
 //! The reference runs its whole scenario set as a single measured blob. That
 //! is a fine canary but a poor gate — sixteen scenarios summed into one
 //! number tell you something moved without telling you what. So each
 //! scenario is its own benchmark here, and the blob is kept as one extra
-//! rollup (`verifier/all_scenarios`) so the reference number stays
+//! rollup (`validator/all_scenarios`) so the reference number stays
 //! comparable.
 //!
 //! Benchmark ids are the tracked metric names. **Renaming one starts a new
 //! metric with no history**, so treat the strings below as fixed.
 //!
-//! Scenario outcomes are asserted in `tests/verifier_scenarios.rs`, not here:
+//! Scenario outcomes are asserted in `tests/validator_scenarios.rs`, not here:
 //! this file has `harness = false`, so an in-file `#[test]` fn would never
 //! run. A scenario that quietly produces the wrong result still benchmarks
 //! something — just not the thing it is named after.
 
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
-use x509_validator::policy::{PolicyEvaluationResult, PolicyFailureReason, VerifierPolicy};
+use x509_validator::policy::{PolicyEvaluationResult, PolicyFailureReason, ValidationPolicy};
 use x509_validator::rfc5280::RFC5280Policy;
 use x509_validator::store::CertificateStore;
-use x509_validator::verifier::ChainValidationResultOwned;
-use x509_validator::BaseVerifier;
+use x509_validator::validator::ChainValidationResultOwned;
+use x509_validator::BaseValidator;
 use x509_validator_bench_measure::{fixtures, BACKEND};
 use x509_validator_core::der_parser::Oid;
 use x509_validator_core::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS;
@@ -35,7 +35,7 @@ struct FailIfCertInChainPolicy {
     inner: RFC5280Policy,
 }
 
-impl VerifierPolicy for FailIfCertInChainPolicy {
+impl ValidationPolicy for FailIfCertInChainPolicy {
     fn verifying_critical_extensions(&self) -> Vec<Oid<'static>> {
         vec![OID_X509_EXT_BASIC_CONSTRAINTS]
     }
@@ -51,7 +51,7 @@ impl VerifierPolicy for FailIfCertInChainPolicy {
 /// Accepts every chain, so an outcome is decided purely by chain building.
 struct IgnoreBasicConstraintsPolicy;
 
-impl VerifierPolicy for IgnoreBasicConstraintsPolicy {
+impl ValidationPolicy for IgnoreBasicConstraintsPolicy {
     fn verifying_critical_extensions(&self) -> Vec<Oid<'static>> {
         vec![OID_X509_EXT_BASIC_CONSTRAINTS]
     }
@@ -76,8 +76,8 @@ struct Scenario {
 /// allocates a `HashMap` and a subject key per certificate, which is setup
 /// cost, not validation cost, and does not belong in the timed region.
 fn validate(roots: CertificateStore<'static>, intermediates: &CertificateStore<'static>, leaf: &Certificate<'static>) -> usize {
-    let mut verifier = BaseVerifier::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::REFERENCE_TIME), BACKEND);
-    match verifier.validate_with_diagnostics(leaf, intermediates, &mut |_| {}) {
+    let mut validator = BaseValidator::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::REFERENCE_TIME), BACKEND);
+    match validator.validate_with_diagnostics(leaf, intermediates, &mut |_| {}) {
         ChainValidationResultOwned::ValidCertificate(chain) => chain.iter().count(),
         ChainValidationResultOwned::CouldNotValidate(reasons) => reasons.len(),
     }
@@ -107,31 +107,31 @@ fn bench_scenario(c: &mut Criterion, id: &str, scenario: impl Fn() -> Scenario) 
 fn successful(c: &mut Criterion) {
     let p = fixtures::parity();
 
-    bench_scenario(c, "verifier/trivial_chain_building", || Scenario {
+    bench_scenario(c, "validator/trivial_chain_building", || Scenario {
         roots: vec![p.ca1.clone()],
         intermediates: vec![p.intermediate1.clone()],
         leaf: &p.localhost_leaf,
     });
 
-    bench_scenario(c, "verifier/extra_roots_are_ignored", || Scenario {
+    bench_scenario(c, "validator/extra_roots_are_ignored", || Scenario {
         roots: vec![p.ca1.clone(), p.ca2.clone()],
         intermediates: vec![p.intermediate1.clone()],
         leaf: &p.localhost_leaf,
     });
 
-    bench_scenario(c, "verifier/roots_in_intermediate_store_are_not_a_problem", || Scenario {
+    bench_scenario(c, "validator/roots_in_intermediate_store_are_not_a_problem", || Scenario {
         roots: vec![p.ca1.clone(), p.ca2.clone()],
         intermediates: vec![p.intermediate1.clone(), p.ca1.clone(), p.ca2.clone()],
         leaf: &p.localhost_leaf,
     });
 
-    bench_scenario(c, "verifier/cross_signed_root", || Scenario {
+    bench_scenario(c, "validator/cross_signed_root", || Scenario {
         roots: vec![p.ca2.clone()],
         intermediates: vec![p.intermediate1.clone(), p.ca1_cross_signed_by_ca2.clone()],
         leaf: &p.localhost_leaf,
     });
 
-    bench_scenario(c, "verifier/builds_shorter_path_when_both_cross_signed_roots_present", || Scenario {
+    bench_scenario(c, "validator/builds_shorter_path_when_both_cross_signed_roots_present", || Scenario {
         roots: vec![p.ca1.clone(), p.ca2.clone()],
         intermediates: vec![
             p.intermediate1.clone(),
@@ -141,13 +141,13 @@ fn successful(c: &mut Criterion) {
         leaf: &p.localhost_leaf,
     });
 
-    bench_scenario(c, "verifier/prefers_intermediate_whose_ski_matches", || Scenario {
+    bench_scenario(c, "validator/prefers_intermediate_whose_ski_matches", || Scenario {
         roots: vec![p.ca1.clone()],
         intermediates: vec![p.intermediate1.clone(), p.intermediate1_without_ski_aki.clone()],
         leaf: &p.localhost_leaf,
     });
 
-    bench_scenario(c, "verifier/prefers_no_ski_over_non_matching_ski", || Scenario {
+    bench_scenario(c, "validator/prefers_no_ski_over_non_matching_ski", || Scenario {
         roots: vec![p.ca1.clone()],
         intermediates: vec![
             p.intermediate1_with_incorrect_ski_aki.clone(),
@@ -156,7 +156,7 @@ fn successful(c: &mut Criterion) {
         leaf: &p.localhost_leaf,
     });
 
-    bench_scenario(c, "verifier/rejects_root_that_did_not_sign", || Scenario {
+    bench_scenario(c, "validator/rejects_root_that_did_not_sign", || Scenario {
         roots: vec![p.ca1_with_alternative_private_key.clone(), p.ca2.clone()],
         intermediates: vec![
             p.ca1_cross_signed_by_ca2.clone(),
@@ -167,7 +167,7 @@ fn successful(c: &mut Criterion) {
     });
 
     // Uses a custom policy, so it cannot go through `bench_scenario`.
-    c.bench_function("verifier/policy_failure_sends_search_down_longer_path", |b| {
+    c.bench_function("validator/policy_failure_sends_search_down_longer_path", |b| {
         b.iter_batched(
             || {
                 (
@@ -180,7 +180,7 @@ fn successful(c: &mut Criterion) {
                 )
             },
             |(roots, intermediates)| {
-                let mut verifier = BaseVerifier::with_policy_and_backend(
+                let mut validator = BaseValidator::with_policy_and_backend(
                     roots,
                     FailIfCertInChainPolicy {
                         forbidden: p.ca1.as_ref().to_vec(),
@@ -188,7 +188,7 @@ fn successful(c: &mut Criterion) {
                     },
                     BACKEND,
                 );
-                match verifier.validate_with_diagnostics(&p.localhost_leaf, &intermediates, &mut |_| {}) {
+                match validator.validate_with_diagnostics(&p.localhost_leaf, &intermediates, &mut |_| {}) {
                     ChainValidationResultOwned::ValidCertificate(chain) => chain.iter().count(),
                     ChainValidationResultOwned::CouldNotValidate(reasons) => reasons.len(),
                 }
@@ -197,7 +197,7 @@ fn successful(c: &mut Criterion) {
         )
     });
 
-    bench_scenario(c, "verifier/self_signed_certificate_in_trust_store_validates", || Scenario {
+    bench_scenario(c, "validator/self_signed_certificate_in_trust_store_validates", || Scenario {
         roots: vec![p.ca1.clone(), p.isolated_self_signed.clone()],
         intermediates: vec![p.intermediate1.clone()],
         leaf: &p.isolated_self_signed,
@@ -205,7 +205,7 @@ fn successful(c: &mut Criterion) {
 
     // Also a custom policy: the trust root is a leaf whose basic constraints
     // would otherwise disqualify it.
-    c.bench_function("verifier/trust_root_may_be_non_self_signed_leaf", |b| {
+    c.bench_function("validator/trust_root_may_be_non_self_signed_leaf", |b| {
         b.iter_batched(
             || {
                 (
@@ -214,8 +214,8 @@ fn successful(c: &mut Criterion) {
                 )
             },
             |(roots, intermediates)| {
-                let mut verifier = BaseVerifier::with_policy_and_backend(roots, IgnoreBasicConstraintsPolicy, BACKEND);
-                match verifier.validate_with_diagnostics(&p.localhost_leaf, &intermediates, &mut |_| {}) {
+                let mut validator = BaseValidator::with_policy_and_backend(roots, IgnoreBasicConstraintsPolicy, BACKEND);
+                match validator.validate_with_diagnostics(&p.localhost_leaf, &intermediates, &mut |_| {}) {
                     ChainValidationResultOwned::ValidCertificate(chain) => chain.iter().count(),
                     ChainValidationResultOwned::CouldNotValidate(reasons) => reasons.len(),
                 }
@@ -224,7 +224,7 @@ fn successful(c: &mut Criterion) {
         )
     });
 
-    bench_scenario(c, "verifier/trust_root_may_be_non_self_signed_intermediate", || Scenario {
+    bench_scenario(c, "validator/trust_root_may_be_non_self_signed_intermediate", || Scenario {
         roots: vec![p.intermediate1.clone()],
         intermediates: vec![p.intermediate1.clone()],
         leaf: &p.localhost_leaf,
@@ -236,25 +236,25 @@ fn successful(c: &mut Criterion) {
 fn unsuccessful(c: &mut Criterion) {
     let p = fixtures::parity();
 
-    bench_scenario(c, "verifier/unhandled_critical_extension_on_leaf_is_policed", || Scenario {
+    bench_scenario(c, "validator/unhandled_critical_extension_on_leaf_is_policed", || Scenario {
         roots: vec![p.ca1.clone(), p.isolated_self_signed_weird_critical.clone()],
         intermediates: vec![p.intermediate1.clone()],
         leaf: &p.isolated_self_signed_weird_critical,
     });
 
-    bench_scenario(c, "verifier/missing_intermediate_cannot_build", || Scenario {
+    bench_scenario(c, "validator/missing_intermediate_cannot_build", || Scenario {
         roots: vec![p.ca1.clone()],
         intermediates: vec![],
         leaf: &p.localhost_leaf,
     });
 
-    bench_scenario(c, "verifier/self_signed_certificate_outside_trust_store_is_rejected", || Scenario {
+    bench_scenario(c, "validator/self_signed_certificate_outside_trust_store_is_rejected", || Scenario {
         roots: vec![p.ca1.clone()],
         intermediates: vec![p.intermediate1.clone()],
         leaf: &p.isolated_self_signed,
     });
 
-    bench_scenario(c, "verifier/missing_root_cannot_build", || Scenario {
+    bench_scenario(c, "validator/missing_root_cannot_build", || Scenario {
         roots: vec![],
         intermediates: vec![p.intermediate1.clone()],
         leaf: &p.localhost_leaf,
@@ -267,7 +267,7 @@ fn unsuccessful(c: &mut Criterion) {
 fn all_scenarios(c: &mut Criterion) {
     let p = fixtures::parity();
 
-    c.bench_function("verifier/all_scenarios", |b| {
+    c.bench_function("validator/all_scenarios", |b| {
         b.iter(|| {
             let mut count = 0usize;
             let stores = |roots: Vec<Certificate<'static>>, intermediates: Vec<Certificate<'static>>| {
@@ -329,7 +329,7 @@ fn all_scenarios(c: &mut Criterion) {
                         p.ca1_cross_signed_by_ca2.clone(),
                     ],
                 );
-                let mut verifier = BaseVerifier::with_policy_and_backend(
+                let mut validator = BaseValidator::with_policy_and_backend(
                     roots,
                     FailIfCertInChainPolicy {
                         forbidden: p.ca1.as_ref().to_vec(),
@@ -337,7 +337,7 @@ fn all_scenarios(c: &mut Criterion) {
                     },
                     BACKEND,
                 );
-                count += match verifier.validate_with_diagnostics(&p.localhost_leaf, &intermediates, &mut |_| {}) {
+                count += match validator.validate_with_diagnostics(&p.localhost_leaf, &intermediates, &mut |_| {}) {
                     ChainValidationResultOwned::ValidCertificate(chain) => chain.iter().count(),
                     ChainValidationResultOwned::CouldNotValidate(reasons) => reasons.len(),
                 };
@@ -349,8 +349,8 @@ fn all_scenarios(c: &mut Criterion) {
             count += validate(r, &i, &p.isolated_self_signed);
             {
                 let (roots, intermediates) = stores(vec![p.localhost_leaf.clone()], vec![p.intermediate1.clone()]);
-                let mut verifier = BaseVerifier::with_policy_and_backend(roots, IgnoreBasicConstraintsPolicy, BACKEND);
-                count += match verifier.validate_with_diagnostics(&p.localhost_leaf, &intermediates, &mut |_| {}) {
+                let mut validator = BaseValidator::with_policy_and_backend(roots, IgnoreBasicConstraintsPolicy, BACKEND);
+                count += match validator.validate_with_diagnostics(&p.localhost_leaf, &intermediates, &mut |_| {}) {
                     ChainValidationResultOwned::ValidCertificate(chain) => chain.iter().count(),
                     ChainValidationResultOwned::CouldNotValidate(reasons) => reasons.len(),
                 };

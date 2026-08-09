@@ -1,4 +1,4 @@
-use x509_validator::{NameConstraintsPolicy, PolicyFailureReason, VerifierPolicy};
+use x509_validator::{NameConstraintsPolicy, PolicyFailureReason, ValidationPolicy};
 use x509_validator_testkit::rcgen::CertificateParams;
 use x509_validator_core::CertificateExt;
 use x509_validator_testkit::{

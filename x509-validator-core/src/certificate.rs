@@ -1,5 +1,9 @@
 pub use x509_parser::certificate::*;
 
+use x509_parser::error::X509Error;
+use x509_parser::nom;
+use x509_parser::prelude::FromDer;
+
 use crate::extensions::ParsedExtension;
 use crate::oid_registry::{OID_X509_EXT_AUTHORITY_KEY_IDENTIFIER, OID_X509_EXT_SUBJECT_KEY_IDENTIFIER};
 use crate::GeneralName;
@@ -9,7 +13,13 @@ pub type Certificate<'a> = x509_parser::certificate::X509Certificate<'a>;
 
 /// Accessors and comparisons over a certificate that `x509-parser` does not
 /// provide directly.
-pub trait CertificateExt<'a> {
+pub trait CertificateExt<'a>: Sized {
+    /// Parse a single DER-encoded certificate, discarding any trailing bytes.
+    ///
+    /// Convenience over [`FromDer::from_der`], which returns the remaining
+    /// input alongside the certificate and wraps its error in `nom::Err`.
+    fn parse(der: &'a [u8]) -> Result<Self, X509Error>;
+
     /// The `subjectKeyIdentifier` bytes, if the extension is present and parses.
     fn subject_key_identifier(&self) -> Option<&'a [u8]>;
 
@@ -36,6 +46,15 @@ pub trait CertificateExt<'a> {
 }
 
 impl<'a> CertificateExt<'a> for Certificate<'a> {
+    fn parse(der: &'a [u8]) -> Result<Self, X509Error> {
+        Certificate::from_der(der)
+            .map(|(_, certificate)| certificate)
+            .map_err(|err| match err {
+                nom::Err::Error(e) | nom::Err::Failure(e) => e,
+                nom::Err::Incomplete(_) => X509Error::InvalidCertificate,
+            })
+    }
+
     fn subject_key_identifier(&self) -> Option<&'a [u8]> {
         let ext = self
             .tbs_certificate
