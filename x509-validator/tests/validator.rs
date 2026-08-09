@@ -28,7 +28,7 @@ use x509_validator::BaseValidator;
 use x509_validator_core::extensions::ParsedExtension;
 use x509_validator_core::oid_registry::{OID_X509_EXT_AUTHORITY_KEY_IDENTIFIER, OID_X509_EXT_BASIC_CONSTRAINTS, OID_X509_EXT_SUBJECT_KEY_IDENTIFIER};
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
-use x509_validator_core::{Certificate, FromDer};
+use x509_validator_core::{Certificate, CertificateExt};
 use x509_validator_testkit::rcgen::KeyPair;
 use x509_validator_testkit::{
     cert, issue_ca, issue_ca_with_key, issue_ca_with_key_and_name, issue_ca_with_key_ids, issue_leaf, issue_leaf_with, issue_leaf_with_aki, leak,
@@ -36,7 +36,7 @@ use x509_validator_testkit::{
 };
 
 fn parse(der: &'static [u8]) -> Certificate<'static> {
-    Certificate::from_der(der).unwrap().1
+    Certificate::parse(der).unwrap()
 }
 
 /// The `subjectKeyIdentifier` bytes of `cert`, if present and parseable.

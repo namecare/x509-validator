@@ -163,7 +163,7 @@ impl LeafSpec {
 mod leaf_spec_tests {
     use super::*;
     use time::{Duration, OffsetDateTime};
-    use x509_validator_core::{Certificate, FromDer};
+    use x509_validator_core::{Certificate, CertificateExt};
 
     #[test]
     fn leaf_spec_honours_validity_and_sans() {
@@ -176,7 +176,7 @@ mod leaf_spec_tests {
             .validity(not_before, not_after)
             .signed_by(&root);
 
-        let parsed = Certificate::from_der(&der).expect("parse").1;
+        let parsed = Certificate::parse(&der).expect("parse");
         assert_eq!(parsed.tbs_certificate.validity().not_before.timestamp(), not_before.unix_timestamp());
         assert_eq!(parsed.tbs_certificate.validity().not_after.timestamp(), not_after.unix_timestamp());
     }
@@ -189,7 +189,7 @@ mod leaf_spec_tests {
             .critical_extension(&[1, 2, 3, 4, 5], vec![1, 2, 3, 4, 5])
             .signed_by(&root);
 
-        let parsed = Certificate::from_der(&der).expect("parse").1;
+        let parsed = Certificate::parse(&der).expect("parse");
         assert!(parsed.tbs_certificate.extensions().iter().any(|e| e.critical && e.oid.to_id_string() == "1.2.3.4.5"));
     }
 }

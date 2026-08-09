@@ -13,7 +13,7 @@
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use x509_validator::policy::ValidationPolicy;
 use x509_validator::rfc5280::{BasicConstraintsPolicy, ExpiryPolicy, NameConstraintsPolicy, RFC5280Policy, VersionPolicy};
-use x509_validator::{AllOfPolicies, AnyPolicy, OneOfPolicies, ServerIdentityPolicy};
+use x509_validator::{AllOfPolicies, AnyPolicy, OneOfPolicies, OneOfTuple2, ServerIdentityPolicy};
 use x509_validator_bench_measure::fixtures;
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
 
@@ -51,12 +51,7 @@ fn policies(c: &mut Criterion) {
     bench_policy(c, "policy/rfc5280", || RFC5280Policy::new(fixtures::REFERENCE_TIME));
     bench_policy(c, "policy/all_of", || AllOfPolicies::new(RFC5280Policy::new(fixtures::REFERENCE_TIME)));
     bench_policy(c, "policy/any", || AnyPolicy::new(RFC5280Policy::new(fixtures::REFERENCE_TIME)));
-    bench_policy(c, "policy/one_of", || {
-        OneOfPolicies::new(vec![
-            Box::new(VersionPolicy) as Box<dyn ValidationPolicy>,
-            Box::new(BasicConstraintsPolicy),
-        ])
-    });
+    bench_policy(c, "policy/one_of", || OneOfPolicies::new(OneOfTuple2::new(VersionPolicy, BasicConstraintsPolicy)));
 }
 
 /// `ServerIdentityPolicy`'s three matching paths, benched separately.

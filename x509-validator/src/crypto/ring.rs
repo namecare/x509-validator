@@ -25,7 +25,7 @@ backend! {
 mod tests {
     use super::*;
     use x509_validator_testkit::rcgen::{CertificateParams, KeyPair};
-    use x509_validator_core::FromDer;
+    use x509_validator_core::CertificateExt;
     use x509_validator_core::Certificate;
 
     /// Builds a real self-signed certificate for `key_pair` and parses it
@@ -37,15 +37,11 @@ mod tests {
         params.self_signed(key_pair).expect("self-sign").der().to_vec()
     }
 
-    fn parse(der: &'static [u8]) -> Certificate<'static> {
-        Certificate::from_der(der).unwrap().1
-    }
-
     #[test]
     fn ecdsa_p256_round_trip_verifies() {
         let key_pair = KeyPair::generate().expect("generate key pair");
         let der: &'static [u8] = Box::leak(self_signed(&key_pair).into_boxed_slice());
-        let cert = parse(der);
+        let cert = Certificate::parse(der).expect("parse certificate");
 
         let public_key = Ring
             .public_key(&cert.signature_algorithm, cert.public_key())
@@ -59,7 +55,7 @@ mod tests {
     fn ecdsa_p256_tampered_message_fails() {
         let key_pair = KeyPair::generate().expect("generate key pair");
         let der: &'static [u8] = Box::leak(self_signed(&key_pair).into_boxed_slice());
-        let cert = parse(der);
+        let cert = Certificate::parse(der).expect("parse certificate");
 
         let public_key = Ring
             .public_key(&cert.signature_algorithm, cert.public_key())
@@ -77,7 +73,7 @@ mod tests {
         };
         let key_pair = KeyPair::generate().expect("generate key pair");
         let der: &'static [u8] = Box::leak(self_signed(&key_pair).into_boxed_slice());
-        let cert = parse(der);
+        let cert = Certificate::parse(der).expect("parse certificate");
 
         let result = Ring.public_key(&algorithm, cert.public_key());
         assert!(matches!(result, Err(CryptoError::InvalidKey(_))));
@@ -94,7 +90,7 @@ mod tests {
         };
         let key_pair = KeyPair::generate().expect("generate key pair");
         let der: &'static [u8] = Box::leak(self_signed(&key_pair).into_boxed_slice());
-        let cert = parse(der);
+        let cert = Certificate::parse(der).expect("parse certificate");
 
         let result = Ring.public_key(&algorithm, cert.public_key());
         assert!(matches!(result, Err(CryptoError::InvalidKey(_))));

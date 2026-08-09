@@ -18,6 +18,7 @@ pub mod server_identity_policy;
 pub mod all_of_policies;
 pub mod any_policy;
 pub mod one_of_policies;
+pub mod policy_builder;
 pub mod store;
 
 pub use policy::*;
@@ -28,3 +29,4 @@ pub use server_identity_policy::ServerIdentityPolicy;
 pub use all_of_policies::AllOfPolicies;
 pub use any_policy::AnyPolicy;
 pub use one_of_policies::OneOfPolicies;
+pub use policy_builder::{Tuple2, Either, WrappedOptional, OneOfTuple2, OneOfWrappedOptional};
