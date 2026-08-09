@@ -11,18 +11,18 @@ pub mod fixtures;
 pub mod roots;
 pub mod signatures;
 
-use x509_validator::crypto::CryptoProvider;
+use x509_validator::crypto::SignatureVerifier;
 
 /// One crypto backend, paired with the name it appears under in the report.
 ///
 /// divan's `args` values must be `Copy` and either `ToString` or `Debug`.
-/// `CryptoProvider` holds `&dyn` trait objects and cannot derive `Debug`, so
-/// the impl below is written by hand and prints just the name — which is
-/// what labels the row.
+/// A `&dyn SignatureVerifier` has no useful derived `Debug`, so the impl
+/// below is written by hand and prints just the name — which is what labels
+/// the row.
 #[derive(Clone, Copy)]
 pub struct Backend {
     pub name: &'static str,
-    pub provider: &'static CryptoProvider,
+    pub provider: &'static dyn SignatureVerifier,
 }
 
 impl std::fmt::Debug for Backend {

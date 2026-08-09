@@ -1,4 +1,4 @@
-use crate::crypto::CryptoProvider;
+use crate::crypto::SignatureVerifier;
 use crate::diagnostic::VerificationDiagnostic;
 use crate::policy::{PolicyFailureReason, ValidationPolicy};
 use crate::store::CertificateStore;
@@ -19,7 +19,7 @@ fn parse_certificate_store(der: &[Vec<u8>]) -> Result<CertificateStore<'_>, Poli
 pub struct BaseValidator<'a, P> {
     /// The trusted root certificates used to anchor chain validation.
     root_certificates: CertificateStore<'a>,
-    crypto: &'a CryptoProvider,
+    crypto: &'a dyn SignatureVerifier,
     /// The policy applied to candidate chains during validation.
     policy: P,
 }
@@ -33,7 +33,7 @@ where
     /// - Parameters:
     ///   - root_certificates: The trusted root certificates.
     ///   - policy: The verification policy.
-    pub fn with_policy_and_backend(root_certificates: CertificateStore<'a>, policy: P, crypto: &'a CryptoProvider) -> Self {
+    pub fn with_policy_and_backend(root_certificates: CertificateStore<'a>, policy: P, crypto: &'a dyn SignatureVerifier) -> Self {
         Self {
             root_certificates,
             crypto,
@@ -232,7 +232,7 @@ fn sort_by_suitability_for_issuing<'a>(candidates: &mut [Certificate<'a>], subje
 fn should_skip_adding_certificate<'a>(
     candidate: &Certificate<'a>,
     partial_chain: &[Certificate<'a>],
-    crypto: &CryptoProvider,
+    crypto: &dyn SignatureVerifier,
     policy: &impl ValidationPolicy,
     diagnostic_callback: &mut dyn FnMut(VerificationDiagnostic<'a>),
 ) -> bool {
