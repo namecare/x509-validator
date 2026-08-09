@@ -41,6 +41,27 @@ where
         }
     }
 
+    /// Creates a validator with the given root certificates and policy, using
+    /// the crypto backend selected by this crate's feature flags.
+    ///
+    /// This is the constructor to reach for: the backend is chosen once in
+    /// `Cargo.toml`, so call sites name only the roots and the policy. Use
+    /// [`BaseValidator::with_policy_and_backend`] to override the backend for a
+    /// single validator.
+    ///
+    /// - Parameters:
+    ///   - root_certificates: The trusted root certificates.
+    ///   - policy: The verification policy.
+    ///
+    /// # Panics
+    ///
+    /// Validation panics unless exactly one backend feature is enabled, since
+    /// no single default backend can be determined otherwise; see
+    /// [`crate::crypto::default_provider`].
+    pub fn with_policy(root_certificates: CertificateStore<'a>, policy: P) -> Self {
+        Self::with_policy_and_backend(root_certificates, policy, crate::crypto::default_provider())
+    }
+
     /// Validates a leaf certificate by building chains through intermediate certificates to the root store.
     ///
     /// - Parameters:
