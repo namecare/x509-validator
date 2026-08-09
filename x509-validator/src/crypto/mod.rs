@@ -38,37 +38,78 @@ pub trait Digest: Send + Sync + Debug {
     fn hash(&self, data: &[u8]) -> Vec<u8>;
 }
 
-/// A `KeyProvider`/`Digest` pair that always fails, used to populate
-/// `CryptoProvider::default_backend` until a real crypto backend is wired
-/// in. Every call reports that no backend has been configured.
+/// A `KeyProvider`/`Digest` pair whose every operation panics, reporting that
+/// no single backend could be determined from the crate's features.
+///
+/// A provider that instead failed each signature check quietly would report
+/// perfectly good chains as unvalidatable — indistinguishable from a genuine
+/// policy failure. This is a build misconfiguration, so it surfaces as one the
+/// first time crypto is actually used.
 #[derive(Debug)]
-struct UnconfiguredCryptoBackend;
+struct UndeterminedCryptoBackend;
 
-impl KeyProvider for UnconfiguredCryptoBackend {
+const NO_BACKEND_ERROR: &str = "
+Could not automatically determine the crypto backend from x509-validator crate features.
+Make sure exactly one of the 'aws_lc', 'ring' and 'rust_crypto' features is enabled, or pass a
+provider explicitly to Validator::with_policy_and_backend instead of Validator::with_policy.
+";
+
+impl KeyProvider for UndeterminedCryptoBackend {
     fn public_key(&self, _algorithm: &AlgorithmIdentifier, _public_key: &SubjectPublicKeyInfo) -> Result<Box<dyn PublicKey>, CryptoError> {
-        Err(CryptoError::InvalidKey("no crypto backend configured".into()))
+        panic!("{NO_BACKEND_ERROR}")
     }
 }
 
-impl Digest for UnconfiguredCryptoBackend {
+impl Digest for UndeterminedCryptoBackend {
     fn hash(&self, _data: &[u8]) -> Vec<u8> {
-        Vec::new()
+        panic!("{NO_BACKEND_ERROR}")
     }
 }
 
-static UNCONFIGURED_CRYPTO_BACKEND: UnconfiguredCryptoBackend = UnconfiguredCryptoBackend;
+/// The crypto backend determined by this crate's feature flags.
+///
+/// This is what [`crate::Validator::with_policy`] uses, so that callers name a
+/// backend once in `Cargo.toml` rather than at every construction site. Pass a
+/// provider to [`crate::Validator::with_policy_and_backend`] to override it for
+/// an individual validator.
+///
+/// A backend is determined only when *exactly one* backend feature is enabled.
+/// Enabling several is allowed — the comparison benchmarks verify one chain
+/// under each in a single process — but leaves no single default to name, so
+/// that configuration, like enabling none, yields a provider whose every
+/// operation panics with [`NO_BACKEND_ERROR`]. Backends stay individually
+/// reachable as `crypto::<backend>::DEFAULT_PROVIDER` regardless.
+pub fn default_provider() -> &'static CryptoProvider {
+    #[cfg(all(feature = "aws_lc", not(feature = "ring"), not(feature = "rust_crypto")))]
+    {
+        return &aws_lc::DEFAULT_PROVIDER;
+    }
+
+    #[cfg(all(feature = "ring", not(feature = "aws_lc"), not(feature = "rust_crypto")))]
+    {
+        return &ring::DEFAULT_PROVIDER;
+    }
+
+    #[cfg(all(feature = "rust_crypto", not(feature = "aws_lc"), not(feature = "ring")))]
+    {
+        return &rust_crypto::DEFAULT_PROVIDER;
+    }
+
+    // Reached when zero backends are enabled, or when several are and none can
+    // be preferred over the others.
+    #[allow(unreachable_code)]
+    {
+        static UNDETERMINED_BACKEND: UndeterminedCryptoBackend = UndeterminedCryptoBackend;
+        static INSTANCE: CryptoProvider = CryptoProvider {
+            key_provider: &UNDETERMINED_BACKEND,
+            sha256: &UNDETERMINED_BACKEND,
+        };
+
+        &INSTANCE
+    }
+}
 
 impl CryptoProvider {
-    /// A `CryptoProvider` whose key provider always fails with
-    /// `CryptoError::InvalidKey`.
-    pub fn default_backend() -> &'static CryptoProvider {
-        static DEFAULT: CryptoProvider = CryptoProvider {
-            key_provider: &UNCONFIGURED_CRYPTO_BACKEND,
-            sha256: &UNCONFIGURED_CRYPTO_BACKEND,
-        };
-        &DEFAULT
-    }
-
     /// Looks up the public key for `algorithm`/`public_key` and checks
     /// `signature` over `message`. This is the one crypto call site the
     /// chain-building core uses to check a candidate issuer's signature

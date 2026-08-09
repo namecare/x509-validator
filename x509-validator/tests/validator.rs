@@ -119,6 +119,65 @@ fn trivial_chain_succeeds_leaf_intermediate_root() {
     assert_chain_is(result, &[&leaf, &parse(intermediate_der), &parse(root_der)]);
 }
 
+/// The API a library consumer is expected to use: name a backend once in
+/// `Cargo.toml`, then construct via the `Validator` alias with roots and a
+/// policy only. Asserts that the feature-selected default provider really
+/// verifies signatures, rather than being a stub that fails every check.
+///
+/// Gated to a single enabled backend: `with_policy` determines a backend only
+/// then. The workspace build enables all three at once for the comparison
+/// benchmarks, where no default exists and using one panics by design —
+/// `tests/default_backend.rs` covers that case.
+#[cfg(any(
+    all(feature = "aws_lc", not(feature = "ring"), not(feature = "rust_crypto")),
+    all(feature = "ring", not(feature = "aws_lc"), not(feature = "rust_crypto")),
+    all(feature = "rust_crypto", not(feature = "aws_lc"), not(feature = "ring")),
+))]
+#[test]
+fn with_policy_uses_the_feature_selected_backend() {
+    let root = self_signed_ca_with("root", |_| {});
+    let intermediate = issue_ca("intermediate", &root, None, |_| {});
+    let leaf_der = leak(issue_leaf("leaf", &["www.example.com"], &intermediate));
+    let intermediate_der = leak(intermediate.der.clone());
+    let root_der = leak(root.der.clone());
+
+    let leaf = parse(leaf_der);
+    let roots = CertificateStore::from_iter(vec![parse(root_der)]);
+    let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
+    let mut validator = x509_validator::Validator::with_policy(roots, AlwaysMeetsPolicy);
+
+    let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+    assert_chain_is(result, &[&leaf, &parse(intermediate_der), &parse(root_der)]);
+}
+
+/// `with_policy` and `with_policy_and_backend` given the same backend must
+/// agree, so that the convenience constructor cannot quietly select something
+/// other than the backend the crate was built with. Gated as above.
+#[cfg(any(
+    all(feature = "aws_lc", not(feature = "ring"), not(feature = "rust_crypto")),
+    all(feature = "ring", not(feature = "aws_lc"), not(feature = "rust_crypto")),
+    all(feature = "rust_crypto", not(feature = "aws_lc"), not(feature = "ring")),
+))]
+#[test]
+fn with_policy_matches_explicit_default_provider() {
+    let root = self_signed_ca_with("root", |_| {});
+    let leaf_der = leak(issue_leaf("leaf", &["www.example.com"], &root));
+    let root_der = leak(root.der.clone());
+    let leaf = parse(leaf_der);
+    let intermediates: CertificateStore = CertificateStore::new();
+
+    let mut implicit = x509_validator::Validator::with_policy(CertificateStore::from_iter(vec![parse(root_der)]), AlwaysMeetsPolicy);
+    let mut explicit = BaseValidator::with_policy_and_backend(
+        CertificateStore::from_iter(vec![parse(root_der)]),
+        AlwaysMeetsPolicy,
+        &DEFAULT_PROVIDER,
+    );
+
+    let expected: &[&Certificate<'_>] = &[&leaf, &parse(root_der)];
+    assert_chain_is(implicit.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {}), expected);
+    assert_chain_is(explicit.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {}), expected);
+}
+
 #[test]
 fn missing_issuer_fails() {
     let orphan = self_signed_ca_with("orphan", |_| {});
