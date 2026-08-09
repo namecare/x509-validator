@@ -19,6 +19,7 @@ backend! {
 mod tests {
     use super::*;
     use x509_validator_testkit::rcgen::{CertificateParams, KeyPair};
+    use x509_validator_core::oid_registry;
     use x509_validator_core::CertificateExt;
     use x509_validator_core::Certificate;
 
@@ -37,11 +38,12 @@ mod tests {
         let der: &'static [u8] = Box::leak(self_signed(&key_pair).into_boxed_slice());
         let cert = Certificate::parse(der).expect("parse certificate");
 
-        let public_key = AwsLc
-            .public_key(&cert.signature_algorithm, cert.public_key())
-            .expect("build public key");
-
-        let result = public_key.is_valid(cert.signature_value.as_ref(), cert.tbs_certificate.as_ref());
+                let result = AwsLc.verify_signature(
+            &cert.signature_algorithm,
+            cert.public_key(),
+            cert.tbs_certificate.as_ref(),
+            cert.signature_value.as_ref(),
+        );
         assert!(result.is_ok(), "expected valid signature to verify, got {result:?}");
     }
 
@@ -51,11 +53,12 @@ mod tests {
         let der: &'static [u8] = Box::leak(self_signed(&key_pair).into_boxed_slice());
         let cert = Certificate::parse(der).expect("parse certificate");
 
-        let public_key = AwsLc
-            .public_key(&cert.signature_algorithm, cert.public_key())
-            .expect("build public key");
-
-        let result = public_key.is_valid(cert.signature_value.as_ref(), b"tampered message");
+                let result = AwsLc.verify_signature(
+            &cert.signature_algorithm,
+            cert.public_key(),
+            b"tampered message",
+            cert.signature_value.as_ref(),
+        );
         assert!(matches!(result, Err(CryptoError::VerificationFailed)));
     }
 
@@ -69,7 +72,7 @@ mod tests {
         let der: &'static [u8] = Box::leak(self_signed(&key_pair).into_boxed_slice());
         let cert = Certificate::parse(der).expect("parse certificate");
 
-        let result = AwsLc.public_key(&algorithm, cert.public_key());
+        let result = AwsLc.verify_signature(&algorithm, cert.public_key(), b"message", b"signature");
         assert!(matches!(result, Err(CryptoError::InvalidKey(_))));
     }
 }

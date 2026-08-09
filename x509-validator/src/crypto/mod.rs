@@ -20,24 +20,29 @@ pub enum CryptoError {
     VerificationFailed,
 }
 
-pub trait PublicKey: Send + Sync + Debug {
-    fn is_valid(&self, signature: &[u8], message: &[u8]) -> Result<(), CryptoError>;
+/// Checks one signature over one message, given the signer's SPKI and the
+/// algorithm the signature was made with.
+///
+/// This is the whole contract between the chain-building core and a crypto
+/// library: implement it and any backend drops in, whether or not its keys can
+/// be usefully prepared ahead of the message. Backends that do have a
+/// reusable key type build one inside `verify_signature`; those that carry
+/// per-algorithm state (an OpenSSL digest, a PSS flag) simply keep it in local
+/// variables rather than in a struct that outlives the call.
+pub trait SignatureVerifier: Send + Sync + Debug {
+    fn verify_signature(
+        &self,
+        algorithm: &AlgorithmIdentifier,
+        public_key: &SubjectPublicKeyInfo,
+        message: &[u8],
+        signature: &[u8],
+    ) -> Result<(), CryptoError>;
 }
 
-/// Provides public keys usable for signature verification, given the
-/// signer's SPKI and the algorithm the signature to verify was made with.
-pub trait KeyProvider: Send + Sync + Debug {
-    fn public_key(&self, algorithm: &AlgorithmIdentifier, public_key: &SubjectPublicKeyInfo) -> Result<Box<dyn PublicKey>, CryptoError>;
-}
-
-pub struct CryptoProvider {
-    pub key_provider: &'static dyn KeyProvider,
-}
-
-/// A `KeyProvider` whose every operation panics, reporting that
+/// A `SignatureVerifier` whose every operation panics, reporting that
 /// no single backend could be determined from the crate's features.
 ///
-/// A provider that instead failed each signature check quietly would report
+/// A verifier that instead failed each signature check quietly would report
 /// perfectly good chains as unvalidatable — indistinguishable from a genuine
 /// policy failure. This is a build misconfiguration, so it surfaces as one the
 /// first time crypto is actually used.
@@ -50,8 +55,14 @@ Make sure exactly one of the 'aws_lc', 'ring' and 'rust_crypto' features is enab
 provider explicitly to Validator::with_policy_and_backend instead of Validator::with_policy.
 ";
 
-impl KeyProvider for UndeterminedCryptoBackend {
-    fn public_key(&self, _algorithm: &AlgorithmIdentifier, _public_key: &SubjectPublicKeyInfo) -> Result<Box<dyn PublicKey>, CryptoError> {
+impl SignatureVerifier for UndeterminedCryptoBackend {
+    fn verify_signature(
+        &self,
+        _algorithm: &AlgorithmIdentifier,
+        _public_key: &SubjectPublicKeyInfo,
+        _message: &[u8],
+        _signature: &[u8],
+    ) -> Result<(), CryptoError> {
         panic!("{NO_BACKEND_ERROR}")
     }
 }
@@ -66,10 +77,10 @@ impl KeyProvider for UndeterminedCryptoBackend {
 /// A backend is determined only when *exactly one* backend feature is enabled.
 /// Enabling several is allowed — the comparison benchmarks verify one chain
 /// under each in a single process — but leaves no single default to name, so
-/// that configuration, like enabling none, yields a provider whose every
+/// that configuration, like enabling none, yields a verifier whose every
 /// operation panics with [`NO_BACKEND_ERROR`]. Backends stay individually
 /// reachable as `crypto::<backend>::DEFAULT_PROVIDER` regardless.
-pub fn default_provider() -> &'static CryptoProvider {
+pub fn default_provider() -> &'static dyn SignatureVerifier {
     #[cfg(all(feature = "aws_lc", not(feature = "ring"), not(feature = "rust_crypto")))]
     {
         return &aws_lc::DEFAULT_PROVIDER;
@@ -90,28 +101,8 @@ pub fn default_provider() -> &'static CryptoProvider {
     #[allow(unreachable_code)]
     {
         static UNDETERMINED_BACKEND: UndeterminedCryptoBackend = UndeterminedCryptoBackend;
-        static INSTANCE: CryptoProvider = CryptoProvider {
-            key_provider: &UNDETERMINED_BACKEND,
-        };
 
-        &INSTANCE
-    }
-}
-
-impl CryptoProvider {
-    /// Looks up the public key for `algorithm`/`public_key` and checks
-    /// `signature` over `message`. This is the one crypto call site the
-    /// chain-building core uses to check a candidate issuer's signature
-    /// over a certificate.
-    pub fn verify_signature(
-        &self,
-        algorithm: &AlgorithmIdentifier,
-        public_key: &SubjectPublicKeyInfo,
-        message: &[u8],
-        signature: &[u8],
-    ) -> Result<(), CryptoError> {
-        let key = self.key_provider.public_key(algorithm, public_key)?;
-        key.is_valid(signature, message)
+        &UNDETERMINED_BACKEND
     }
 }
 
@@ -150,76 +141,60 @@ mod tests {
         (cert.signature_algorithm, cert.tbs_certificate.subject_pki)
     }
 
-    /// Tagged KeyProvider that returns a distinct error message from
-    /// `public_key` to identify which algorithm it was dispatched for.
+    /// Tagged verifier reporting, through the error it returns, which
+    /// algorithm it was handed.
     #[derive(Debug)]
-    struct TaggedKeyProvider;
+    struct TaggedVerifier;
 
-    impl KeyProvider for TaggedKeyProvider {
-        fn public_key(&self, algorithm: &AlgorithmIdentifier, _public_key: &SubjectPublicKeyInfo) -> Result<Box<dyn PublicKey>, CryptoError> {
+    impl SignatureVerifier for TaggedVerifier {
+        fn verify_signature(
+            &self,
+            algorithm: &AlgorithmIdentifier,
+            _public_key: &SubjectPublicKeyInfo,
+            _message: &[u8],
+            _signature: &[u8],
+        ) -> Result<(), CryptoError> {
             Err(CryptoError::InvalidKey(format!("{}-was-called", algorithm.algorithm)))
         }
     }
 
-    /// Fake KeyProvider whose keys always fail verification with
-    /// `VerificationFailed`.
+    /// Fake verifier that always reports the signature as bad.
     #[derive(Debug)]
-    struct FailurePublicKey;
+    struct FailureVerifier;
 
-    impl PublicKey for FailurePublicKey {
-        fn is_valid(&self, _signature: &[u8], _message: &[u8]) -> Result<(), CryptoError> {
+    impl SignatureVerifier for FailureVerifier {
+        fn verify_signature(
+            &self,
+            _algorithm: &AlgorithmIdentifier,
+            _public_key: &SubjectPublicKeyInfo,
+            _message: &[u8],
+            _signature: &[u8],
+        ) -> Result<(), CryptoError> {
             Err(CryptoError::VerificationFailed)
         }
     }
 
-    #[derive(Debug)]
-    struct FailureKeyProvider;
-
-    impl KeyProvider for FailureKeyProvider {
-        fn public_key(&self, _algorithm: &AlgorithmIdentifier, _public_key: &SubjectPublicKeyInfo) -> Result<Box<dyn PublicKey>, CryptoError> {
-            Ok(Box::new(FailurePublicKey))
-        }
-    }
-
-    static TAGGED_KEY_PROVIDER: TaggedKeyProvider = TaggedKeyProvider;
-    static FAILURE_KEY_PROVIDER: FailureKeyProvider = FailureKeyProvider;
-
-    fn tagged_provider() -> CryptoProvider {
-        CryptoProvider {
-            key_provider: &TAGGED_KEY_PROVIDER,
-        }
-    }
-
     #[test]
-    fn verify_signature_dispatches_by_algorithm_oid() {
-        let provider = tagged_provider();
+    fn verify_signature_receives_the_signature_algorithm() {
         let (algorithm, spki) = algorithm_and_spki();
 
-        let result = provider.verify_signature(&algorithm, &spki, b"message", b"signature");
+        let result = TaggedVerifier.verify_signature(&algorithm, &spki, b"message", b"signature");
 
-        assert!(result.is_err());
         match result {
             Err(CryptoError::InvalidKey(msg)) => {
                 assert_eq!(msg, format!("{}-was-called", algorithm.algorithm));
             }
-            _ => panic!("Expected InvalidKey error from key provider"),
+            _ => panic!("Expected InvalidKey error naming the algorithm, got {result:?}"),
         }
     }
 
     #[test]
-    fn verify_signature_verifier_fails() {
-        let provider = CryptoProvider {
-            key_provider: &FAILURE_KEY_PROVIDER,
-        };
+    fn verify_signature_propagates_verification_failure() {
         let (algorithm, spki) = algorithm_and_spki();
 
-        let result = provider.verify_signature(&algorithm, &spki, b"message", b"signature");
+        let result = FailureVerifier.verify_signature(&algorithm, &spki, b"message", b"signature");
 
-        assert!(result.is_err());
-        match result {
-            Err(CryptoError::VerificationFailed) => {}
-            _ => panic!("Expected VerificationFailed error"),
-        }
+        assert!(matches!(result, Err(CryptoError::VerificationFailed)));
     }
 
     #[test]

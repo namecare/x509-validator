@@ -12,7 +12,7 @@
 //! peer. Nothing below is part of `x509-validator`'s public API.
 
 use time::{Duration, OffsetDateTime};
-use x509_validator::crypto::CryptoProvider;
+use x509_validator::crypto::SignatureVerifier;
 use x509_validator_core::Certificate;
 use x509_validator_testkit::{cert, rcgen, CaSpec, LeafSpec};
 
@@ -21,7 +21,7 @@ use x509_validator_testkit::{cert, rcgen, CaSpec, LeafSpec};
 /// A backend is chosen at compile time by feature; this crate enables
 /// `aws_lc`. Swapping to `ring` or `rust_crypto` means changing the feature
 /// and this one constant — no other line in any example moves.
-pub const BACKEND: &CryptoProvider = &x509_validator::crypto::aws_lc::DEFAULT_PROVIDER;
+pub const BACKEND: &dyn SignatureVerifier = &x509_validator::crypto::aws_lc::DEFAULT_PROVIDER;
 
 /// A freshly generated root → intermediate → leaf chain.
 ///

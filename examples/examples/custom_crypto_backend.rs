@@ -3,27 +3,23 @@
 //!     cargo run -p x509-validator-examples --example custom_crypto_backend
 //!
 //! The built-in backends cover aws-lc-rs, ring and RustCrypto. If you already
-//! link something else — here, OpenSSL — you can supply it yourself: a
-//! `CryptoProvider` is a `KeyProvider` plus a `Digest`, and nothing about the
-//! chain building or policy code changes.
+//! link something else — here, OpenSSL — you can supply it yourself, and
+//! nothing about the chain building or policy code changes.
 //!
-//! Three traits carry the whole contract:
+//! One trait carries the whole contract: `SignatureVerifier::verify_signature`
+//! checks one signature over one message, given the signer's
+//! `SubjectPublicKeyInfo` and the signature's `AlgorithmIdentifier`.
 //!
-//! - `KeyProvider::public_key` turns the signer's `SubjectPublicKeyInfo` and
-//!   the signature's `AlgorithmIdentifier` into something that can verify.
-//! - `PublicKey::is_valid` checks one signature over one message.
-//! - `Digest::hash` computes SHA-256.
-//!
-//! The work is almost entirely in the first: mapping X.509 algorithm OIDs
-//! onto the library's own notion of an algorithm, and refusing the pairings
-//! it cannot honour.
-
-use std::fmt;
+//! The work is almost entirely in mapping X.509 algorithm OIDs onto the
+//! library's own notion of an algorithm, and refusing the pairings it cannot
+//! honour. Because verification happens in a single call, whatever that
+//! mapping produces — here a digest and a PSS flag — stays in local variables
+//! and never has to be carried in a struct.
 
 use openssl::hash::MessageDigest;
-use openssl::pkey::{PKey, Public};
+use openssl::pkey::PKey;
 use openssl::sign::Verifier as OpenSslVerifier;
-use x509_validator::crypto::{CryptoError, CryptoProvider, KeyProvider, PublicKey};
+use x509_validator::crypto::{CryptoError, SignatureVerifier};
 use x509_validator::rfc5280::RFC5280Policy;
 use x509_validator::store::CertificateStore;
 use x509_validator::validator::ChainValidationResultOwned;
@@ -36,33 +32,29 @@ use x509_validator_testkit::rcgen;
 #[derive(Debug)]
 struct OpenSsl;
 
-/// How a signature must be checked: the key, the digest, and whether RSA-PSS
-/// padding applies. Ed25519 names no digest — OpenSSL derives it.
-struct OpenSslKey {
-    key: PKey<Public>,
-    digest: Option<MessageDigest>,
-    pss: bool,
-}
+impl SignatureVerifier for OpenSsl {
+    fn verify_signature(
+        &self,
+        algorithm: &AlgorithmIdentifier,
+        public_key: &SubjectPublicKeyInfo,
+        message: &[u8],
+        signature: &[u8],
+    ) -> Result<(), CryptoError> {
+        // How the signature must be checked: which digest, and whether RSA-PSS
+        // padding applies. Ed25519 names no digest — OpenSSL derives it.
+        let (digest, pss) = signature_scheme(algorithm)?;
 
-// `PublicKey` requires `Debug`; `MessageDigest` does not implement it.
-impl fmt::Debug for OpenSslKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("OpenSslKey")
-            .field("digest", &self.digest.map(|d| d.type_().short_name().unwrap_or("?")))
-            .field("pss", &self.pss)
-            .finish()
-    }
-}
+        // The `subjectPublicKeyInfo` DER is exactly what OpenSSL parses, so
+        // the SPKI is handed over whole rather than as the bare key bits.
+        let key = PKey::public_key_from_der(&public_key.raw).map_err(|e| CryptoError::InvalidKey(e.to_string()))?;
 
-impl PublicKey for OpenSslKey {
-    fn is_valid(&self, signature: &[u8], message: &[u8]) -> Result<(), CryptoError> {
-        let mut verifier = match self.digest {
-            Some(digest) => OpenSslVerifier::new(digest, &self.key),
-            None => OpenSslVerifier::new_without_digest(&self.key),
+        let mut verifier = match digest {
+            Some(digest) => OpenSslVerifier::new(digest, &key),
+            None => OpenSslVerifier::new_without_digest(&key),
         }
         .map_err(|e| CryptoError::InvalidKey(e.to_string()))?;
 
-        if self.pss {
+        if pss {
             verifier
                 .set_rsa_padding(openssl::rsa::Padding::PKCS1_PSS)
                 .map_err(|e| CryptoError::InvalidKey(e.to_string()))?;
@@ -82,19 +74,6 @@ impl PublicKey for OpenSslKey {
             // would tell an attacker which it was.
             Ok(false) | Err(_) => Err(CryptoError::VerificationFailed),
         }
-    }
-}
-
-impl KeyProvider for OpenSsl {
-    fn public_key(&self, algorithm: &AlgorithmIdentifier, public_key: &SubjectPublicKeyInfo) -> Result<Box<dyn PublicKey>, CryptoError> {
-        let (digest, pss) = signature_scheme(algorithm)?;
-
-        // The `subjectPublicKeyInfo` DER is exactly what OpenSSL parses, so
-        // the SPKI is re-encoded rather than passing the bare key bits.
-        let spki = public_key.raw.to_vec();
-        let key = PKey::public_key_from_der(&spki).map_err(|e| CryptoError::InvalidKey(e.to_string()))?;
-
-        Ok(Box::new(OpenSslKey { key, digest, pss }))
     }
 }
 
@@ -136,13 +115,9 @@ fn signature_scheme(algorithm: &AlgorithmIdentifier) -> Result<(Option<MessageDi
     Ok((Some(digest), false))
 }
 
-static OPENSSL: OpenSsl = OpenSsl;
-
 /// The assembled backend, in the same shape as the built-in
 /// `crypto::aws_lc::DEFAULT_PROVIDER`.
-const OPENSSL_PROVIDER: &CryptoProvider = &CryptoProvider {
-    key_provider: &OPENSSL,
-};
+static OPENSSL_PROVIDER: OpenSsl = OpenSsl;
 
 fn main() {
     // One chain per algorithm the backend claims to map, so every arm of
@@ -161,7 +136,7 @@ fn main() {
         let intermediates = CertificateStore::from_iter([chain.intermediate.clone()]);
 
         // Only the backend argument differs from the `validate_chain` example.
-        let mut validator = BaseValidator::with_policy_and_backend(roots, RFC5280Policy::new(validation_time()), OPENSSL_PROVIDER);
+        let mut validator = BaseValidator::with_policy_and_backend(roots, RFC5280Policy::new(validation_time()), &OPENSSL_PROVIDER);
 
         let verdict = match validator.validate_with_diagnostics(&chain.leaf, &intermediates, &mut |_| {}) {
             ChainValidationResultOwned::ValidCertificate(valid) => {

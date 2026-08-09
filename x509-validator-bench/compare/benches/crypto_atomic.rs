@@ -55,20 +55,3 @@ verify_bench!(verify_ecdsa_p384_sha384, "ecdsa_p384_sha384");
 verify_bench!(verify_ed25519, "ed25519");
 verify_bench!(verify_rsa_2048_sha256, "rsa_2048_sha256");
 verify_bench!(verify_rsa_4096_sha256, "rsa_4096_sha256");
-
-/// Defines one SHA-256 benchmark over a fixed input size, run against every
-/// compiled-in backend.
-///
-/// One function per size rather than looping over sizes in a single bench:
-/// summing several sizes into one measured closure would report a single
-/// number dominated by the largest input, hiding the per-size cost.
-macro_rules! sha256_bench {
-    ($name:ident, $len:expr) => {
-        #[divan::bench(args = BACKENDS)]
-        fn $name(bencher: divan::Bencher, backend: Backend) {
-            let input = vec![0x41u8; $len];
-            bencher.bench(|| divan::black_box(backend.provider.sha256.hash(divan::black_box(&input))));
-        }
-    };
-}
-
