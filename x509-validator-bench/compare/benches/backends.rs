@@ -7,7 +7,7 @@
 use x509_validator::rfc5280::RFC5280Policy;
 use x509_validator::store::CertificateStore;
 use x509_validator::validator::ChainValidationResult;
-use x509_validator::BaseValidator;
+use x509_validator::Validator;
 use x509_validator_bench_compare::{fixtures, Backend, BACKENDS};
 
 fn main() {
@@ -24,7 +24,7 @@ fn validate_three_cert_chain(bencher: divan::Bencher, backend: Backend) {
     // error path and every number would be meaningless.
     let roots = CertificateStore::from_iter(vec![parity.ca1.clone()]);
     let intermediates = CertificateStore::from_iter(vec![parity.intermediate1.clone()]);
-    let validator = BaseValidator::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::REFERENCE_TIME), backend.provider);
+    let validator = Validator::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::REFERENCE_TIME), backend.provider);
     let result = validator.validate_with_diagnostics(&parity.localhost_leaf, &intermediates, &mut |_| {});
     assert!(
         matches!(result, ChainValidationResult::ValidCertificate(_)),
@@ -42,7 +42,7 @@ fn validate_three_cert_chain(bencher: divan::Bencher, backend: Backend) {
             (roots, intermediates)
         })
         .bench_values(|(roots, intermediates)| {
-            let validator = BaseValidator::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::REFERENCE_TIME), backend.provider);
+            let validator = Validator::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::REFERENCE_TIME), backend.provider);
             divan::black_box(validator.validate_with_diagnostics(divan::black_box(&parity.localhost_leaf), &intermediates, &mut |_| {}))
         });
 }
@@ -61,7 +61,7 @@ fn validate_apple_receipt_chain(bencher: divan::Bencher, backend: Backend) {
 
     let roots = CertificateStore::from_iter(vec![chain.root.clone()]);
     let intermediates = CertificateStore::from_iter(vec![chain.intermediate.clone()]);
-    let validator = BaseValidator::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::apple::SIGNED_DATE), backend.provider);
+    let validator = Validator::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::apple::SIGNED_DATE), backend.provider);
     let result = validator.validate_with_diagnostics(&chain.leaf, &intermediates, &mut |_| {});
     assert!(
         matches!(result, ChainValidationResult::ValidCertificate(_)),
@@ -76,7 +76,7 @@ fn validate_apple_receipt_chain(bencher: divan::Bencher, backend: Backend) {
             (roots, intermediates)
         })
         .bench_values(|(roots, intermediates)| {
-            let validator = BaseValidator::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::apple::SIGNED_DATE), backend.provider);
+            let validator = Validator::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::apple::SIGNED_DATE), backend.provider);
             divan::black_box(validator.validate_with_diagnostics(divan::black_box(&chain.leaf), &intermediates, &mut |_| {}))
         });
 }
@@ -93,7 +93,7 @@ fn validate_with_cross_signed_candidates(bencher: divan::Bencher, backend: Backe
         parity.ca1_cross_signed_by_ca2.clone(),
         parity.ca2_cross_signed_by_ca1.clone(),
     ]);
-    let validator = BaseValidator::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::REFERENCE_TIME), backend.provider);
+    let validator = Validator::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::REFERENCE_TIME), backend.provider);
     let result = validator.validate_with_diagnostics(&parity.localhost_leaf, &intermediates, &mut |_| {});
     assert!(
         matches!(result, ChainValidationResult::ValidCertificate(_)),
@@ -112,7 +112,7 @@ fn validate_with_cross_signed_candidates(bencher: divan::Bencher, backend: Backe
             (roots, intermediates)
         })
         .bench_values(|(roots, intermediates)| {
-            let validator = BaseValidator::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::REFERENCE_TIME), backend.provider);
+            let validator = Validator::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::REFERENCE_TIME), backend.provider);
             divan::black_box(validator.validate_with_diagnostics(divan::black_box(&parity.localhost_leaf), &intermediates, &mut |_| {}))
         });
 }

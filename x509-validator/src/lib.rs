@@ -4,24 +4,11 @@ pub mod validator;
 
 pub use x509_validator_core::*;
 
-// `validator::BaseValidator` (this crate's concrete, DFS chain-building
-// struct) and `x509_validator_core::Validator` (core's backend-agnostic
-// trait) share a name only via the trait; `BaseValidator` itself is
-// unambiguous, so it's re-exported directly here.
-pub use validator::BaseValidator;
-
-/// The validator to use: [`BaseValidator`] over the crypto backend selected by
-/// this crate's feature flags.
-///
-/// ```ignore
-/// let mut validator = x509_validator::Validator::with_policy(roots, policy);
-/// ```
-///
-/// This shadows core's `Validator` trait, re-exported above via
-/// `x509_validator_core::*`. That is deliberate: the concrete type is what
-/// callers of this crate want under that name, and the trait remains reachable
-/// as `x509_validator_core::Validator`.
-pub type Validator<'a, P> = BaseValidator<'a, P>;
+// This shadows core's `Validator` trait, re-exported above via
+// `x509_validator_core::*`. That is deliberate: the concrete type is what
+// callers of this crate want under that name, and the trait remains reachable
+// as `x509_validator_core::Validator`.
+pub use validator::Validator;
 
 pub mod policy;
 pub mod certificate_display;

@@ -197,7 +197,7 @@ impl RustCrypto {
 }
 
 /// The backend itself. Callers name it as the `crypto` argument to
-/// [`crate::BaseValidator::with_policy_and_backend`].
+/// [`crate::Validator::with_policy_and_backend`].
 pub static DEFAULT_PROVIDER: RustCrypto = RustCrypto;
 
 #[cfg(test)]

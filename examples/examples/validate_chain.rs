@@ -11,7 +11,7 @@
 use x509_validator::rfc5280::RFC5280Policy;
 use x509_validator::store::CertificateStore;
 use x509_validator::validator::ChainValidationResult;
-use x509_validator::BaseValidator;
+use x509_validator::Validator;
 use x509_validator_examples::{demo_chain, validation_time, BACKEND};
 
 fn main() {
@@ -24,7 +24,7 @@ fn main() {
     let intermediates = CertificateStore::from_iter([chain.intermediate.clone()]);
 
     let policy = RFC5280Policy::new(validation_time());
-    let validator = BaseValidator::with_policy_and_backend(roots, policy, BACKEND);
+    let validator = Validator::with_policy_and_backend(roots, policy, BACKEND);
 
     match validator.validate_with_diagnostics(&chain.leaf, &intermediates, &mut |_| {}) {
         ChainValidationResult::ValidCertificate(valid) => {
@@ -45,7 +45,7 @@ fn main() {
     // The same leaf without its intermediate available: there is no path to
     // the root, so chain building fails even though the leaf itself is fine.
     let roots = CertificateStore::from_iter([chain.root.clone()]);
-    let validator = BaseValidator::with_policy_and_backend(roots, RFC5280Policy::new(validation_time()), BACKEND);
+    let validator = Validator::with_policy_and_backend(roots, RFC5280Policy::new(validation_time()), BACKEND);
 
     let result = validator.validate_with_diagnostics(&chain.leaf, &CertificateStore::new(), &mut |_| {});
     println!(

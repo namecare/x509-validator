@@ -28,7 +28,7 @@ impl<'a> CertificateStore<'a> {
     }
 
     pub fn append(&mut self, certificate: Certificate<'a>) {
-        let key = subject_key(&certificate);
+        let key = certificate.subject_key();
         self.by_subject.entry(key).or_default().push(certificate);
     }
 
@@ -37,7 +37,3 @@ impl<'a> CertificateStore<'a> {
     }
 }
 
-/// Canonical lookup key for a certificate's subject: its raw DER bytes.
-pub fn subject_key(certificate: &Certificate) -> Vec<u8> {
-    certificate.subject_key()
-}
