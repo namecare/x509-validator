@@ -23,12 +23,11 @@ use std::fmt;
 use openssl::hash::MessageDigest;
 use openssl::pkey::{PKey, Public};
 use openssl::sign::Verifier as OpenSslVerifier;
-use x509_validator::crypto::{CryptoError, CryptoProvider, Digest, KeyProvider, PublicKey};
+use x509_validator::crypto::{CryptoError, CryptoProvider, KeyProvider, PublicKey};
 use x509_validator::rfc5280::RFC5280Policy;
 use x509_validator::store::CertificateStore;
 use x509_validator::validator::ChainValidationResultOwned;
-use x509_validator::BaseValidator;
-use x509_validator_core::crypto::rsa_pss_digest_bits;
+use x509_validator::{rsa_pss_digest_bits, BaseValidator};
 use x509_validator_core::oid_registry;
 use x509_validator_core::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
 use x509_validator_examples::{demo_chain_with, validation_time};
@@ -137,21 +136,12 @@ fn signature_scheme(algorithm: &AlgorithmIdentifier) -> Result<(Option<MessageDi
     Ok((Some(digest), false))
 }
 
-impl Digest for OpenSsl {
-    fn hash(&self, data: &[u8]) -> Vec<u8> {
-        openssl::hash::hash(MessageDigest::sha256(), data)
-            .expect("sha256")
-            .to_vec()
-    }
-}
-
 static OPENSSL: OpenSsl = OpenSsl;
 
 /// The assembled backend, in the same shape as the built-in
 /// `crypto::aws_lc::DEFAULT_PROVIDER`.
 const OPENSSL_PROVIDER: &CryptoProvider = &CryptoProvider {
     key_provider: &OPENSSL,
-    sha256: &OPENSSL,
 };
 
 fn main() {

@@ -9,6 +9,7 @@ pub mod ring;
 pub mod rust_crypto;
 
 use std::fmt::Debug;
+use x509_validator_core::{oid_registry, Any, RsaSsaPssParams};
 use x509_validator_core::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
 
 #[derive(thiserror::Error, Debug)]
@@ -31,14 +32,9 @@ pub trait KeyProvider: Send + Sync + Debug {
 
 pub struct CryptoProvider {
     pub key_provider: &'static dyn KeyProvider,
-    pub sha256: &'static dyn Digest,
 }
 
-pub trait Digest: Send + Sync + Debug {
-    fn hash(&self, data: &[u8]) -> Vec<u8>;
-}
-
-/// A `KeyProvider`/`Digest` pair whose every operation panics, reporting that
+/// A `KeyProvider` whose every operation panics, reporting that
 /// no single backend could be determined from the crate's features.
 ///
 /// A provider that instead failed each signature check quietly would report
@@ -56,12 +52,6 @@ provider explicitly to Validator::with_policy_and_backend instead of Validator::
 
 impl KeyProvider for UndeterminedCryptoBackend {
     fn public_key(&self, _algorithm: &AlgorithmIdentifier, _public_key: &SubjectPublicKeyInfo) -> Result<Box<dyn PublicKey>, CryptoError> {
-        panic!("{NO_BACKEND_ERROR}")
-    }
-}
-
-impl Digest for UndeterminedCryptoBackend {
-    fn hash(&self, _data: &[u8]) -> Vec<u8> {
         panic!("{NO_BACKEND_ERROR}")
     }
 }
@@ -102,7 +92,6 @@ pub fn default_provider() -> &'static CryptoProvider {
         static UNDETERMINED_BACKEND: UndeterminedCryptoBackend = UndeterminedCryptoBackend;
         static INSTANCE: CryptoProvider = CryptoProvider {
             key_provider: &UNDETERMINED_BACKEND,
-            sha256: &UNDETERMINED_BACKEND,
         };
 
         &INSTANCE
@@ -126,12 +115,29 @@ impl CryptoProvider {
     }
 }
 
+pub fn rsa_pss_digest_bits(params: Option<&Any>) -> Option<usize> {
+    let params = params?;
+    let params = RsaSsaPssParams::try_from(params).ok()?;
+    let hash_algorithm = params.hash_algorithm_oid();
+
+    if *hash_algorithm == oid_registry::OID_NIST_HASH_SHA256 {
+        Some(256)
+    } else if *hash_algorithm == oid_registry::OID_NIST_HASH_SHA384 {
+        Some(384)
+    } else if *hash_algorithm == oid_registry::OID_NIST_HASH_SHA512 {
+        Some(512)
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use x509_validator_testkit::rcgen::{CertificateParams, KeyPair};
     use x509_validator_core::CertificateExt;
     use x509_validator_core::Certificate;
+    use crate::FromDer;
 
     /// A real self-signed certificate's `AlgorithmIdentifier` and
     /// `SubjectPublicKeyInfo`, for tests that only need *some* valid values
@@ -175,24 +181,12 @@ mod tests {
         }
     }
 
-    /// Fake Digest that returns a fixed output
-    #[derive(Debug)]
-    struct FakeDigest;
-
-    impl Digest for FakeDigest {
-        fn hash(&self, _data: &[u8]) -> Vec<u8> {
-            vec![0x42; 32]
-        }
-    }
-
     static TAGGED_KEY_PROVIDER: TaggedKeyProvider = TaggedKeyProvider;
     static FAILURE_KEY_PROVIDER: FailureKeyProvider = FailureKeyProvider;
-    static FAKE_DIGEST: FakeDigest = FakeDigest;
 
     fn tagged_provider() -> CryptoProvider {
         CryptoProvider {
             key_provider: &TAGGED_KEY_PROVIDER,
-            sha256: &FAKE_DIGEST,
         }
     }
 
@@ -216,7 +210,6 @@ mod tests {
     fn verify_signature_verifier_fails() {
         let provider = CryptoProvider {
             key_provider: &FAILURE_KEY_PROVIDER,
-            sha256: &FAKE_DIGEST,
         };
         let (algorithm, spki) = algorithm_and_spki();
 
@@ -227,5 +220,58 @@ mod tests {
             Err(CryptoError::VerificationFailed) => {}
             _ => panic!("Expected VerificationFailed error"),
         }
+    }
+
+    #[test]
+    fn absent_parameters_yield_no_digest() {
+        assert_eq!(rsa_pss_digest_bits(None), None);
+    }
+
+    #[test]
+    fn undecodable_parameters_yield_no_digest() {
+        // A NULL where `RSASSA-PSS-params` (a SEQUENCE) is expected.
+        let params = Any::from_der(&[0x05, 0x00]).expect("parse NULL").1;
+
+        assert_eq!(rsa_pss_digest_bits(Some(&params)), None);
+    }
+
+    /// DER for `RSASSA-PSS-params` carrying only a `hashAlgorithm` of `oid`.
+    fn pss_params_der(oid_der: &[u8]) -> Vec<u8> {
+        // AlgorithmIdentifier ::= SEQUENCE { algorithm OBJECT IDENTIFIER }
+        let mut algorithm_identifier = vec![0x30, oid_der.len() as u8];
+        algorithm_identifier.extend_from_slice(oid_der);
+
+        // hashAlgorithm is context tag [0], explicit.
+        let mut tagged = vec![0xa0, algorithm_identifier.len() as u8];
+        tagged.extend_from_slice(&algorithm_identifier);
+
+        // RSASSA-PSS-params ::= SEQUENCE { [0] hashAlgorithm ... }
+        let mut params = vec![0x30, tagged.len() as u8];
+        params.extend_from_slice(&tagged);
+        params
+    }
+
+    #[test]
+    fn sha2_hash_algorithms_yield_their_digest_size() {
+        // OIDs 2.16.840.1.101.3.4.2.{1,2,3} = SHA-256 / SHA-384 / SHA-512.
+        for (last_octet, expected) in [(0x01, 256), (0x02, 384), (0x03, 512)] {
+            let oid_der = [
+                0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, last_octet,
+            ];
+            let der = pss_params_der(&oid_der);
+            let params = Any::from_der(&der).expect("parse PSS params").1;
+
+            assert_eq!(rsa_pss_digest_bits(Some(&params)), Some(expected));
+        }
+    }
+
+    #[test]
+    fn non_sha2_hash_algorithm_yields_no_digest() {
+        // OID 1.3.14.3.2.26 = SHA-1, which no backend supports for RSA-PSS.
+        let oid_der = [0x06, 0x05, 0x2b, 0x0e, 0x03, 0x02, 0x1a];
+        let der = pss_params_der(&oid_der);
+        let params = Any::from_der(&der).expect("parse PSS params").1;
+
+        assert_eq!(rsa_pss_digest_bits(Some(&params)), None);
     }
 }

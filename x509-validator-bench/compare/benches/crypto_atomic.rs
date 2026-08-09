@@ -72,6 +72,3 @@ macro_rules! sha256_bench {
     };
 }
 
-sha256_bench!(sha256_64b, 64);
-sha256_bench!(sha256_1kib, 1024);
-sha256_bench!(sha256_64kib, 65536);

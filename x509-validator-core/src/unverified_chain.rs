@@ -92,7 +92,6 @@ mod tests {
 
         assert_eq!(chain.len(), 1);
         assert!(!chain.is_empty());
-        // The single certificate is the leaf, even though it is a root.
         assert_eq!(chain.leaf().subject().to_string(), "CN=Root");
     }
 
