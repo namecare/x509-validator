@@ -1,6 +1,7 @@
-use crate::policy::{PolicyEvaluationResult, PolicyFailureReason, ValidationPolicy};
-use x509_validator_core::der_parser::Oid;
-use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
+use crate::policy::{PolicyEvaluationResult, ValidationPolicy};
+use crate::der_parser::Oid;
+use crate::unverified_chain::UnverifiedCertificateChain;
+use crate::PolicyFailureReason;
 
 /// Combines two [`ValidationPolicy`] values so that both must be met for the combination to be met.
 /// Built by the [`policy!`] macro when composing a flat sequence of policies; can also be constructed

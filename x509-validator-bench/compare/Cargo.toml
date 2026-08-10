@@ -7,7 +7,6 @@ publish = false
 
 [dependencies]
 x509-validator = { path = "../../x509-validator", features = ["aws_lc", "ring", "rust_crypto"] }
-x509-validator-core = { path = "../../x509-validator-core" }
 x509-validator-testkit = { path = "../../x509-validator-testkit" }
 rsa = "0.10.0-rc.18"
 rand = { version = "0.10.2", features = ["thread_rng"] }

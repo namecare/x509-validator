@@ -93,7 +93,7 @@ Runnable versions of this and more are in [examples]:
 
 ## Approach
 
-Parsing is done by [x509-parser]. `x509_validator_core::Certificate` is a re-export
+Parsing is done by [x509-parser]. `x509_validator::Certificate` is a re-export
 of its `X509Certificate`.
 
 Crypto is swappable via the feature flags above, or you can supply your own

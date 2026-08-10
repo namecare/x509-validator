@@ -11,7 +11,7 @@
 //! could pass while the benchmark measured a different set of certificates.
 
 use x509_validator_bench_compare::roots::ROOTS;
-use x509_validator_core::{Certificate, FromDer};
+use x509_validator::{Certificate, FromDer};
 
 #[test]
 fn every_root_parses_and_corpus_is_complete() {

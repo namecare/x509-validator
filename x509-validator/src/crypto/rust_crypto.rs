@@ -2,7 +2,7 @@
 
 use signature::Verifier;
 
-use x509_validator_core::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
+use crate::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
 
 use crate::crypto::backend::{VerificationAlgorithm, verification_algorithm};
 use crate::crypto::{CryptoError, SignatureVerifier};
@@ -165,9 +165,9 @@ pub static DEFAULT_PROVIDER: RustCrypto = RustCrypto;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use x509_validator_core::oid_registry;
-    use x509_validator_core::Certificate;
-    use x509_validator_core::CertificateExt;
+    use crate::oid_registry;
+    use crate::Certificate;
+    use crate::CertificateExt;
     use x509_validator_testkit::rcgen::{self, KeyPair};
     use x509_validator_testkit::self_signed;
 

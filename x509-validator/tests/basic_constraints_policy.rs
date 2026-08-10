@@ -1,7 +1,7 @@
 use x509_validator::{BasicConstraintsPolicy, ValidationPolicy};
-use x509_validator_core::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS;
-use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
-use x509_validator_core::{Certificate, CertificateExt};
+use x509_validator::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS;
+use x509_validator::unverified_chain::UnverifiedCertificateChain;
+use x509_validator::{Certificate, CertificateExt};
 use x509_validator_testkit::rcgen::CertificateParams;
 use x509_validator_testkit::{chain_of, issue_ca, issue_leaf, self_signed_ca_with};
 

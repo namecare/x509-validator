@@ -1,6 +1,6 @@
 use crate::policy::{PolicyEvaluationResult, ValidationPolicy};
-use x509_validator_core::der_parser::Oid;
-use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
+use crate::der_parser::Oid;
+use crate::unverified_chain::UnverifiedCertificateChain;
 
 /// Use this to build a policy where all of the sub-policies must be met for the overall policy to be met.
 /// This is only useful within a [`OneOfPolicies`] block, because at the top-level, it is already required for all

@@ -7,7 +7,6 @@ publish = false
 
 [dependencies]
 x509-validator = { path = "../../x509-validator" }
-x509-validator-core = { path = "../../x509-validator-core" }
 x509-validator-testkit = { path = "../../x509-validator-testkit" }
 
 [dev-dependencies]

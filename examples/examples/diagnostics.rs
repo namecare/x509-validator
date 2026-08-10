@@ -13,15 +13,11 @@
 
 use x509_validator::rfc5280::RFC5280Policy;
 use x509_validator::store::CertificateStore;
-use x509_validator::validator::ChainValidationResult;
 use x509_validator::Validator;
 use x509_validator_examples::{demo_chain, validation_time, BACKEND};
 
 fn main() {
     let chain = demo_chain(&["example.com"]);
-
-    // A root the leaf has nothing to do with: chain building will search,
-    // find no issuer it trusts, and give up.
     let unrelated = demo_chain(&["unrelated.test"]);
 
     let roots = CertificateStore::from_iter([unrelated.root.clone()]);
@@ -40,10 +36,10 @@ fn main() {
     }
 
     match result {
-        ChainValidationResult::ValidCertificate(valid) => {
+        Ok(valid) => {
             println!("\nunexpectedly valid — chain of {}", valid.iter().count());
         }
-        ChainValidationResult::CouldNotValidate(reasons) => {
+        Err(reasons) => {
             println!("\nverdict: rejected");
             if reasons.is_empty() {
                 println!("  no policy failures recorded — no chain reached a trusted root");
@@ -54,13 +50,11 @@ fn main() {
         }
     }
 
-    // `multiline_description()` carries the same information as `Display`,
-    // laid out over several lines.
     let roots = CertificateStore::from_iter([unrelated.root.clone()]);
     let validator = Validator::with_policy_and_backend(roots, RFC5280Policy::new(validation_time()), BACKEND);
 
     let mut last = None;
-    validator.validate_with_diagnostics(&chain.leaf, &intermediates, &mut |diagnostic| {
+    let _ = validator.validate_with_diagnostics(&chain.leaf, &intermediates, &mut |diagnostic| {
         last = Some(diagnostic.multiline_description());
     });
 

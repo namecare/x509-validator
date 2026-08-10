@@ -2,7 +2,7 @@
 //! fallback.
 
 use x509_validator::{ServerIdentityPolicy, ValidationPolicy};
-use x509_validator_core::oid_registry::OID_X509_EXT_SUBJECT_ALT_NAME;
+use x509_validator::oid_registry::OID_X509_EXT_SUBJECT_ALT_NAME;
 use x509_validator_testkit::rcgen::string::Ia5String;
 use x509_validator_testkit::rcgen::{DistinguishedName, DnType, SanType};
 use x509_validator_testkit::{

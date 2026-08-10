@@ -1,6 +1,6 @@
 use crate::{ValidationPolicy, PolicyEvaluationResult, PolicyFailureReason};
-use x509_validator_core::der_parser::Oid;
-use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
+use crate::der_parser::Oid;
+use crate::unverified_chain::UnverifiedCertificateChain;
 
 pub type Timestamp = i64;
 

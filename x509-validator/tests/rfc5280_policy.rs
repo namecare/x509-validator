@@ -5,7 +5,7 @@ use x509_validator::{PolicyEvaluationResult, PolicyFailureReason, RFC5280Policy,
 
 mod tests {
     use super::*;
-    use x509_validator_core::oid_registry::{OID_X509_EXT_BASIC_CONSTRAINTS, OID_X509_EXT_KEY_USAGE, OID_X509_EXT_NAME_CONSTRAINTS};
+    use x509_validator::oid_registry::{OID_X509_EXT_BASIC_CONSTRAINTS, OID_X509_EXT_KEY_USAGE, OID_X509_EXT_NAME_CONSTRAINTS};
     use x509_validator_testkit::rcgen::CertificateParams;
     use x509_validator_testkit::time::{Duration, OffsetDateTime};
     use x509_validator_testkit::{chain_of, dns_subtree, issue_leaf, name_constraints, self_signed_ca_with};
@@ -128,9 +128,9 @@ mod conformance {
     use super::*;
     use x509_validator::unverified_chain::UnverifiedCertificateChain;
     use x509_validator::{BasicConstraintsPolicy, ExpiryPolicy, NameConstraintsPolicy, VersionPolicy};
-    use x509_validator_core::oid_registry::OID_X509_EXT_KEY_USAGE;
-    use x509_validator_core::Certificate;
-    use x509_validator_core::CertificateExt;
+    use x509_validator::oid_registry::OID_X509_EXT_KEY_USAGE;
+    use x509_validator::Certificate;
+    use x509_validator::CertificateExt;
     use x509_validator_testkit::rcgen::CertificateParams;
     use x509_validator_testkit::time::{Duration, OffsetDateTime};
     use x509_validator_testkit::{
@@ -240,7 +240,7 @@ mod conformance {
         );
 
         let mut downgraded = parsed.clone();
-        downgraded.tbs_certificate.version = x509_validator_core::x509::X509Version::V1;
+        downgraded.tbs_certificate.version = x509_validator::x509::X509Version::V1;
         let chain = UnverifiedCertificateChain::new(vec![downgraded]);
 
         for_both_policies(PolicyUnderTest::Version, |policy| {

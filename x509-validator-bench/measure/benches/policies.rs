@@ -15,7 +15,7 @@ use x509_validator::policy::ValidationPolicy;
 use x509_validator::rfc5280::{BasicConstraintsPolicy, ExpiryPolicy, NameConstraintsPolicy, RFC5280Policy, VersionPolicy};
 use x509_validator::{AllOfPolicies, AnyPolicy, OneOfPolicies, OneOfTuple2, ServerIdentityPolicy};
 use x509_validator_bench_measure::fixtures;
-use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
+use x509_validator::unverified_chain::UnverifiedCertificateChain;
 
 /// The leaf → intermediate → root chain every policy here is evaluated
 /// against.

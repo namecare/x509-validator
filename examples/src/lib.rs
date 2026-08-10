@@ -13,7 +13,7 @@
 
 use time::{Duration, OffsetDateTime};
 use x509_validator::crypto::SignatureVerifier;
-use x509_validator_core::Certificate;
+use x509_validator::Certificate;
 use x509_validator_testkit::{cert, rcgen, CaSpec, LeafSpec};
 
 /// The crypto backend the examples verify signatures with.

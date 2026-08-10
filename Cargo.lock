@@ -1748,7 +1748,7 @@ dependencies = [
  "sha2",
  "signature",
  "thiserror",
- "x509-validator-core",
+ "x509-parser",
  "x509-validator-testkit",
 ]
 
@@ -1762,7 +1762,6 @@ dependencies = [
  "rsa",
  "x509-cert",
  "x509-validator",
- "x509-validator-core",
  "x509-validator-testkit",
 ]
 
@@ -1772,15 +1771,6 @@ version = "0.0.0"
 dependencies = [
  "criterion",
  "x509-validator",
- "x509-validator-core",
- "x509-validator-testkit",
-]
-
-[[package]]
-name = "x509-validator-core"
-version = "0.1.0"
-dependencies = [
- "x509-parser",
  "x509-validator-testkit",
 ]
 
@@ -1791,17 +1781,16 @@ dependencies = [
  "openssl",
  "time",
  "x509-validator",
- "x509-validator-core",
  "x509-validator-testkit",
 ]
 
 [[package]]
 name = "x509-validator-testkit"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "rcgen",
  "time",
- "x509-validator-core",
+ "x509-validator",
 ]
 
 [[package]]

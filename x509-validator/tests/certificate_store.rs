@@ -2,7 +2,7 @@
 
 use x509_validator::store::CertificateStore;
 use x509_validator::Certificate;
-use x509_validator_core::CertificateExt;
+use x509_validator::CertificateExt;
 use x509_validator_testkit::{cert, self_signed_ca};
 
 fn store_cert(subject_cn: &str) -> Certificate<'static> {

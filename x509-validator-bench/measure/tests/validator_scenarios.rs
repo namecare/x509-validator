@@ -14,10 +14,10 @@ use x509_validator::store::CertificateStore;
 use x509_validator::validator::ChainValidationResult;
 use x509_validator::Validator;
 use x509_validator_bench_measure::{fixtures, BACKEND};
-use x509_validator_core::der_parser::Oid;
-use x509_validator_core::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS;
-use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
-use x509_validator_core::Certificate;
+use x509_validator::der_parser::Oid;
+use x509_validator::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS;
+use x509_validator::unverified_chain::UnverifiedCertificateChain;
+use x509_validator::Certificate;
 
 /// Rejects any chain containing a specific certificate, so that a scenario can
 /// force the search past the shortest path onto a longer one.
@@ -79,12 +79,12 @@ fn assert_scenario(
 
 fn assert_outcome(name: &str, result: &ChainValidationResult, expect: Expect) {
     match (result, expect) {
-        (ChainValidationResult::ValidCertificate(_), Expect::Valid) => {}
-        (ChainValidationResult::CouldNotValidate(_), Expect::Invalid) => {}
-        (ChainValidationResult::ValidCertificate(_), Expect::Invalid) => {
+        (Ok(_), Expect::Valid) => {}
+        (Err(_), Expect::Invalid) => {}
+        (Ok(_), Expect::Invalid) => {
             panic!("scenario `{name}` was expected to fail validation but produced ValidCertificate");
         }
-        (ChainValidationResult::CouldNotValidate(reasons), Expect::Valid) => {
+        (Err(reasons), Expect::Valid) => {
             panic!("scenario `{name}` was expected to validate but produced CouldNotValidate({reasons:?})");
         }
     }
