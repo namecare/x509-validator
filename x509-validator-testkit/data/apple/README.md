@@ -1,7 +1,9 @@
 # Apple receipt-signing chain
 
-A real, publicly-issued certificate chain, vendored so the suite reports at
-least one measurement against certificates nobody chose for benchmarking.
+A real, publicly-issued certificate chain, vendored so the benchmark suite
+reports at least one measurement against certificates nobody chose for
+benchmarking. It also seeds the fuzz corpus, where it is the one chain whose
+signatures actually verify.
 
 | File | Subject | Key |
 |---|---|---|

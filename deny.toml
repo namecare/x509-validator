@@ -1,0 +1,15 @@
+[licenses]
+version = 2
+allow = ["Apache-2.0", "BSD-3-Clause", "ISC", "MIT", "Unicode-3.0"]
+private = { ignore = true }
+
+[advisories]
+ignore = [
+  # Marvin Attack: timing sidechannel in the `rsa` crate's private-key
+  # operations, with no fixed version available. Certificate validation only
+  # ever verifies signatures against the public key carried in the
+  # certificate, so it performs none of the affected operations and holds no
+  # private key. The private-key uses in this repository are confined to test
+  # code that generates throwaway certificates.
+  "RUSTSEC-2023-0071",
+]

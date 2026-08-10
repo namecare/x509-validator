@@ -48,29 +48,35 @@ but verifies nothing. You can also provide your own by implementing
 ```rust
 use x509_validator::rfc5280::RFC5280Policy;
 use x509_validator::store::CertificateStore;
-use x509_validator::validator::ChainValidationResult;
 use x509_validator::Validator;
+use x509_validator::rfc5280::Timestamp;
+use x509_validator::{Certificate, FromDer};
 
-// Roots are trusted a priori. Intermediates are only available to build
-// through — each still has to be signed by something leading back to a root.
-let roots = CertificateStore::from_iter([root]);
-let intermediates = CertificateStore::from_iter([intermediate]);
+fn example(root_der: &[u8], intermediate_der: &[u8], leaf_der: &[u8], now: Timestamp) {
+    let parse = |der| Certificate::from_der(der).expect("parse").1;
+    let (root, intermediate, leaf) = (parse(root_der), parse(intermediate_der), parse(leaf_der));
 
-let policy = RFC5280Policy::new(now);
-let validator = Validator::with_policy(roots, policy);
+    // Roots are trusted a priori. Intermediates are only available to build
+    // through — each still has to be signed by something leading back to a root.
+    let roots = CertificateStore::from_iter([root]);
+    let intermediates = CertificateStore::from_iter([intermediate]);
 
-match validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {}) {
-    ChainValidationResult::ValidCertificate(chain) => {
-        // Leaf first, root last.
-        for cert in chain.iter() {
-            println!("{}", cert.tbs_certificate.subject);
+    let policy = RFC5280Policy::new(now);
+    let validator = Validator::with_policy(roots, policy);
+
+    match validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {}) {
+        Ok(chain) => {
+            // Leaf first, root last.
+            for cert in chain.iter() {
+                println!("{}", cert.tbs_certificate.subject);
+            }
         }
-    }
-    ChainValidationResult::CouldNotValidate(reasons) => {
-        // Empty means no candidate chain reached a root, so the policy was
-        // never asked.
-        for reason in reasons {
-            println!("rejected: {reason}");
+        Err(reasons) => {
+            // Empty means no candidate chain reached a root, so the policy was
+            // never asked.
+            for reason in reasons {
+                println!("rejected: {reason}");
+            }
         }
     }
 }
@@ -89,7 +95,9 @@ Runnable versions of this and more are in [examples]:
 | `diagnostics` | Reading the diagnostic callback to find out *why* a chain failed |
 | `custom_crypto_backend` | Implementing `SignatureVerifier` over OpenSSL |
 
-    cargo run -p x509-validator-examples --example validate_chain
+```sh
+cargo run -p x509-validator-examples --example validate_chain
+```
 
 ## Approach
 

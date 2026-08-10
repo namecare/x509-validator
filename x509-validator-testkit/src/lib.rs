@@ -1,9 +1,4 @@
 //! Helpers for building real DER-encoded certificates in tests.
-//!
-//! `x509_validator::Certificate` borrows from the DER bytes it was
-//! parsed from and has no public constructor, so tests can't hand-build
-//! fake instances — every test exercises a certificate produced by `rcgen`
-//! and re-parsed via `Certificate::from_der`.
 
 pub mod bench_fixtures;
 pub mod ca;
@@ -11,6 +6,8 @@ pub mod constraints;
 pub mod leaf;
 pub mod parse;
 pub mod raw;
+pub mod real_chain;
+pub mod roots;
 
 pub use ca::*;
 pub use constraints::*;

@@ -29,7 +29,7 @@ impl<'a> UnverifiedCertificateChain<'a> {
     }
 }
 
-impl<'a> core::ops::Index<usize> for UnverifiedCertificateChain<'a> {
+impl<'a> std::ops::Index<usize> for UnverifiedCertificateChain<'a> {
     type Output = Certificate<'a>;
     fn index(&self, i: usize) -> &Certificate<'a> {
         &self.certificates[i]
@@ -38,10 +38,9 @@ impl<'a> core::ops::Index<usize> for UnverifiedCertificateChain<'a> {
 
 #[cfg(test)]
 mod tests {
-    use x509_validator_testkit::{cert, issue_ca, issue_leaf, self_signed_ca_with};
-
     use super::*;
     use crate::CertificateExt;
+    use x509_validator_testkit::{cert, issue_ca, issue_leaf, self_signed_ca_with};
 
     /// A three-certificate chain, leaf-first: leaf, intermediate, root.
     fn leaf_intermediate_root() -> Vec<Certificate<'static>> {
@@ -49,11 +48,11 @@ mod tests {
         let intermediate = issue_ca("Intermediate", &root, None, |_| {});
         let leaf = issue_leaf("leaf.example.com", &["leaf.example.com"], &intermediate);
 
-        vec![
-            cert(leaf),
-            cert(intermediate.der),
-            cert(root.der),
-        ]
+<<<<<<< Updated upstream
+        vec![cert(leaf), cert(intermediate.der.clone()), cert(root.der.clone())]
+=======
+        vec![cert(leaf), cert(intermediate.der), cert(root.der)]
+>>>>>>> Stashed changes
     }
 
     #[test]
@@ -85,25 +84,20 @@ mod tests {
     fn iter_yields_every_certificate_in_index_order() {
         let chain = UnverifiedCertificateChain::new(leaf_intermediate_root());
 
-        let subjects: Vec<_> = chain
-            .iter()
-            .map(|c| c.subject().to_string())
-            .collect();
+        let subjects: Vec<_> = chain.iter().map(|c| c.subject().to_string()).collect();
 
-        assert_eq!(
-            subjects,
-            ["CN=leaf.example.com", "CN=Intermediate", "CN=Root"]
-        );
+        assert_eq!(subjects, ["CN=leaf.example.com", "CN=Intermediate", "CN=Root"]);
         assert_eq!(subjects.len(), chain.len());
     }
 
     #[test]
     fn a_chain_is_never_empty() {
-        let chain = UnverifiedCertificateChain::new(vec![cert(
-            self_signed_ca_with("Root", |_| {})
-                .der
-                ,
-        )]);
+<<<<<<< Updated upstream
+        let chain = UnverifiedCertificateChain::new(vec![cert(self_signed_ca_with("Root", |_| {}).der.clone())]);
+=======
+        let chain =
+            UnverifiedCertificateChain::new(vec![cert(self_signed_ca_with("Root", |_| {}).der)]);
+>>>>>>> Stashed changes
 
         assert_eq!(chain.len(), 1);
         assert!(!chain.is_empty());

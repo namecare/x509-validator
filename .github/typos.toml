@@ -1,0 +1,8 @@
+[default.extend-words]
+# Part of a wildcard-matching fixture ("FO*.EXAMPLE.com"), not a word.
+FO = "FO"
+
+[files]
+# Mozilla's root CA bundle, named after the CAs themselves. The spellings are
+# theirs, and renaming the files would break the benchmark fixtures.
+extend-exclude = ["*.der", "x509-validator-bench/compare/data/"]
