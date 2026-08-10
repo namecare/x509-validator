@@ -12,13 +12,18 @@
 [![Documentation](https://docs.rs/x509-validator/badge.svg)](https://docs.rs/x509-validator/)
 [![Crates.io](https://img.shields.io/crates/v/x509-validator.svg)](https://crates.io/crates/x509-validator)
 
-Validates an X.509 certificate chain against a set of root certificates and verifier policy.
+X.509 certificate chain validator.   
+
+## Overview
+
+This library makes it possible to validate X.509 certificate chain against a set of root certificates and a ``ValidationPolicy``.  This is an essential building-block for a wide range
+of PKI applications. It ships with a default verifier and a number of built-in verifier policies.
 
     This library was havily inspired and follows the design of [swift-certificates].
 
 ## Requirements
 
-- Rust 2021 edition. Tested against stable; no MSRV is declared yet.
+- Rust 2021 edition. 
 
 ## Installation
 
@@ -86,26 +91,20 @@ Runnable versions of this and more are in [examples]:
 
 ## Approach
 
-Parsing is [x509-parser]'s. `x509_validator_core::Certificate` is a re-export
-of its `X509Certificate`, so certificates borrow their input buffer rather than
-being copied into an owned tree.
+Parsing is done by [x509-parser]. `x509_validator_core::Certificate` is a re-export
+of its `X509Certificate`.
 
-Crypto is yours to choose, via the feature flags above or your own
-`SignatureVerifier`.
+Crypto is swapable via the feature flags above or can be provided a `SignatureVerifier`.
 
-Policy is where the actual rules live. The validator finds paths; it does not
-decide what a good path is. A `ValidationPolicy` gets each candidate chain and
-accepts or rejects it, and the built-in policies are ordinary implementations
-of that same trait with no privileged access.
+Policy is where the actual rules live. A `ValidationPolicy` gets each candidate chain and
+accepts or rejects it. 
 
 ## Benchmarks
 
 Two crates, in [x509-validator-bench]:
 
-- [`measure`][bench-measure] — did *our* code get slower? One backend, one
-  fixed reference time, criterion tracking history between runs.
-- [`compare`][bench-compare] — which is faster? Backend against backend,
-  parser against parser, with [results][bench-results] for Apple Silicon.
+- [`measure`][bench-measure] — Regression benchmarks.
+- [`compare`][bench-compare] — Compare backends and parsers, with [results][bench-results] for Apple Silicon.
 
 ## Contributing
 

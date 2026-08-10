@@ -9,40 +9,23 @@ publish = false
 x509-validator = { path = "../../x509-validator" }
 x509-validator-core = { path = "../../x509-validator-core" }
 x509-validator-testkit = { path = "../../x509-validator-testkit" }
-time = "0.3"
 
 [dev-dependencies]
-# Criterion rather than divan: this suite is meant to be tracked over time by
-# a CI service, and the ones that ingest Rust benchmarks read criterion's
-# output. `html_reports` writes plots and an index page to
-# `target/criterion/report/` — see the README for how to open them.
-# `html_reports` needs `plotters` to render with; enabling it alone silently
-# produces no report.
-criterion = { version = "0.8", default-features = false, features = [
+criterion = { version = "0.8.2", default-features = false, features = [
     "cargo_bench_support",
     "html_reports",
     "plotters",
 ] }
 
 [features]
-# One backend, chosen at compile time. A regression gate wants a single
-# stable number per code path; a backend axis would triple the metric count
-# and none of the extra rows would say anything about our own code.
 default = ["aws_lc"]
 aws_lc = ["x509-validator/aws_lc"]
 ring = ["x509-validator/ring"]
 rust_crypto = ["x509-validator/rust_crypto"]
 
-# `cargo bench` would otherwise also run `src/lib.rs` as a benchmark target
-# under the default libtest harness, which rejects criterion's flags —
-# `--baseline-lenient` fails there before a single benchmark runs. The lib has
-# no `#[bench]` functions to contribute anyway.
 [lib]
 bench = false
 
-# Every bench target needs `harness = false`: with the default harness the
-# file is compiled against libtest, which does not understand criterion's
-# command line. `parse` is as much a criterion bench as the other two.
 [[bench]]
 name = "parse"
 harness = false
