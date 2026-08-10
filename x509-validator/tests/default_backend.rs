@@ -8,7 +8,7 @@
 //! reported the same way as one that was checked and found wanting.
 
 use x509_validator::crypto::default_provider;
-use x509_validator_core::{Certificate, CertificateExt};
+use x509_validator::{Certificate, CertificateExt};
 use x509_validator_testkit::rcgen::{CertificateParams, KeyPair};
 
 /// A real self-signed certificate, giving the tests a genuine

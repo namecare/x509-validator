@@ -9,8 +9,8 @@ pub mod ring;
 pub mod rust_crypto;
 
 use std::fmt::Debug;
-use x509_validator_core::{oid_registry, Any, RsaSsaPssParams};
-use x509_validator_core::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
+use crate::{oid_registry, Any, RsaSsaPssParams};
+use crate::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
 
 #[derive(thiserror::Error, Debug)]
 pub enum CryptoError {
@@ -108,8 +108,8 @@ pub fn rsa_pss_digest_bits(params: Option<&Any>) -> Option<usize> {
 mod tests {
     use super::*;
     use x509_validator_testkit::rcgen::{CertificateParams, KeyPair};
-    use x509_validator_core::CertificateExt;
-    use x509_validator_core::Certificate;
+    use crate::CertificateExt;
+    use crate::Certificate;
     use crate::FromDer;
 
     /// A real self-signed certificate's `AlgorithmIdentifier` and

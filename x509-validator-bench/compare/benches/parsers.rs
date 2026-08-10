@@ -1,6 +1,6 @@
 //! DER parsing, our parser against another.
 //!
-//! We parse via `x509_validator_core::Certificate`, which is a re-export of
+//! We parse via `x509_validator::Certificate`, which is a re-export of
 //! x509-parser's `X509Certificate` — so this row is x509-parser's number,
 //! with no wrapper overhead of ours in it. The rival is RustCrypto's
 //! `x509-cert`.
@@ -23,7 +23,7 @@ mod webpki_roots {
 
     #[divan::bench]
     fn x509_parser(bencher: divan::Bencher) {
-        use x509_validator_core::{Certificate, FromDer};
+        use x509_validator::{Certificate, FromDer};
 
         bencher.bench(|| {
             for der in ROOTS {
@@ -54,7 +54,7 @@ mod single_root {
 
     #[divan::bench]
     fn x509_parser(bencher: divan::Bencher) {
-        use x509_validator_core::{Certificate, FromDer};
+        use x509_validator::{Certificate, FromDer};
 
         let der = ROOTS[0];
         bencher.bench(|| {
@@ -83,7 +83,7 @@ mod apple_leaf {
 
     #[divan::bench]
     fn x509_parser(bencher: divan::Bencher) {
-        use x509_validator_core::{Certificate, FromDer};
+        use x509_validator::{Certificate, FromDer};
 
         let der = fixtures::apple::LEAF_DER;
         bencher.bench(|| {

@@ -1,6 +1,6 @@
 use crate::policy::{PolicyEvaluationResult, ValidationPolicy};
-use x509_validator_core::der_parser::Oid;
-use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
+use crate::der_parser::Oid;
+use crate::unverified_chain::UnverifiedCertificateChain;
 
 /// [`AnyPolicy`] can be used to erase the concrete type of some [`ValidationPolicy`].
 /// Only use [`AnyPolicy`] if type erasure is necessary.

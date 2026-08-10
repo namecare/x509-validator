@@ -7,8 +7,8 @@
 //! [`VerificationDiagnostic::multiline_description`]).
 
 use x509_validator::{PolicyFailureReason, VerificationDiagnostic};
-use x509_validator_core::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS;
-use x509_validator_core::Certificate;
+use x509_validator::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS;
+use x509_validator::Certificate;
 use x509_validator_testkit::{cert, issue_ca, issue_leaf, self_signed_ca_with};
 
 /// A root, an intermediate issued by it, and a leaf issued by the

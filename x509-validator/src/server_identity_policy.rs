@@ -1,10 +1,11 @@
-use crate::policy::{PolicyEvaluationResult, PolicyFailureReason, ValidationPolicy};
+use crate::policy::{PolicyEvaluationResult, ValidationPolicy};
 use std::net::{Ipv4Addr, Ipv6Addr};
-use x509_validator_core::der_parser::Oid;
-use x509_validator_core::extensions::GeneralName;
-use x509_validator_core::oid_registry::OID_X509_EXT_SUBJECT_ALT_NAME;
-use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
-use x509_validator_core::Certificate;
+use crate::der_parser::Oid;
+use crate::extensions::GeneralName;
+use crate::oid_registry::OID_X509_EXT_SUBJECT_ALT_NAME;
+use crate::unverified_chain::UnverifiedCertificateChain;
+use crate::Certificate;
+use crate::PolicyFailureReason;
 
 const ASCII_PERIOD: u8 = b'.';
 const ASCII_ASTERISK: u8 = b'*';

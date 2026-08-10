@@ -1,8 +1,8 @@
-use crate::policy::PolicyFailureReason;
 use std::fmt;
-use x509_validator_core::der_parser::Oid;
-use x509_validator_core::Certificate;
-use x509_validator_core::certificate::format_certificate;
+use crate::der_parser::Oid;
+use crate::Certificate;
+use crate::certificate::format_certificate;
+use crate::PolicyFailureReason;
 
 pub struct VerificationDiagnostic<'a> {
     storage: Storage<'a>,

@@ -19,9 +19,9 @@ backend! {
 mod tests {
     use super::*;
     use x509_validator_testkit::rcgen::KeyPair;
-    use x509_validator_core::oid_registry;
-    use x509_validator_core::CertificateExt;
-    use x509_validator_core::Certificate;
+    use crate::oid_registry;
+    use crate::CertificateExt;
+    use crate::Certificate;
     use x509_validator_testkit::self_signed;
 
     #[test]

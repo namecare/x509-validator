@@ -16,7 +16,7 @@ use crate::rcgen::{KeyPair, PKCS_ECDSA_P384_SHA384};
 use crate::{CaSpec, LeafSpec, Ski};
 use std::sync::OnceLock;
 use time::{Duration, OffsetDateTime};
-use x509_validator_core::Certificate;
+use x509_validator::Certificate;
 
 /// The instant every validity window is anchored to, and the time expiry
 /// checks are pinned to. Fixed rather than "now" so a benchmark run is not

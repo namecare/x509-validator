@@ -1,13 +1,11 @@
+use std::fmt;
 use crate::crypto::SignatureVerifier;
 use crate::diagnostic::VerificationDiagnostic;
-use crate::policy::{PolicyFailureReason, ValidationPolicy};
 use crate::store::CertificateStore;
-use x509_validator_core::error::PolicyFailure;
-use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
-use x509_validator_core::validated_chain::ValidatedCertificateChain;
-use x509_validator_core::validator::BaseValidator;
-pub use x509_validator_core::validator::ChainValidationResult;
-use x509_validator_core::{Certificate, CertificateExt};
+use crate::unverified_chain::UnverifiedCertificateChain;
+use crate::validated_chain::ValidatedCertificateChain;
+use crate::{Certificate, CertificateExt};
+use crate::{PolicyFailureReason, ValidationPolicy};
 
 /// Validates an X.509 certificate chain against a set of root certificates and
 /// a [`ValidationPolicy`], using the crypto backend selected by this crate's
@@ -77,7 +75,7 @@ where
                 leaf.clone(),
                 self.policy.verifying_critical_extensions(),
             ));
-            return ChainValidationResult::CouldNotValidate(vec![PolicyFailure::new(
+            return Err(vec![PolicyFailure::new(
                 UnverifiedCertificateChain::new(vec![leaf.clone()]),
                 PolicyFailureReason::new("leaf certificate has unhandled critical extension"),
             )]);
@@ -98,7 +96,7 @@ where
                 Ok(()) => {
                     // We're good!
                     diagnostic_callback(VerificationDiagnostic::found_valid_certificate_chain(vec![leaf.clone()]));
-                    return ChainValidationResult::ValidCertificate(ValidatedCertificateChain::new_unchecked(vec![leaf.clone()]));
+                    return Ok(ValidatedCertificateChain::new_unchecked(vec![leaf.clone()]));
                 }
                 Err(reason) => {
                     diagnostic_callback(
@@ -141,7 +139,7 @@ where
                     Ok(()) => {
                         // We're good!
                         diagnostic_callback(VerificationDiagnostic::found_valid_certificate_chain(chain_certs.clone()));
-                        return ChainValidationResult::ValidCertificate(ValidatedCertificateChain::new_unchecked(chain_certs));
+                        return Ok(ValidatedCertificateChain::new_unchecked(chain_certs));
                     }
                     Err(reason) => {
                         diagnostic_callback(VerificationDiagnostic::chain_fails_to_meet_policy(chain_certs, reason.clone()));
@@ -175,33 +173,7 @@ where
         }
 
         diagnostic_callback(VerificationDiagnostic::could_not_validate_leaf_certificate(leaf.clone()));
-        ChainValidationResult::CouldNotValidate(policy_failures)
-    }
-}
-
-impl<'a, P> BaseValidator<'a> for Validator<'a, P>
-where
-    P: ValidationPolicy,
-{
-    fn validate(&self, leaf: Certificate<'a>, intermediates: Vec<Certificate<'a>>) -> ChainValidationResult<'a> {
-        let store = CertificateStore::from_iter(intermediates);
-        self.validate_with_diagnostics(&leaf, &store, &mut |_: VerificationDiagnostic| {})
-    }
-
-    fn validate_raw(&self, leaf: &'a [u8], intermediates: &'a [&'a [u8]]) -> ChainValidationResult<'a> {
-        let Ok(leaf) = Certificate::parse(leaf) else {
-            return ChainValidationResult::CouldNotValidate(Vec::new());
-        };
-        let mut parsed = Vec::with_capacity(intermediates.len());
-        for der in intermediates {
-            // An unparseable intermediate is skipped rather than fatal: chain
-            // building may still reach a root through the certificates that
-            // did parse.
-            if let Ok(certificate) = Certificate::parse(der) {
-                parsed.push(certificate);
-            }
-        }
-        self.validate(leaf, parsed)
+        Err(policy_failures)
     }
 }
 
@@ -275,4 +247,39 @@ fn should_skip_adding_certificate<'a>(
     }
 
     !signature_verifies
+}
+
+
+/// The result of validating a certificate chain.
+///
+/// The error case carries every chain that was built and rejected, each with
+/// the reason it was rejected, in the order the implementation considered them.
+pub type ChainValidationResult<'a> = Result<ValidatedCertificateChain<'a>, Vec<PolicyFailure<'a>>>;
+
+/// A chain that was built but rejected by policy, and why.
+#[derive(Clone)]
+pub struct PolicyFailure<'a> {
+    pub chain: UnverifiedCertificateChain<'a>,
+    pub policy_failure_reason: PolicyFailureReason,
+}
+
+impl<'a> PolicyFailure<'a> {
+    pub fn new(chain: UnverifiedCertificateChain<'a>, policy_failure_reason: PolicyFailureReason) -> Self {
+        Self {
+            chain,
+            policy_failure_reason,
+        }
+    }
+}
+
+impl fmt::Display for PolicyFailure<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.policy_failure_reason)
+    }
+}
+
+impl fmt::Debug for PolicyFailure<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} (chain of {})", self.policy_failure_reason, self.chain.len())
+    }
 }

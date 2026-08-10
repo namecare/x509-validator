@@ -7,7 +7,6 @@ publish = false
 
 [dependencies]
 x509-validator = { path = "../x509-validator", features = ["aws_lc"] }
-x509-validator-core = { path = "../x509-validator-core" }
 
 # The examples validate certificates, so they need certificates to validate.
 # Generating them here keeps every example self-contained: `cargo run

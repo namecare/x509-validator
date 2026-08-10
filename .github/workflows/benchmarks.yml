@@ -23,7 +23,6 @@ on:
     branches: [master]
     paths: &bench_paths
       - "x509-validator/**"
-      - "x509-validator-core/**"
       - "x509-validator-testkit/**"
       - "x509-validator-bench/measure/**"
       - "Cargo.toml"

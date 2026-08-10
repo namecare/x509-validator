@@ -1,8 +1,8 @@
 use crate::{ValidationPolicy, PolicyEvaluationResult, PolicyFailureReason};
-use x509_validator_core::der_parser::Oid;
-use x509_validator_core::extensions::{GeneralName, GeneralSubtree};
-use x509_validator_core::oid_registry::OID_X509_EXT_NAME_CONSTRAINTS;
-use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
+use crate::der_parser::Oid;
+use crate::extensions::{GeneralName, GeneralSubtree};
+use crate::oid_registry::OID_X509_EXT_NAME_CONSTRAINTS;
+use crate::unverified_chain::UnverifiedCertificateChain;
 
 /// id-ce-nameConstraints, RFC 5280 §4.2.1.10: 2.5.29.30.
 fn name_constraints_oid() -> Oid<'static> {
@@ -52,7 +52,7 @@ impl ValidationPolicy for NameConstraintsPolicy {
 impl NameConstraintsPolicy {
     fn validate_name_constraints(
         chain: &UnverifiedCertificateChain,
-        issuer: &x509_validator_core::Certificate,
+        issuer: &crate::Certificate,
         subject_indices: &[usize],
     ) -> PolicyEvaluationResult {
         // If we couldn't decode these, fail validation.
@@ -83,7 +83,7 @@ impl NameConstraintsPolicy {
         Ok(())
     }
 
-    fn names<'a>(cert: &'a x509_validator_core::Certificate<'a>) -> Result<Vec<GeneralName<'a>>, PolicyFailureReason> {
+    fn names<'a>(cert: &'a crate::Certificate<'a>) -> Result<Vec<GeneralName<'a>>, PolicyFailureReason> {
         let mut names = vec![GeneralName::DirectoryName(cert.subject().clone())];
 
         let san = cert

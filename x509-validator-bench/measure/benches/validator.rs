@@ -20,13 +20,12 @@ use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use x509_validator::policy::{PolicyEvaluationResult, PolicyFailureReason, ValidationPolicy};
 use x509_validator::rfc5280::RFC5280Policy;
 use x509_validator::store::CertificateStore;
-use x509_validator::validator::ChainValidationResult;
 use x509_validator::Validator;
 use x509_validator_bench_measure::{fixtures, BACKEND};
-use x509_validator_core::der_parser::Oid;
-use x509_validator_core::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS;
-use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
-use x509_validator_core::Certificate;
+use x509_validator::der_parser::Oid;
+use x509_validator::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS;
+use x509_validator::unverified_chain::UnverifiedCertificateChain;
+use x509_validator::Certificate;
 
 /// Rejects any chain containing a specific certificate, so that a scenario can
 /// force the search past the shortest path onto a longer one.
@@ -78,8 +77,8 @@ struct Scenario {
 fn validate(roots: CertificateStore<'static>, intermediates: &CertificateStore<'static>, leaf: &Certificate<'static>) -> usize {
     let validator = Validator::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::REFERENCE_TIME), BACKEND);
     match validator.validate_with_diagnostics(leaf, intermediates, &mut |_| {}) {
-        ChainValidationResult::ValidCertificate(chain) => chain.iter().count(),
-        ChainValidationResult::CouldNotValidate(reasons) => reasons.len(),
+        Ok(chain) => chain.iter().count(),
+        Err(reasons) => reasons.len(),
     }
 }
 
@@ -189,8 +188,8 @@ fn successful(c: &mut Criterion) {
                     BACKEND,
                 );
                 match validator.validate_with_diagnostics(&p.localhost_leaf, &intermediates, &mut |_| {}) {
-                    ChainValidationResult::ValidCertificate(chain) => chain.iter().count(),
-                    ChainValidationResult::CouldNotValidate(reasons) => reasons.len(),
+                    Ok(chain) => chain.iter().count(),
+                    Err(reasons) => reasons.len(),
                 }
             },
             BatchSize::SmallInput,
@@ -216,8 +215,8 @@ fn successful(c: &mut Criterion) {
             |(roots, intermediates)| {
                 let validator = Validator::with_policy_and_backend(roots, IgnoreBasicConstraintsPolicy, BACKEND);
                 match validator.validate_with_diagnostics(&p.localhost_leaf, &intermediates, &mut |_| {}) {
-                    ChainValidationResult::ValidCertificate(chain) => chain.iter().count(),
-                    ChainValidationResult::CouldNotValidate(reasons) => reasons.len(),
+                    Ok(chain) => chain.iter().count(),
+                    Err(reasons) => reasons.len(),
                 }
             },
             BatchSize::SmallInput,
@@ -338,8 +337,8 @@ fn all_scenarios(c: &mut Criterion) {
                     BACKEND,
                 );
                 count += match validator.validate_with_diagnostics(&p.localhost_leaf, &intermediates, &mut |_| {}) {
-                    ChainValidationResult::ValidCertificate(chain) => chain.iter().count(),
-                    ChainValidationResult::CouldNotValidate(reasons) => reasons.len(),
+                    Ok(chain) => chain.iter().count(),
+                    Err(reasons) => reasons.len(),
                 };
             }
             let (r, i) = stores(
@@ -351,8 +350,8 @@ fn all_scenarios(c: &mut Criterion) {
                 let (roots, intermediates) = stores(vec![p.localhost_leaf.clone()], vec![p.intermediate1.clone()]);
                 let validator = Validator::with_policy_and_backend(roots, IgnoreBasicConstraintsPolicy, BACKEND);
                 count += match validator.validate_with_diagnostics(&p.localhost_leaf, &intermediates, &mut |_| {}) {
-                    ChainValidationResult::ValidCertificate(chain) => chain.iter().count(),
-                    ChainValidationResult::CouldNotValidate(reasons) => reasons.len(),
+                    Ok(chain) => chain.iter().count(),
+                    Err(reasons) => reasons.len(),
                 };
             }
             let (r, i) = stores(vec![p.intermediate1.clone()], vec![p.intermediate1.clone()]);

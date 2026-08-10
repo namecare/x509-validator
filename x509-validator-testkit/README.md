@@ -6,10 +6,10 @@
 </picture>
 </p>
 
-# X509Validator 
+# X509Validator TestKit
 
 [![Tests](https://github.com/namecare/x509-validator/actions/workflows/tests.yml/badge.svg?branch=master)](https://github.com/namecare/x509-validator/actions/workflows/tests.yml?query=branch%3Amaster)
 [![Documentation](https://docs.rs/x509-validator/badge.svg)](https://docs.rs/x509-validator/)
 [![Crates.io](https://img.shields.io/crates/v/x509-validator.svg)](https://crates.io/crates/x509-validator)
 
-Validates an X.509 certificate chain against a set of root certificates and verifier policy.
+Provides bla bla bla

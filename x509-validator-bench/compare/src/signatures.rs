@@ -5,8 +5,8 @@
 //! and signing happen once, here.
 
 use std::sync::OnceLock;
-use x509_validator_core::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
-use x509_validator_core::{Certificate, FromDer};
+use x509_validator::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
+use x509_validator::{Certificate, FromDer};
 use x509_validator_testkit::parse::leak;
 use x509_validator_testkit::rcgen::{CertificateParams, KeyPair, PKCS_ECDSA_P384_SHA384, PKCS_ED25519};
 

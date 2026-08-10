@@ -1,6 +1,6 @@
 use x509_validator::{NameConstraintsPolicy, PolicyFailureReason, ValidationPolicy};
 use x509_validator_testkit::rcgen::CertificateParams;
-use x509_validator_core::CertificateExt;
+use x509_validator::CertificateExt;
 use x509_validator_testkit::{
     chain_of, dns_subtree, issue_leaf, issue_leaf_with, name_constraints, raw_name_constraints_extension, self_signed_ca_with,
     RawGeneralName,
@@ -117,7 +117,7 @@ fn name_that_cannot_be_decoded_is_rejected_rather_than_skipped() {
     // extension that failed to parse outright would be rejected by a different path.
     let names = chain.leaf().subject_alternative_names();
     assert!(
-        matches!(names.as_slice(), [x509_validator_core::GeneralName::Invalid(..)]),
+        matches!(names.as_slice(), [x509_validator::GeneralName::Invalid(..)]),
         "expected a single undecodable name, got {names:?}"
     );
 
@@ -155,5 +155,5 @@ fn unsupported_constraint_kind_is_rejected_even_with_no_name_of_that_kind() {
 fn verifying_critical_extensions_includes_name_constraints_oid() {
     let policy = NameConstraintsPolicy;
     let oids = policy.verifying_critical_extensions();
-    assert!(oids.contains(&x509_validator_core::oid_registry::OID_X509_EXT_NAME_CONSTRAINTS));
+    assert!(oids.contains(&x509_validator::oid_registry::OID_X509_EXT_NAME_CONSTRAINTS));
 }

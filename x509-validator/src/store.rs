@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use x509_validator_core::{Certificate, CertificateExt};
+use crate::{Certificate, CertificateExt};
 
 /// A collection of certificates for use in verification.
 #[derive(Debug, Clone)]

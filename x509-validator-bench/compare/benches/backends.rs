@@ -6,7 +6,6 @@
 
 use x509_validator::rfc5280::RFC5280Policy;
 use x509_validator::store::CertificateStore;
-use x509_validator::validator::ChainValidationResult;
 use x509_validator::Validator;
 use x509_validator_bench_compare::{fixtures, Backend, BACKENDS};
 
@@ -27,7 +26,7 @@ fn validate_three_cert_chain(bencher: divan::Bencher, backend: Backend) {
     let validator = Validator::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::REFERENCE_TIME), backend.provider);
     let result = validator.validate_with_diagnostics(&parity.localhost_leaf, &intermediates, &mut |_| {});
     assert!(
-        matches!(result, ChainValidationResult::ValidCertificate(_)),
+        result.is_ok(),
         "three-cert chain must validate successfully for {}, but validation failed",
         backend.name,
     );
@@ -64,7 +63,7 @@ fn validate_apple_receipt_chain(bencher: divan::Bencher, backend: Backend) {
     let validator = Validator::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::apple::SIGNED_DATE), backend.provider);
     let result = validator.validate_with_diagnostics(&chain.leaf, &intermediates, &mut |_| {});
     assert!(
-        matches!(result, ChainValidationResult::ValidCertificate(_)),
+        result.is_ok(),
         "the Apple receipt chain must validate successfully for {}, but validation failed",
         backend.name,
     );
@@ -96,7 +95,7 @@ fn validate_with_cross_signed_candidates(bencher: divan::Bencher, backend: Backe
     let validator = Validator::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::REFERENCE_TIME), backend.provider);
     let result = validator.validate_with_diagnostics(&parity.localhost_leaf, &intermediates, &mut |_| {});
     assert!(
-        matches!(result, ChainValidationResult::ValidCertificate(_)),
+        result.is_ok(),
         "chain with cross-signed decoys must validate successfully for {}, but validation failed",
         backend.name,
     );

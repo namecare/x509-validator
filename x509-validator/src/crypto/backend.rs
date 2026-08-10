@@ -1,8 +1,8 @@
 //! Backend-independent algorithm selection
 
-use x509_validator_core::asn1_rs::Any;
-use x509_validator_core::oid_registry;
-use x509_validator_core::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
+use crate::asn1_rs::Any;
+use crate::oid_registry;
+use crate::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
 
 use crate::crypto::rsa_pss_digest_bits;
 
@@ -105,7 +105,7 @@ macro_rules! backend {
         ecdsa_p384: { $($p384_sha:literal => $p384_alg:ident),* $(,)? },
     ) => {
         use $krate::signature::{self, UnparsedPublicKey};
-        use x509_validator_core::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
+        use crate::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
         use crate::crypto::backend::{VerificationAlgorithm, verification_algorithm};
         use crate::crypto::{CryptoError, SignatureVerifier};
         

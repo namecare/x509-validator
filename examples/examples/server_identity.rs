@@ -16,10 +16,9 @@
 use x509_validator::policy::{PolicyEvaluationResult, ValidationPolicy};
 use x509_validator::rfc5280::RFC5280Policy;
 use x509_validator::store::CertificateStore;
-use x509_validator::validator::ChainValidationResult;
 use x509_validator::{Validator, ServerIdentityPolicy};
-use x509_validator_core::der_parser::Oid;
-use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
+use x509_validator::der_parser::Oid;
+use x509_validator::unverified_chain::UnverifiedCertificateChain;
 use x509_validator_examples::{demo_chain, validation_time, BACKEND};
 
 /// RFC 5280 chain rules plus RFC 6125 server identity — the pair a TLS
@@ -54,11 +53,8 @@ impl ValidationPolicy for WebPkiPolicy {
 }
 
 fn main() {
-    // A leaf carrying two SAN entries, one of them a wildcard.
     let chain = demo_chain(&["example.com", "*.example.com"]);
 
-    // The wildcard matches one label deep and no further, and a hostname the
-    // certificate never claimed is rejected however valid the chain is.
     for hostname in ["example.com", "api.example.com", "deep.api.example.com", "attacker.test"] {
         let roots = CertificateStore::from_iter([chain.root.clone()]);
         let intermediates = CertificateStore::from_iter([chain.intermediate.clone()]);
@@ -67,8 +63,8 @@ fn main() {
         let validator = Validator::with_policy_and_backend(roots, policy, BACKEND);
 
         let verdict = match validator.validate_with_diagnostics(&chain.leaf, &intermediates, &mut |_| {}) {
-            ChainValidationResult::ValidCertificate(_) => "accepted".to_string(),
-            ChainValidationResult::CouldNotValidate(reasons) => {
+            Ok(_) => "accepted".to_string(),
+            Err(reasons) => {
                 let first = reasons.first().map(ToString::to_string).unwrap_or_else(|| "no reason given".into());
                 format!("rejected — {first}")
             }

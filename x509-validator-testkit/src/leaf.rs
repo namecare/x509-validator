@@ -163,7 +163,7 @@ impl LeafSpec {
 mod leaf_spec_tests {
     use super::*;
     use time::{Duration, OffsetDateTime};
-    use x509_validator_core::{Certificate, CertificateExt};
+    use x509_validator::{Certificate, CertificateExt};
 
     #[test]
     fn leaf_spec_honours_validity_and_sans() {

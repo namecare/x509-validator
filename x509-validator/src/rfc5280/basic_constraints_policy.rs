@@ -1,7 +1,7 @@
 use crate::{ValidationPolicy, PolicyEvaluationResult, PolicyFailureReason};
-use x509_validator_core::der_parser::Oid;
-use x509_validator_core::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS;
-use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
+use crate::der_parser::Oid;
+use crate::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS;
+use crate::unverified_chain::UnverifiedCertificateChain;
 
 /// id-ce-basicConstraints, RFC 5280 §4.2.1.9: 2.5.29.19.
 fn basic_constraints_oid() -> Oid<'static> {
@@ -37,7 +37,7 @@ impl ValidationPolicy for BasicConstraintsPolicy {
         }
 
         let leaf = chain.leaf();
-        let leaf_is_v1 = leaf.tbs_certificate.version == x509_validator_core::x509::X509Version::V1;
+        let leaf_is_v1 = leaf.tbs_certificate.version == crate::x509::X509Version::V1;
 
         // We check for the special-case of a trust root being presented as the end entity cert. If that's what's
         // happening, we require that this cert be marked as a CA.
@@ -58,7 +58,7 @@ impl ValidationPolicy for BasicConstraintsPolicy {
 
         for i in 1..chain.len() {
             let cert = &chain[i];
-            let is_v1 = cert.tbs_certificate.version == x509_validator_core::x509::X509Version::V1;
+            let is_v1 = cert.tbs_certificate.version == crate::x509::X509Version::V1;
 
             if !is_v1 {
                 let basic_constraints = cert

@@ -377,7 +377,7 @@ pub fn self_signed(key_pair: &KeyPair) -> Vec<u8> {
 #[cfg(test)]
 mod ca_spec_tests {
     use super::*;
-    use x509_validator_core::{Certificate, CertificateExt};
+    use x509_validator::{Certificate, CertificateExt};
 
     #[test]
     fn ca_spec_honours_key_algorithm_and_validity() {
@@ -406,7 +406,7 @@ mod ca_spec_tests {
             .expect("EC public key carries curve parameters")
             .as_oid()
             .expect("curve parameters are an OID");
-        assert_eq!(curve, x509_validator_core::oid_registry::OID_NIST_EC_P384);
+        assert_eq!(curve, x509_validator::oid_registry::OID_NIST_EC_P384);
     }
 
     #[test]

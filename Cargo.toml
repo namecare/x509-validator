@@ -1,7 +1,6 @@
 [workspace]
 resolver = "2"
 members = [
-    "x509-validator-core",
     "x509-validator",
     "x509-validator-testkit",
     "examples",

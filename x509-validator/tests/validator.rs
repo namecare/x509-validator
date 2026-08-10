@@ -25,9 +25,9 @@ use x509_validator::policy::{PolicyEvaluationResult, PolicyFailureReason, Valida
 use x509_validator::store::CertificateStore;
 use x509_validator::validator::ChainValidationResult;
 use x509_validator::Validator;
-use x509_validator_core::oid_registry::{OID_X509_EXT_BASIC_CONSTRAINTS, OID_X509_EXT_SUBJECT_KEY_IDENTIFIER};
-use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
-use x509_validator_core::{Certificate, CertificateExt};
+use x509_validator::oid_registry::{OID_X509_EXT_BASIC_CONSTRAINTS, OID_X509_EXT_SUBJECT_KEY_IDENTIFIER};
+use x509_validator::unverified_chain::UnverifiedCertificateChain;
+use x509_validator::{Certificate, CertificateExt};
 use x509_validator_testkit::rcgen::KeyPair;
 use x509_validator_testkit::{
     cert, issue_ca, issue_ca_with_key, issue_ca_with_key_and_name, issue_ca_with_key_ids, issue_leaf, issue_leaf_with, issue_leaf_with_aki, leak,
@@ -44,12 +44,12 @@ fn parse(der: &'static [u8]) -> Certificate<'static> {
 /// of certificates in the wrong order just as readily as a wrong one.
 fn assert_chain_is(result: ChainValidationResult<'_>, expected: &[&Certificate<'_>]) {
     match result {
-        ChainValidationResult::ValidCertificate(chain) => {
+        Ok(chain) => {
             let actual: Vec<&[u8]> = chain.iter().map(|c| c.as_ref()).collect();
             let expected: Vec<&[u8]> = expected.iter().map(|c| c.as_ref()).collect();
             assert_eq!(actual, expected, "chain contents or order differ from expectation");
         }
-        ChainValidationResult::CouldNotValidate(reasons) => {
+        Err(reasons) => {
             panic!("expected a valid chain, got failures: {reasons:?}")
         }
     }
@@ -59,7 +59,7 @@ fn assert_chain_is(result: ChainValidationResult<'_>, expected: &[&Certificate<'
 /// purely by chain building and signature verification.
 struct AlwaysMeetsPolicy;
 impl ValidationPolicy for AlwaysMeetsPolicy {
-    fn verifying_critical_extensions(&self) -> Vec<x509_validator_core::der_parser::Oid<'static>> {
+    fn verifying_critical_extensions(&self) -> Vec<x509_validator::der_parser::Oid<'static>> {
         // The generator always marks basicConstraints critical, so a policy
         // claiming no extensions at all would reject every generated
         // CA/root as carrying an unhandled critical extension.
@@ -161,7 +161,7 @@ fn missing_issuer_fails() {
     let validator = Validator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
     let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
-    assert!(matches!(result, ChainValidationResult::CouldNotValidate(_)));
+    assert!(result.is_err());
 }
 
 #[test]
@@ -175,11 +175,11 @@ fn leaf_directly_in_root_store_is_accepted_immediately() {
 
     let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
     match result {
-        ChainValidationResult::ValidCertificate(chain) => {
+        Ok(chain) => {
             let certs: Vec<&Certificate> = chain.iter().collect();
             assert_eq!(certs.len(), 1);
         }
-        ChainValidationResult::CouldNotValidate(reasons) => {
+        Err(reasons) => {
             panic!("expected immediate root acceptance, got failures: {reasons:?}")
         }
     }
@@ -220,7 +220,7 @@ fn candidate_with_non_verifying_signature_is_skipped() {
     let validator = Validator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
     let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
-    assert!(matches!(result, ChainValidationResult::CouldNotValidate(_)));
+    assert!(result.is_err());
 }
 
 #[test]
@@ -246,7 +246,7 @@ fn candidate_with_unhandled_critical_extension_is_skipped() {
     let validator = Validator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
     let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
-    assert!(matches!(result, ChainValidationResult::CouldNotValidate(_)));
+    assert!(result.is_err());
 }
 
 #[test]
@@ -261,7 +261,7 @@ fn policy_failure_on_first_root_candidate_continues_search() {
         right_root_der: Vec<u8>,
     }
     impl ValidationPolicy for RequireRootPolicy {
-        fn verifying_critical_extensions(&self) -> Vec<x509_validator_core::der_parser::Oid<'static>> {
+        fn verifying_critical_extensions(&self) -> Vec<x509_validator::der_parser::Oid<'static>> {
             vec![OID_X509_EXT_BASIC_CONSTRAINTS]
         }
         fn chain_meets_policy_requirements(&self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
@@ -317,7 +317,7 @@ fn candidate_without_subject_key_identifier_is_preferred_over_one_whose_ski_mism
         root_skis: Arc<Mutex<Vec<Option<Vec<u8>>>>>,
     }
     impl ValidationPolicy for RecordingPolicy {
-        fn verifying_critical_extensions(&self) -> Vec<x509_validator_core::der_parser::Oid<'static>> {
+        fn verifying_critical_extensions(&self) -> Vec<x509_validator::der_parser::Oid<'static>> {
             vec![OID_X509_EXT_BASIC_CONSTRAINTS]
         }
         fn chain_meets_policy_requirements(&self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
@@ -399,12 +399,12 @@ fn missing_intermediate_fails_to_build() {
 
     let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
     match result {
-        ChainValidationResult::CouldNotValidate(reasons) => {
+        Err(reasons) => {
             // Nothing was ever offered to the policy, so there is no
             // policy failure to report — only the absence of a path.
             assert!(reasons.is_empty(), "expected no policy failures, got: {reasons:?}");
         }
-        ChainValidationResult::ValidCertificate(_) => panic!("built a chain with no intermediate available"),
+        Ok(_) => panic!("built a chain with no intermediate available"),
     }
 }
 
@@ -424,10 +424,10 @@ fn missing_root_fails_to_build() {
 
     let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
     match result {
-        ChainValidationResult::CouldNotValidate(reasons) => {
+        Err(reasons) => {
             assert!(reasons.is_empty(), "expected no policy failures, got: {reasons:?}");
         }
-        ChainValidationResult::ValidCertificate(_) => panic!("built a chain terminating at an untrusted root"),
+        Ok(_) => panic!("built a chain terminating at an untrusted root"),
     }
 }
 
@@ -494,7 +494,7 @@ fn self_signed_certificate_is_rejected_when_not_in_the_trust_store() {
 
     let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
     assert!(
-        matches!(result, ChainValidationResult::CouldNotValidate(_)),
+        result.is_err(),
         "a self-signed certificate outside the trust store must not validate"
     );
 }
@@ -591,7 +591,7 @@ fn critical_extensions_are_policed_on_leaf_certificates() {
 
     let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
     assert!(
-        matches!(result, ChainValidationResult::CouldNotValidate(_)),
+        result.is_err(),
         "a leaf with an unhandled critical extension must not validate"
     );
 }
@@ -821,7 +821,7 @@ fn policy_failures_let_the_search_find_a_longer_path() {
         forbidden_der: Vec<u8>,
     }
     impl ValidationPolicy for ForbidCertificatePolicy {
-        fn verifying_critical_extensions(&self) -> Vec<x509_validator_core::der_parser::Oid<'static>> {
+        fn verifying_critical_extensions(&self) -> Vec<x509_validator::der_parser::Oid<'static>> {
             vec![OID_X509_EXT_BASIC_CONSTRAINTS]
         }
         fn chain_meets_policy_requirements(&self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {

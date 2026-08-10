@@ -13,7 +13,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use std::hint::black_box;
 use x509_validator_bench_measure::roots::ROOTS;
-use x509_validator_core::{Certificate, FromDer};
+use x509_validator::{Certificate, FromDer};
 
 fn parse(c: &mut Criterion) {
     // The whole corpus, parsed once per iteration.

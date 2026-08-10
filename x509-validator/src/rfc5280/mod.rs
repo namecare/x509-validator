@@ -12,9 +12,9 @@ pub use basic_constraints_policy::BasicConstraintsPolicy;
 pub use name_constraints_policy::NameConstraintsPolicy;
 
 use crate::{ValidationPolicy, PolicyEvaluationResult};
-use x509_validator_core::der_parser::Oid;
-use x509_validator_core::oid_registry::OID_X509_EXT_KEY_USAGE;
-use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
+use crate::der_parser::Oid;
+use crate::oid_registry::OID_X509_EXT_KEY_USAGE;
+use crate::unverified_chain::UnverifiedCertificateChain;
 
 /// A [`ValidationPolicy`] that implements the core chain verification policies from RFC 5280.
 ///
