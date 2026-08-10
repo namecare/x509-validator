@@ -9,7 +9,7 @@ use crate::extensions::ParsedExtension;
 use crate::oid_registry::{OID_X509_EXT_AUTHORITY_KEY_IDENTIFIER, OID_X509_EXT_SUBJECT_KEY_IDENTIFIER};
 use crate::GeneralName;
 
-pub type Certificate<'a> = x509_parser::certificate::X509Certificate<'a>;
+pub type Certificate<'a> = X509Certificate<'a>;
 
 pub trait CertificateExt<'a>: Sized {
     /// Parse a single DER-encoded certificate

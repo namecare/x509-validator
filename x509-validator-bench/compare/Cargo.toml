@@ -9,18 +9,13 @@ publish = false
 x509-validator = { path = "../../x509-validator", features = ["aws_lc", "ring", "rust_crypto"] }
 x509-validator-core = { path = "../../x509-validator-core" }
 x509-validator-testkit = { path = "../../x509-validator-testkit" }
-# rcgen cannot generate RSA keys, so the RSA entries in the signature corpus
-# need an RNG of their own.
-rsa = "0.9.10"
-rand = "0.8"
-time = "0.3"
+rsa = "0.10.0-rc.18"
+rand = { version = "0.10.2", features = ["thread_rng"] }
 
 [dev-dependencies]
 divan = "0.1.21"
-# The rival parser. Our own `Certificate` is a re-export of x509-parser's, so
-# x509-cert is the only genuinely external parser in the comparison.
 x509-cert = "0.3.0"
-der = "0.8"
+der = "0.8.1"
 
 [features]
 default = ["aws_lc", "ring", "rust_crypto"]

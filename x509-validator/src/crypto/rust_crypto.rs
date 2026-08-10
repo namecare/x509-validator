@@ -100,7 +100,8 @@ impl RustCrypto {
     fn verify_ecdsa_p256_sha256(key_bytes: &[u8], signature: &[u8], message: &[u8]) -> Result<(), CryptoError> {
         let verifying_key = p256::ecdsa::VerifyingKey::from_sec1_bytes(key_bytes)
             .map_err(|e| CryptoError::InvalidKey(e.to_string()))?;
-        let signature = p256::ecdsa::DerSignature::try_from(signature)
+
+        let signature = p256::ecdsa::Signature::from_der(&signature)
             .map_err(|_| CryptoError::VerificationFailed)?;
 
         verifying_key
@@ -139,7 +140,7 @@ impl RustCrypto {
     fn verify_ecdsa_p384_sha384(key_bytes: &[u8], signature: &[u8], message: &[u8]) -> Result<(), CryptoError> {
         let verifying_key = p384::ecdsa::VerifyingKey::from_sec1_bytes(key_bytes)
             .map_err(|e| CryptoError::InvalidKey(e.to_string()))?;
-        let signature = p384::ecdsa::DerSignature::try_from(signature)
+        let signature = p384::ecdsa::Signature::from_der(signature)
             .map_err(|_| CryptoError::VerificationFailed)?;
 
         verifying_key
@@ -248,7 +249,7 @@ mod tests {
         static PKCS8_DER: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
 
         let der = PKCS8_DER.get_or_init(|| {
-            let mut rng = rand::thread_rng();
+            let mut rng = rand::rng();
             let private_key = rsa::RsaPrivateKey::new(&mut rng, 2048).expect("generate RSA key");
             private_key.to_pkcs8_der().expect("encode PKCS#8").as_bytes().to_vec()
         });
@@ -289,8 +290,11 @@ mod tests {
     fn rsa_spki_of_size(bits: usize) -> Vec<u8> {
         use rsa::pkcs8::EncodePublicKey;
 
-        let mut rng = rand::thread_rng();
-        let private_key = rsa::RsaPrivateKey::new(&mut rng, bits).expect("generate RSA key");
+        let mut rng = rand::rng();
+        // `new` refuses to generate below 1024 bits, but the undersized keys are exactly what the
+        // size bound needs to be handed, so bypass the generator's own guard here.
+        let private_key =
+            rsa::RsaPrivateKey::new_unchecked(&mut rng, bits).expect("generate RSA key");
         private_key
             .to_public_key()
             .to_public_key_der()

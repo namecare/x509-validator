@@ -25,17 +25,7 @@ pub fn corpus() -> &'static [SignedSample] {
     CORPUS.get_or_init(build)
 }
 
-/// Builds a sample from a self-signed certificate: the certificate's own
-/// signature over its own TBS bytes is a real signature by the key its SPKI
-/// carries, which is exactly the shape the chain builder verifies.
-///
-/// `AlgorithmIdentifier` and `SubjectPublicKeyInfo` are `Clone`, but cloning
-/// them out of a `Certificate` parsed from a local (non-leaked) binding still
-/// leaves `message`/`signature` — plain byte-slice fields borrowed straight
-/// from the certificate, not owned copies — tied to that binding's lifetime.
-/// The certificate itself is leaked instead: it already only borrows from
-/// the leaked DER, so leaking it gives every field, cloned or borrowed, a
-/// `'static` lifetime.
+/// Builds a sample from a self-signed certificate
 fn sample_from_self_signed(label: &'static str, key_pair: KeyPair) -> SignedSample {
     let der = CertificateParams::default()
         .self_signed(&key_pair)
@@ -73,15 +63,12 @@ fn build() -> Vec<SignedSample> {
     corpus
 }
 
-/// An RSA key pair of `bits`, routed through PKCS#8 DER so rcgen can sign
-/// with it. `KeyPair::try_from(&[u8])` auto-detects the key kind from the
-/// PKCS#8 DER and, for RSA, selects `PKCS_RSA_SHA256` — exactly the
-/// algorithm these samples are labeled with.
+/// An RSA key pair of `bits`
 fn rsa_key_pair(bits: usize) -> KeyPair {
     use rsa::pkcs8::EncodePrivateKey;
     use rsa::RsaPrivateKey;
 
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let private_key = RsaPrivateKey::new(&mut rng, bits).expect("generate RSA key");
     let pkcs8 = private_key.to_pkcs8_der().expect("encode PKCS#8");
     KeyPair::try_from(pkcs8.as_bytes()).expect("rcgen accepts RSA PKCS#8")

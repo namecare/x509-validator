@@ -1,7 +1,8 @@
 [package]
 name = "x509-validator-core"
 version = "0.1.0"
-edition = "2021"
+edition.workspace = true
+rust-version = "1.85"
 description = "Validates an X.509 certificate chain against a set of root certificates and a ``ValidationPolicy``."
 repository = "https://github.com/namecare/x509-validator"
 homepage = "https://github.com/namecare/x509-validator"
@@ -24,3 +25,6 @@ allowed_external_types = [
     "asn1_rs::*",
     "oid_registry::*",
 ]
+
+[lints]
+workspace = true
