@@ -48,11 +48,7 @@ mod tests {
         let intermediate = issue_ca("Intermediate", &root, None, |_| {});
         let leaf = issue_leaf("leaf.example.com", &["leaf.example.com"], &intermediate);
 
-<<<<<<< Updated upstream
-        vec![cert(leaf), cert(intermediate.der.clone()), cert(root.der.clone())]
-=======
         vec![cert(leaf), cert(intermediate.der), cert(root.der)]
->>>>>>> Stashed changes
     }
 
     #[test]
@@ -92,12 +88,8 @@ mod tests {
 
     #[test]
     fn a_chain_is_never_empty() {
-<<<<<<< Updated upstream
-        let chain = UnverifiedCertificateChain::new(vec![cert(self_signed_ca_with("Root", |_| {}).der.clone())]);
-=======
         let chain =
             UnverifiedCertificateChain::new(vec![cert(self_signed_ca_with("Root", |_| {}).der)]);
->>>>>>> Stashed changes
 
         assert_eq!(chain.len(), 1);
         assert!(!chain.is_empty());

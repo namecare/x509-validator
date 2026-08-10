@@ -177,14 +177,10 @@ where
     }
 }
 
-<<<<<<< Updated upstream
-fn has_unhandled_critical_extensions(cert: &Certificate, policy: &impl ValidationPolicy) -> bool {
-=======
 fn has_unhandled_critical_extensions(
     cert: &Certificate<'_>,
     policy: &impl ValidationPolicy,
 ) -> bool {
->>>>>>> Stashed changes
     let handled = policy.verifying_critical_extensions();
     cert.tbs_certificate.iter_extensions().any(|ext| ext.critical && !handled.contains(&ext.oid))
 }

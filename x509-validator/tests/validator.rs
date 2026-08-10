@@ -211,11 +211,7 @@ fn candidate_with_non_verifying_signature_is_skipped() {
     );
     assert_ne!(
         impostor_cert.public_key().raw,
-<<<<<<< Updated upstream
-        parse(leak(root.der.clone())).public_key().raw,
-=======
         parse(leak(root.der)).public_key().raw,
->>>>>>> Stashed changes
         "the impostor root must carry a different key than the real root"
     );
 

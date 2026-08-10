@@ -36,11 +36,7 @@ mod tests {
         let intermediate = issue_ca("Intermediate", &root, None, |_| {});
         let leaf = issue_leaf("leaf.example.com", &["leaf.example.com"], &intermediate);
 
-<<<<<<< Updated upstream
-        vec![cert(leaf), cert(intermediate.der.clone()), cert(root.der.clone())]
-=======
         vec![cert(leaf), cert(intermediate.der), cert(root.der)]
->>>>>>> Stashed changes
     }
 
     #[test]
@@ -71,11 +67,7 @@ mod tests {
 
     #[test]
     fn a_single_certificate_is_both_leaf_and_root() {
-<<<<<<< Updated upstream
-        let root = cert(self_signed_ca_with("Root", |_| {}).der.clone());
-=======
         let root = cert(self_signed_ca_with("Root", |_| {}).der);
->>>>>>> Stashed changes
         let chain = ValidatedCertificateChain::new_unchecked(vec![root]);
 
         assert_eq!(chain.leaf().subject().to_string(), "CN=Root");
@@ -88,13 +80,8 @@ mod tests {
         // Two unrelated self-signed certificates: nothing issues anything
         // else. The constructor is named `_unchecked` because it accepts
         // this — policy evaluation is the caller's job.
-<<<<<<< Updated upstream
-        let a = cert(self_signed_ca_with("A", |_| {}).der.clone());
-        let b = cert(self_signed_ca_with("B", |_| {}).der.clone());
-=======
         let a = cert(self_signed_ca_with("A", |_| {}).der);
         let b = cert(self_signed_ca_with("B", |_| {}).der);
->>>>>>> Stashed changes
 
         let chain = ValidatedCertificateChain::new_unchecked(vec![a, b]);
 

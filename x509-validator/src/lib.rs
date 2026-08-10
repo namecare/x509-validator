@@ -68,15 +68,11 @@ pub use policy::*;
 pub use diagnostic::*;
 pub use rfc5280::*;
 pub use server_identity_policy::ServerIdentityPolicy;
-<<<<<<< Updated upstream
 pub use all_of_policies::AllOfPolicies;
 pub use any_policy::AnyPolicy;
 pub use one_of_policies::OneOfPolicies;
 pub use policy_builder::{Tuple2, Either, WrappedOptional, OneOfTuple2, OneOfWrappedOptional};
 
-=======
-
 #[doc = include_str!("../../README.md")]
 #[cfg(doctest)]
 pub struct ReadmeDoctests;
->>>>>>> Stashed changes
