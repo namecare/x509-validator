@@ -41,11 +41,6 @@ pub trait SignatureVerifier: Send + Sync + Debug {
 
 /// A `SignatureVerifier` whose every operation panics, reporting that
 /// no single backend could be determined from the crate's features.
-///
-/// A verifier that instead failed each signature check quietly would report
-/// perfectly good chains as unvalidatable — indistinguishable from a genuine
-/// policy failure. This is a build misconfiguration, so it surfaces as one the
-/// first time crypto is actually used.
 #[derive(Debug)]
 struct UndeterminedCryptoBackend;
 
@@ -68,18 +63,6 @@ impl SignatureVerifier for UndeterminedCryptoBackend {
 }
 
 /// The crypto backend determined by this crate's feature flags.
-///
-/// This is what [`crate::Validator::with_policy`] uses, so that callers name a
-/// backend once in `Cargo.toml` rather than at every construction site. Pass a
-/// provider to [`crate::Validator::with_policy_and_backend`] to override it for
-/// an individual validator.
-///
-/// A backend is determined only when *exactly one* backend feature is enabled.
-/// Enabling several is allowed — the comparison benchmarks verify one chain
-/// under each in a single process — but leaves no single default to name, so
-/// that configuration, like enabling none, yields a verifier whose every
-/// operation panics with [`NO_BACKEND_ERROR`]. Backends stay individually
-/// reachable as `crypto::<backend>::DEFAULT_PROVIDER` regardless.
 pub fn default_provider() -> &'static dyn SignatureVerifier {
     #[cfg(all(feature = "aws_lc", not(feature = "ring"), not(feature = "rust_crypto")))]
     {
@@ -96,8 +79,7 @@ pub fn default_provider() -> &'static dyn SignatureVerifier {
         return &rust_crypto::DEFAULT_PROVIDER;
     }
 
-    // Reached when zero backends are enabled, or when several are and none can
-    // be preferred over the others.
+    // Reached when zero backends are enabled
     #[allow(unreachable_code)]
     {
         static UNDETERMINED_BACKEND: UndeterminedCryptoBackend = UndeterminedCryptoBackend;

@@ -8,7 +8,6 @@ pub use x509_validator_core::*;
 pub use validator::Validator;
 
 pub mod policy;
-pub mod certificate_display;
 pub mod diagnostic;
 pub mod rfc5280;
 pub mod server_identity_policy;
@@ -19,7 +18,6 @@ pub mod policy_builder;
 pub mod store;
 
 pub use policy::*;
-pub use certificate_display::*;
 pub use diagnostic::*;
 pub use rfc5280::*;
 pub use server_identity_policy::ServerIdentityPolicy;

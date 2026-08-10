@@ -28,7 +28,7 @@ impl<'a, P> Validator<'a, P>
 where
     P: ValidationPolicy,
 {
-    /// Creates a validator with the given root certificates and policy.
+    /// Creates a validator with the given root certificates, policy and backend.
     ///
     /// - Parameters:
     ///   - root_certificates: The trusted root certificates.
@@ -43,11 +43,6 @@ where
 
     /// Creates a validator with the given root certificates and policy, using
     /// the crypto backend selected by this crate's feature flags.
-    ///
-    /// This is the constructor to reach for: the backend is chosen once in
-    /// `Cargo.toml`, so call sites name only the roots and the policy. Use
-    /// [`Validator::with_policy_and_backend`] to override the backend for a
-    /// single validator.
     ///
     /// - Parameters:
     ///   - root_certificates: The trusted root certificates.

@@ -18,19 +18,11 @@ backend! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use x509_validator_testkit::rcgen::{CertificateParams, KeyPair};
+    use x509_validator_testkit::rcgen::KeyPair;
     use x509_validator_core::oid_registry;
     use x509_validator_core::CertificateExt;
     use x509_validator_core::Certificate;
-
-    /// Builds a real self-signed certificate for `key_pair` and parses it
-    /// back, giving tests a genuine `AlgorithmIdentifier`/`SubjectPublicKeyInfo`
-    /// pair straight from a real DER encoding rather than hand-assembled
-    /// ASN.1 structs.
-    fn self_signed(key_pair: &KeyPair) -> Vec<u8> {
-        let params = CertificateParams::default();
-        params.self_signed(key_pair).expect("self-sign").der().to_vec()
-    }
+    use x509_validator_testkit::self_signed;
 
     #[test]
     fn ecdsa_p256_round_trip_verifies() {

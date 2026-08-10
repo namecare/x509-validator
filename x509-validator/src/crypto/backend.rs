@@ -1,25 +1,4 @@
-//! Backend-independent algorithm selection, plus the body shared by the
-//! aws-lc-rs and ring crypto backends.
-//!
-//! Reading a signature algorithm out of a certificate is the same work for
-//! every backend: the OID (and, for ECDSA, the signer's curve) names one
-//! algorithm, and the digest RSA-PSS is parameterised by is read from its
-//! parameters. [`VerificationAlgorithm`] is the result of that reading — a
-//! plain enum naming an algorithm without yet binding it to a crypto library —
-//! and [`verification_algorithm`] produces it once for all backends.
-//!
-//! Each backend then converts a [`VerificationAlgorithm`] into whatever its
-//! library takes, and reports the variants it does not ship as unsupported:
-//! aws-lc-rs offers ECDSA-with-SHA512 for both curves, ring and RustCrypto do
-//! not.
-//!
-//! aws-lc-rs and ring further share a shape — a `signature` module of
-//! `&'static dyn VerificationAlgorithm` constants and an `UnparsedPublicKey`
-//! that pairs one with key bytes — so their conversion and verification is the
-//! same code twice over, differing only in which crate the names resolve to.
-//! The [`backend!`] macro holds that code once. The RustCrypto backend does not
-//! share this shape — its verifiers live in per-algorithm crates with no common
-//! key type — so it implements the same trait by hand.
+//! Backend-independent algorithm selection
 
 use x509_validator_core::asn1_rs::Any;
 use x509_validator_core::oid_registry;
@@ -28,11 +7,6 @@ use x509_validator_core::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
 use crate::crypto::rsa_pss_digest_bits;
 
 /// A signature algorithm named by a certificate, in backend-independent form.
-///
-/// Every variant the X.509 side can name appears here whether or not a given
-/// backend ships it; a backend that does not reports the variant as
-/// unsupported when converting, so a pairing is never silently verified under
-/// a different digest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VerificationAlgorithm {
     RsaPkcs1Sha1,
@@ -123,13 +97,6 @@ pub fn rsa_pss_algorithm(params: Option<&Any>) -> Option<VerificationAlgorithm> 
 
 /// Defines a crypto backend over `$krate`, a crate exposing aws-lc-rs' and
 /// ring's shared API shape.
-///
-/// `$krate` is matched as a `:tt` rather than `:ident` or `:path`: both of
-/// those capture into a single opaque fragment that cannot then be extended
-/// with `::` inside a `use`, while a bare token tree stays transparent to the
-/// parser. `$backend` names the marker type carrying the backend's trait
-/// impls, and the trailing `ecdsa` groups list the `(digest => algorithm)`
-/// pairings the crate provides for each curve.
 macro_rules! backend {
     (
         krate: $krate:tt,
@@ -141,13 +108,7 @@ macro_rules! backend {
         use x509_validator_core::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
         use crate::crypto::backend::{VerificationAlgorithm, verification_algorithm};
         use crate::crypto::{CryptoError, SignatureVerifier};
-
-        /// Converts a backend-independent [`VerificationAlgorithm`] into this
-        /// crate's own algorithm constant. Variants this backend does not ship
-        /// — the ECDSA digest/curve pairings absent from the `ecdsa_*` groups
-        /// above — fall through to `None` and surface as
-        /// `CryptoError::InvalidKey`, rather than being verified under a
-        /// different digest.
+        
         fn backend_algorithm(
             algorithm: VerificationAlgorithm,
         ) -> Option<&'static dyn $krate::signature::VerificationAlgorithm> {

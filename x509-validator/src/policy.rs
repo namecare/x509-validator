@@ -1,12 +1,6 @@
 use x509_validator_core::der_parser::Oid;
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
 
-/// A description of why a certificate chain failed to meet a verification policy.
-///
-/// Re-exported from core so that a reason produced by a policy here is the same
-/// type core's [`PolicyFailure`] carries.
-///
-/// [`PolicyFailure`]: x509_validator_core::error::PolicyFailure
 pub use x509_validator_core::error::PolicyFailureReason;
 
 /// The result of evaluating a [`ValidationPolicy`] against a candidate certificate chain.
