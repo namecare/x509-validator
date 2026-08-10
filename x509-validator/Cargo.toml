@@ -59,4 +59,4 @@ rust_crypto = [
 ]
 
 [package.metadata.cargo_check_external_types]
-allowed_external_types = ["x509_parser::*", "asn1_rs::*", "oid_registry::*"]
+allowed_external_types = ["x509_parser::*", "asn1_rs", "asn1_rs::*", "oid_registry", "der_parser"]

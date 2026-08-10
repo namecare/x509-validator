@@ -18,7 +18,7 @@ impl<'a> ValidatedCertificateChain<'a> {
     pub fn root(&self) -> &Certificate<'a> {
         self.certificates.last().unwrap()
     }
-    
+
     pub fn iter(&self) -> impl Iterator<Item = &Certificate<'a>> {
         self.certificates.iter()
     }
@@ -26,9 +26,10 @@ impl<'a> ValidatedCertificateChain<'a> {
 
 #[cfg(test)]
 mod tests {
+    use x509_validator_testkit::{cert, issue_ca, issue_leaf, self_signed_ca_with};
+
     use super::*;
     use crate::CertificateExt;
-    use x509_validator_testkit::{cert, issue_ca, issue_leaf, self_signed_ca_with};
 
     /// A three-certificate chain, leaf-first: leaf, intermediate, root.
     fn leaf_intermediate_root() -> Vec<Certificate<'static>> {
@@ -60,9 +61,15 @@ mod tests {
     fn iter_yields_the_chain_leaf_first() {
         let chain = ValidatedCertificateChain::new_unchecked(leaf_intermediate_root());
 
-        let subjects: Vec<_> = chain.iter().map(|c| c.subject().to_string()).collect();
+        let subjects: Vec<_> = chain
+            .iter()
+            .map(|c| c.subject().to_string())
+            .collect();
 
-        assert_eq!(subjects, ["CN=leaf.example.com", "CN=Intermediate", "CN=Root"]);
+        assert_eq!(
+            subjects,
+            ["CN=leaf.example.com", "CN=Intermediate", "CN=Root"]
+        );
     }
 
     #[test]
@@ -72,7 +79,11 @@ mod tests {
 
         assert_eq!(chain.leaf().subject().to_string(), "CN=Root");
         assert_eq!(chain.root().subject().to_string(), "CN=Root");
-        assert!(chain.leaf().has_same_identity_as(chain.root()));
+        assert!(
+            chain
+                .leaf()
+                .has_same_identity_as(chain.root())
+        );
     }
 
     #[test]

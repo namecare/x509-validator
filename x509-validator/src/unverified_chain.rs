@@ -29,7 +29,7 @@ impl<'a> UnverifiedCertificateChain<'a> {
     }
 }
 
-impl<'a> std::ops::Index<usize> for UnverifiedCertificateChain<'a> {
+impl<'a> core::ops::Index<usize> for UnverifiedCertificateChain<'a> {
     type Output = Certificate<'a>;
     fn index(&self, i: usize) -> &Certificate<'a> {
         &self.certificates[i]
@@ -38,9 +38,10 @@ impl<'a> std::ops::Index<usize> for UnverifiedCertificateChain<'a> {
 
 #[cfg(test)]
 mod tests {
+    use x509_validator_testkit::{cert, issue_ca, issue_leaf, self_signed_ca_with};
+
     use super::*;
     use crate::CertificateExt;
-    use x509_validator_testkit::{cert, issue_ca, issue_leaf, self_signed_ca_with};
 
     /// A three-certificate chain, leaf-first: leaf, intermediate, root.
     fn leaf_intermediate_root() -> Vec<Certificate<'static>> {
@@ -80,9 +81,15 @@ mod tests {
     fn iter_yields_every_certificate_in_index_order() {
         let chain = UnverifiedCertificateChain::new(leaf_intermediate_root());
 
-        let subjects: Vec<_> = chain.iter().map(|c| c.subject().to_string()).collect();
+        let subjects: Vec<_> = chain
+            .iter()
+            .map(|c| c.subject().to_string())
+            .collect();
 
-        assert_eq!(subjects, ["CN=leaf.example.com", "CN=Intermediate", "CN=Root"]);
+        assert_eq!(
+            subjects,
+            ["CN=leaf.example.com", "CN=Intermediate", "CN=Root"]
+        );
         assert_eq!(subjects.len(), chain.len());
     }
 
