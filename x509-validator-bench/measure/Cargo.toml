@@ -5,16 +5,18 @@ edition = "2021"
 description = "Regression benchmarks for x509-validator, mirroring the reference validator benchmark. Not published."
 publish = false
 
+[lints]
+workspace = true
+
 [dependencies]
-x509-validator = { path = "../../x509-validator" }
-x509-validator-core = { path = "../../x509-validator-core" }
-x509-validator-testkit = { path = "../../x509-validator-testkit" }
+x509-validator.workspace = true
+x509-validator-testkit.workspace = true
 
 [dev-dependencies]
 criterion = { version = "0.8.2", default-features = false, features = [
-    "cargo_bench_support",
-    "html_reports",
-    "plotters",
+  "cargo_bench_support",
+  "html_reports",
+  "plotters",
 ] }
 
 [features]

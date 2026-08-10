@@ -101,19 +101,29 @@ fn general_subtree(name: &RawGeneralName) -> Vec<u8> {
 
 /// A nameConstraints extension built from raw GeneralNames, encoded as
 /// `SEQUENCE { [0] permittedSubtrees OPTIONAL, [1] excludedSubtrees OPTIONAL }`.
-pub fn raw_name_constraints_extension(permitted: &[RawGeneralName], excluded: &[RawGeneralName]) -> rcgen::CustomExtension {
+pub fn raw_name_constraints_extension(
+    permitted: &[RawGeneralName],
+    excluded: &[RawGeneralName],
+) -> rcgen::CustomExtension {
     let mut body = Vec::new();
 
     if !permitted.is_empty() {
-        let subtrees: Vec<u8> = permitted.iter().flat_map(general_subtree).collect();
+        let subtrees: Vec<u8> = permitted
+            .iter()
+            .flat_map(general_subtree)
+            .collect();
         body.extend_from_slice(&der_tlv(0xa0, &subtrees));
     }
     if !excluded.is_empty() {
-        let subtrees: Vec<u8> = excluded.iter().flat_map(general_subtree).collect();
+        let subtrees: Vec<u8> = excluded
+            .iter()
+            .flat_map(general_subtree)
+            .collect();
         body.extend_from_slice(&der_tlv(0xa1, &subtrees));
     }
 
-    let mut extension = rcgen::CustomExtension::from_oid_content(NAME_CONSTRAINTS_OID, der_tlv(0x30, &body));
+    let mut extension =
+        rcgen::CustomExtension::from_oid_content(NAME_CONSTRAINTS_OID, der_tlv(0x30, &body));
     extension.set_criticality(true);
     extension
 }
@@ -121,29 +131,40 @@ pub fn raw_name_constraints_extension(permitted: &[RawGeneralName], excluded: &[
 /// A subjectAltName extension built from raw GeneralNames, for name forms
 /// the generator's own `SanType` cannot express.
 pub fn raw_subject_alt_name_extension(names: &[RawGeneralName]) -> rcgen::CustomExtension {
-    let contents: Vec<u8> = names.iter().flat_map(|n| n.0.clone()).collect();
-    let mut extension = rcgen::CustomExtension::from_oid_content(SUBJECT_ALT_NAME_OID, der_tlv(0x30, &contents));
+    let contents: Vec<u8> = names
+        .iter()
+        .flat_map(|n| n.0.clone())
+        .collect();
+    let mut extension =
+        rcgen::CustomExtension::from_oid_content(SUBJECT_ALT_NAME_OID, der_tlv(0x30, &contents));
     extension.set_criticality(true);
     extension
 }
 
 /// A nameConstraints extension whose contents are undecodable gibberish.
 pub fn broken_name_constraints_extension() -> rcgen::CustomExtension {
-    let mut extension = rcgen::CustomExtension::from_oid_content(NAME_CONSTRAINTS_OID, vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    let mut extension = rcgen::CustomExtension::from_oid_content(
+        NAME_CONSTRAINTS_OID,
+        vec![1, 2, 3, 4, 5, 6, 7, 8, 9],
+    );
     extension.set_criticality(true);
     extension
 }
 
 /// A subjectAltName extension whose contents are undecodable gibberish.
 pub fn broken_subject_alt_name_extension() -> rcgen::CustomExtension {
-    let mut extension = rcgen::CustomExtension::from_oid_content(SUBJECT_ALT_NAME_OID, vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    let mut extension = rcgen::CustomExtension::from_oid_content(
+        SUBJECT_ALT_NAME_OID,
+        vec![1, 2, 3, 4, 5, 6, 7, 8, 9],
+    );
     extension.set_criticality(true);
     extension
 }
 
 /// A critical extension with an OID no policy in this crate claims.
 pub fn weird_critical_extension() -> rcgen::CustomExtension {
-    let mut extension = rcgen::CustomExtension::from_oid_content(&[1, 2, 3, 4, 5], vec![1, 2, 3, 4, 5]);
+    let mut extension =
+        rcgen::CustomExtension::from_oid_content(&[1, 2, 3, 4, 5], vec![1, 2, 3, 4, 5]);
     extension.set_criticality(true);
     extension
 }

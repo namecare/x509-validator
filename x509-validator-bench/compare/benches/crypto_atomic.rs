@@ -18,7 +18,7 @@ fn main() {
 macro_rules! verify_bench {
     ($name:ident, $label:literal) => {
         #[divan::bench(args = BACKENDS)]
-        fn $name(bencher: divan::Bencher, backend: Backend) {
+        fn $name(bencher: divan::Bencher<'_, '_>, backend: Backend) {
             let sample = signatures::corpus()
                 .iter()
                 .find(|s| s.label == $label)
@@ -31,7 +31,12 @@ macro_rules! verify_bench {
             // An absent row means "unsupported", not "crashed".
             if backend
                 .provider
-                .verify_signature(&sample.algorithm, &sample.spki, sample.message, sample.signature)
+                .verify_signature(
+                    &sample.algorithm,
+                    &sample.spki,
+                    sample.message,
+                    sample.signature,
+                )
                 .is_err()
             {
                 return;

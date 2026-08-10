@@ -2,10 +2,9 @@
 
 use signature::Verifier;
 
-use x509_validator_core::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
-
 use crate::crypto::backend::{VerificationAlgorithm, verification_algorithm};
 use crate::crypto::{CryptoError, SignatureVerifier};
+use crate::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
 
 /// The RSA modulus sizes, in bytes, this backend will verify against.
 const MIN_RSA_MODULUS_BYTES: usize = 2048 / 8;
@@ -17,8 +16,8 @@ pub struct RustCrypto;
 impl SignatureVerifier for RustCrypto {
     fn verify_signature(
         &self,
-        algorithm: &AlgorithmIdentifier,
-        public_key: &SubjectPublicKeyInfo,
+        algorithm: &AlgorithmIdentifier<'_>,
+        public_key: &SubjectPublicKeyInfo<'_>,
         message: &[u8],
         signature: &[u8],
     ) -> Result<(), CryptoError> {
@@ -31,17 +30,39 @@ impl SignatureVerifier for RustCrypto {
         let key_bytes = public_key.subject_public_key.as_ref();
 
         match verification_algorithm {
-            VerificationAlgorithm::RsaPkcs1Sha1 => Self::verify_rsa_pkcs1::<sha1::Sha1>(spki_der, signature, message),
-            VerificationAlgorithm::RsaPkcs1Sha256 => Self::verify_rsa_pkcs1::<sha2::Sha256>(spki_der, signature, message),
-            VerificationAlgorithm::RsaPkcs1Sha384 => Self::verify_rsa_pkcs1::<sha2::Sha384>(spki_der, signature, message),
-            VerificationAlgorithm::RsaPkcs1Sha512 => Self::verify_rsa_pkcs1::<sha2::Sha512>(spki_der, signature, message),
-            VerificationAlgorithm::RsaPssSha256 => Self::verify_rsa_pss::<sha2::Sha256>(spki_der, signature, message),
-            VerificationAlgorithm::RsaPssSha384 => Self::verify_rsa_pss::<sha2::Sha384>(spki_der, signature, message),
-            VerificationAlgorithm::RsaPssSha512 => Self::verify_rsa_pss::<sha2::Sha512>(spki_der, signature, message),
-            VerificationAlgorithm::EcdsaP256Sha256 => Self::verify_ecdsa_p256_sha256(key_bytes, signature, message),
-            VerificationAlgorithm::EcdsaP256Sha384 => Self::verify_ecdsa_p256_sha384(key_bytes, signature, message),
-            VerificationAlgorithm::EcdsaP384Sha256 => Self::verify_ecdsa_p384_sha256(key_bytes, signature, message),
-            VerificationAlgorithm::EcdsaP384Sha384 => Self::verify_ecdsa_p384_sha384(key_bytes, signature, message),
+            VerificationAlgorithm::RsaPkcs1Sha1 => {
+                Self::verify_rsa_pkcs1::<sha1::Sha1>(spki_der, signature, message)
+            }
+            VerificationAlgorithm::RsaPkcs1Sha256 => {
+                Self::verify_rsa_pkcs1::<sha2::Sha256>(spki_der, signature, message)
+            }
+            VerificationAlgorithm::RsaPkcs1Sha384 => {
+                Self::verify_rsa_pkcs1::<sha2::Sha384>(spki_der, signature, message)
+            }
+            VerificationAlgorithm::RsaPkcs1Sha512 => {
+                Self::verify_rsa_pkcs1::<sha2::Sha512>(spki_der, signature, message)
+            }
+            VerificationAlgorithm::RsaPssSha256 => {
+                Self::verify_rsa_pss::<sha2::Sha256>(spki_der, signature, message)
+            }
+            VerificationAlgorithm::RsaPssSha384 => {
+                Self::verify_rsa_pss::<sha2::Sha384>(spki_der, signature, message)
+            }
+            VerificationAlgorithm::RsaPssSha512 => {
+                Self::verify_rsa_pss::<sha2::Sha512>(spki_der, signature, message)
+            }
+            VerificationAlgorithm::EcdsaP256Sha256 => {
+                Self::verify_ecdsa_p256_sha256(key_bytes, signature, message)
+            }
+            VerificationAlgorithm::EcdsaP256Sha384 => {
+                Self::verify_ecdsa_p256_sha384(key_bytes, signature, message)
+            }
+            VerificationAlgorithm::EcdsaP384Sha256 => {
+                Self::verify_ecdsa_p384_sha256(key_bytes, signature, message)
+            }
+            VerificationAlgorithm::EcdsaP384Sha384 => {
+                Self::verify_ecdsa_p384_sha384(key_bytes, signature, message)
+            }
             VerificationAlgorithm::Ed25519 => Self::verify_ed25519(key_bytes, signature, message),
             VerificationAlgorithm::EcdsaP256Sha512 | VerificationAlgorithm::EcdsaP384Sha512 => {
                 Err(unsupported())
@@ -71,7 +92,11 @@ impl RustCrypto {
         Ok(key)
     }
 
-    fn verify_rsa_pkcs1<D>(spki_der: &[u8], signature: &[u8], message: &[u8]) -> Result<(), CryptoError>
+    fn verify_rsa_pkcs1<D>(
+        spki_der: &[u8],
+        signature: &[u8],
+        message: &[u8],
+    ) -> Result<(), CryptoError>
     where
         D: sha2::Digest + rsa::pkcs8::AssociatedOid,
     {
@@ -84,24 +109,16 @@ impl RustCrypto {
             .map_err(|_| CryptoError::VerificationFailed)
     }
 
-    fn verify_rsa_pss<D>(spki_der: &[u8], signature: &[u8], message: &[u8]) -> Result<(), CryptoError>
+    fn verify_rsa_pss<D>(
+        spki_der: &[u8],
+        signature: &[u8],
+        message: &[u8],
+    ) -> Result<(), CryptoError>
     where
         D: sha2::Digest + sha2::digest::FixedOutputReset,
     {
         let verifying_key = rsa::pss::VerifyingKey::<D>::new(Self::rsa_public_key(spki_der)?);
-        let signature =
-            rsa::pss::Signature::try_from(signature).map_err(|_| CryptoError::VerificationFailed)?;
-
-        verifying_key
-            .verify(message, &signature)
-            .map_err(|_| CryptoError::VerificationFailed)
-    }
-
-    fn verify_ecdsa_p256_sha256(key_bytes: &[u8], signature: &[u8], message: &[u8]) -> Result<(), CryptoError> {
-        let verifying_key = p256::ecdsa::VerifyingKey::from_sec1_bytes(key_bytes)
-            .map_err(|e| CryptoError::InvalidKey(e.to_string()))?;
-
-        let signature = p256::ecdsa::Signature::from_der(&signature)
+        let signature = rsa::pss::Signature::try_from(signature)
             .map_err(|_| CryptoError::VerificationFailed)?;
 
         verifying_key
@@ -109,7 +126,27 @@ impl RustCrypto {
             .map_err(|_| CryptoError::VerificationFailed)
     }
 
-    fn verify_ecdsa_p256_sha384(key_bytes: &[u8], signature: &[u8], message: &[u8]) -> Result<(), CryptoError> {
+    fn verify_ecdsa_p256_sha256(
+        key_bytes: &[u8],
+        signature: &[u8],
+        message: &[u8],
+    ) -> Result<(), CryptoError> {
+        let verifying_key = p256::ecdsa::VerifyingKey::from_sec1_bytes(key_bytes)
+            .map_err(|e| CryptoError::InvalidKey(e.to_string()))?;
+
+        let signature = p256::ecdsa::Signature::from_der(signature)
+            .map_err(|_| CryptoError::VerificationFailed)?;
+
+        verifying_key
+            .verify(message, &signature)
+            .map_err(|_| CryptoError::VerificationFailed)
+    }
+
+    fn verify_ecdsa_p256_sha384(
+        key_bytes: &[u8],
+        signature: &[u8],
+        message: &[u8],
+    ) -> Result<(), CryptoError> {
         use sha2::Digest as _;
         use signature::hazmat::PrehashVerifier;
 
@@ -123,7 +160,11 @@ impl RustCrypto {
             .map_err(|_| CryptoError::VerificationFailed)
     }
 
-    fn verify_ecdsa_p384_sha256(key_bytes: &[u8], signature: &[u8], message: &[u8]) -> Result<(), CryptoError> {
+    fn verify_ecdsa_p384_sha256(
+        key_bytes: &[u8],
+        signature: &[u8],
+        message: &[u8],
+    ) -> Result<(), CryptoError> {
         use sha2::Digest as _;
         use signature::hazmat::PrehashVerifier;
 
@@ -137,7 +178,11 @@ impl RustCrypto {
             .map_err(|_| CryptoError::VerificationFailed)
     }
 
-    fn verify_ecdsa_p384_sha384(key_bytes: &[u8], signature: &[u8], message: &[u8]) -> Result<(), CryptoError> {
+    fn verify_ecdsa_p384_sha384(
+        key_bytes: &[u8],
+        signature: &[u8],
+        message: &[u8],
+    ) -> Result<(), CryptoError> {
         let verifying_key = p384::ecdsa::VerifyingKey::from_sec1_bytes(key_bytes)
             .map_err(|e| CryptoError::InvalidKey(e.to_string()))?;
         let signature = p384::ecdsa::Signature::from_der(signature)
@@ -148,7 +193,11 @@ impl RustCrypto {
             .map_err(|_| CryptoError::VerificationFailed)
     }
 
-    fn verify_ed25519(key_bytes: &[u8], signature: &[u8], message: &[u8]) -> Result<(), CryptoError> {
+    fn verify_ed25519(
+        key_bytes: &[u8],
+        signature: &[u8],
+        message: &[u8],
+    ) -> Result<(), CryptoError> {
         let verifying_key = ed25519_dalek::VerifyingKey::try_from(key_bytes)
             .map_err(|e| CryptoError::InvalidKey(e.to_string()))?;
         let signature = ed25519_dalek::Signature::from_slice(signature)
@@ -164,12 +213,11 @@ pub static DEFAULT_PROVIDER: RustCrypto = RustCrypto;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use x509_validator_core::oid_registry;
-    use x509_validator_core::Certificate;
-    use x509_validator_core::CertificateExt;
     use x509_validator_testkit::rcgen::{self, KeyPair};
     use x509_validator_testkit::self_signed;
+
+    use super::*;
+    use crate::{Certificate, CertificateExt, oid_registry};
 
     #[test]
     fn ecdsa_p256_round_trip_verifies() {
@@ -177,13 +225,16 @@ mod tests {
         let der: &'static [u8] = Box::leak(self_signed(&key_pair).into_boxed_slice());
         let cert = Certificate::parse(der).expect("parse certificate");
 
-                let result = RustCrypto.verify_signature(
+        let result = RustCrypto.verify_signature(
             &cert.signature_algorithm,
             cert.public_key(),
             cert.tbs_certificate.as_ref(),
             cert.signature_value.as_ref(),
         );
-        assert!(result.is_ok(), "expected valid signature to verify, got {result:?}");
+        assert!(
+            result.is_ok(),
+            "expected valid signature to verify, got {result:?}"
+        );
     }
 
     #[test]
@@ -192,7 +243,7 @@ mod tests {
         let der: &'static [u8] = Box::leak(self_signed(&key_pair).into_boxed_slice());
         let cert = Certificate::parse(der).expect("parse certificate");
 
-                let result = RustCrypto.verify_signature(
+        let result = RustCrypto.verify_signature(
             &cert.signature_algorithm,
             cert.public_key(),
             b"tampered message",
@@ -211,7 +262,8 @@ mod tests {
         let der: &'static [u8] = Box::leak(self_signed(&key_pair).into_boxed_slice());
         let cert = Certificate::parse(der).expect("parse certificate");
 
-        let result = RustCrypto.verify_signature(&algorithm, cert.public_key(), b"message", b"signature");
+        let result =
+            RustCrypto.verify_signature(&algorithm, cert.public_key(), b"message", b"signature");
         assert!(matches!(result, Err(CryptoError::InvalidKey(_))));
     }
 
@@ -225,7 +277,8 @@ mod tests {
         let der: &'static [u8] = Box::leak(self_signed(&key_pair).into_boxed_slice());
         let cert = Certificate::parse(der).expect("parse certificate");
 
-        let result = RustCrypto.verify_signature(&algorithm, cert.public_key(), b"message", b"signature");
+        let result =
+            RustCrypto.verify_signature(&algorithm, cert.public_key(), b"message", b"signature");
         assert!(matches!(result, Err(CryptoError::InvalidKey(_))));
     }
 
@@ -234,13 +287,16 @@ mod tests {
         let der: &'static [u8] = Box::leak(self_signed(&key_pair).into_boxed_slice());
         let cert = Certificate::parse(der).expect("parse certificate");
 
-                let result = RustCrypto.verify_signature(
+        let result = RustCrypto.verify_signature(
             &cert.signature_algorithm,
             cert.public_key(),
             cert.tbs_certificate.as_ref(),
             cert.signature_value.as_ref(),
         );
-        assert!(result.is_ok(), "expected valid signature to verify, got {result:?}");
+        assert!(
+            result.is_ok(),
+            "expected valid signature to verify, got {result:?}"
+        );
     }
 
     fn rsa_key_pair(algorithm: &'static rcgen::SignatureAlgorithm) -> KeyPair {
@@ -251,7 +307,11 @@ mod tests {
         let der = PKCS8_DER.get_or_init(|| {
             let mut rng = rand::rng();
             let private_key = rsa::RsaPrivateKey::new(&mut rng, 2048).expect("generate RSA key");
-            private_key.to_pkcs8_der().expect("encode PKCS#8").as_bytes().to_vec()
+            private_key
+                .to_pkcs8_der()
+                .expect("encode PKCS#8")
+                .as_bytes()
+                .to_vec()
         });
 
         KeyPair::from_pkcs8_der_and_sign_algo(&der.as_slice().into(), algorithm)
@@ -263,13 +323,16 @@ mod tests {
         let der: &'static [u8] = Box::leak(self_signed(&key_pair).into_boxed_slice());
         let cert = Certificate::parse(der).expect("parse certificate");
 
-                let result = RustCrypto.verify_signature(
+        let result = RustCrypto.verify_signature(
             &cert.signature_algorithm,
             cert.public_key(),
             cert.tbs_certificate.as_ref(),
             cert.signature_value.as_ref(),
         );
-        assert!(result.is_ok(), "expected valid signature to verify, got {result:?}");
+        assert!(
+            result.is_ok(),
+            "expected valid signature to verify, got {result:?}"
+        );
     }
 
     #[test]
@@ -319,7 +382,6 @@ mod tests {
         // rejections above are the bound talking and not a broken SPKI encoding.
         assert!(RustCrypto::rsa_public_key(&rsa_spki_of_size(2048)).is_ok());
     }
-
 
     #[test]
     fn ecdsa_p384_sha384_round_trip_verifies() {

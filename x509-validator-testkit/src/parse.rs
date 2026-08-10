@@ -1,5 +1,5 @@
-use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
-use x509_validator_core::{Certificate, CertificateExt};
+use x509_validator::unverified_chain::UnverifiedCertificateChain;
+use x509_validator::{Certificate, CertificateExt};
 
 /// Leaks DER bytes to obtain the `'static` lifetime that borrowed
 /// `Certificate` values require. Tests are short-lived processes, so the

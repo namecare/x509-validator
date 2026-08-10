@@ -5,10 +5,13 @@
 //! and signing happen once, here.
 
 use std::sync::OnceLock;
-use x509_validator_core::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
-use x509_validator_core::{Certificate, FromDer};
+
+use x509_validator::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
+use x509_validator::{Certificate, FromDer};
 use x509_validator_testkit::parse::leak;
-use x509_validator_testkit::rcgen::{CertificateParams, KeyPair, PKCS_ECDSA_P384_SHA384, PKCS_ED25519};
+use x509_validator_testkit::rcgen::{
+    CertificateParams, KeyPair, PKCS_ECDSA_P384_SHA384, PKCS_ED25519,
+};
 
 /// One verifiable signature, with everything needed to check it.
 pub struct SignedSample {
@@ -33,12 +36,19 @@ fn sample_from_self_signed(label: &'static str, key_pair: KeyPair) -> SignedSamp
         .der()
         .to_vec();
     let der: &'static [u8] = leak(der);
-    let certificate: &'static Certificate<'static> = Box::leak(Box::new(Certificate::from_der(der).expect("parse").1));
+    let certificate: &'static Certificate<'static> = Box::leak(Box::new(
+        Certificate::from_der(der)
+            .expect("parse")
+            .1,
+    ));
 
     SignedSample {
         label,
         algorithm: certificate.signature_algorithm.clone(),
-        spki: certificate.tbs_certificate.subject_pki.clone(),
+        spki: certificate
+            .tbs_certificate
+            .subject_pki
+            .clone(),
         message: certificate.tbs_certificate.as_ref(),
         signature: certificate.signature_value.as_ref(),
     }
@@ -51,12 +61,18 @@ fn build() -> Vec<SignedSample> {
             "ecdsa_p384_sha384",
             KeyPair::generate_for(&PKCS_ECDSA_P384_SHA384).expect("p384 key"),
         ),
-        sample_from_self_signed("ed25519", KeyPair::generate_for(&PKCS_ED25519).expect("ed25519 key")),
+        sample_from_self_signed(
+            "ed25519",
+            KeyPair::generate_for(&PKCS_ED25519).expect("ed25519 key"),
+        ),
     ];
 
     // rcgen cannot generate RSA keys, so these are generated with `rsa` and
     // handed to rcgen as a PKCS#8 private key.
-    for (label, bits) in [("rsa_2048_sha256", 2048usize), ("rsa_4096_sha256", 4096usize)] {
+    for (label, bits) in [
+        ("rsa_2048_sha256", 2048usize),
+        ("rsa_4096_sha256", 4096usize),
+    ] {
         corpus.push(sample_from_self_signed(label, rsa_key_pair(bits)));
     }
 
@@ -70,7 +86,9 @@ fn rsa_key_pair(bits: usize) -> KeyPair {
 
     let mut rng = rand::rng();
     let private_key = RsaPrivateKey::new(&mut rng, bits).expect("generate RSA key");
-    let pkcs8 = private_key.to_pkcs8_der().expect("encode PKCS#8");
+    let pkcs8 = private_key
+        .to_pkcs8_der()
+        .expect("encode PKCS#8");
     KeyPair::try_from(pkcs8.as_bytes()).expect("rcgen accepts RSA PKCS#8")
 }
 
@@ -85,7 +103,12 @@ mod tests {
             let verified = BACKENDS.iter().any(|backend| {
                 backend
                     .provider
-                    .verify_signature(&sample.algorithm, &sample.spki, sample.message, sample.signature)
+                    .verify_signature(
+                        &sample.algorithm,
+                        &sample.spki,
+                        sample.message,
+                        sample.signature,
+                    )
                     .is_ok()
             });
             assert!(verified, "no backend verified sample {}", sample.label);

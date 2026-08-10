@@ -4,10 +4,10 @@
 //! benchmark crates build against the same certificates; it is re-exported
 //! here so call sites keep reading `fixtures::parity()`.
 
-pub use x509_validator_testkit::bench_fixtures::{parity, Parity, REFERENCE_TIME};
-
 use std::sync::OnceLock;
-use x509_validator_core::Certificate;
+
+use x509_validator::Certificate;
+pub use x509_validator_testkit::bench_fixtures::{parity, Parity, REFERENCE_TIME};
 
 /// A real, publicly-issued certificate chain, as a counterpart to the
 /// generated fixtures.
@@ -58,7 +58,9 @@ pub mod apple {
 
     /// Parses DER that is already `'static`, so no leaking is needed.
     fn parse_static(der: &'static [u8]) -> Certificate<'static> {
-        use x509_validator_core::FromDer;
-        Certificate::from_der(der).expect("vendored Apple certificate parses").1
+        use x509_validator::FromDer;
+        Certificate::from_der(der)
+            .expect("vendored Apple certificate parses")
+            .1
     }
 }

@@ -12,7 +12,6 @@ The workspace builds on stable Rust, edition 2024, and needs 1.85 or newer.
 ```sh
 git clone https://github.com/namecare/x509-validator
 cd x509-validator
-cargo test -p x509-validator-core --all-targets
 cargo test -p x509-validator --features aws_lc --all-targets
 ```
 

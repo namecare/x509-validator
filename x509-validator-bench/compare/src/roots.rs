@@ -24,7 +24,9 @@ pub static ROOTS: &[&[u8]] = &[
     include_bytes!("../data/mozilla/Amazon_Root_CA_4.der"),
     include_bytes!("../data/mozilla/Atos_TrustedRoot_2011.der"),
     include_bytes!("../data/mozilla/Autoridad_de_Certificacion_Firmaprofesional_CIF_A62634068.der"),
-    include_bytes!("../data/mozilla/Autoridad_de_Certificacion_Firmaprofesional_CIF_A62634068_2.der"),
+    include_bytes!(
+        "../data/mozilla/Autoridad_de_Certificacion_Firmaprofesional_CIF_A62634068_2.der"
+    ),
     include_bytes!("../data/mozilla/Baltimore_CyberTrust_Root.der"),
     include_bytes!("../data/mozilla/Buypass_Class_2_Root_CA.der"),
     include_bytes!("../data/mozilla/Buypass_Class_3_Root_CA.der"),
@@ -81,7 +83,9 @@ pub static ROOTS: &[&[u8]] = &[
     include_bytes!("../data/mozilla/Go_Daddy_Root_Certificate_Authority_-_G2.der"),
     include_bytes!("../data/mozilla/HARICA_TLS_ECC_Root_CA_2021.der"),
     include_bytes!("../data/mozilla/HARICA_TLS_RSA_Root_CA_2021.der"),
-    include_bytes!("../data/mozilla/Hellenic_Academic_and_Research_Institutions_ECC_RootCA_2015.der"),
+    include_bytes!(
+        "../data/mozilla/Hellenic_Academic_and_Research_Institutions_ECC_RootCA_2015.der"
+    ),
     include_bytes!("../data/mozilla/Hellenic_Academic_and_Research_Institutions_RootCA_2015.der"),
     include_bytes!("../data/mozilla/HiPKI_Root_CA_-_G1.der"),
     include_bytes!("../data/mozilla/Hongkong_Post_Root_CA_1.der"),

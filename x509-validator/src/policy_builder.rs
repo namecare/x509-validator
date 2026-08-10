@@ -1,6 +1,7 @@
-use crate::policy::{PolicyEvaluationResult, PolicyFailureReason, ValidationPolicy};
-use x509_validator_core::der_parser::Oid;
-use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
+use crate::PolicyFailureReason;
+use crate::der_parser::Oid;
+use crate::policy::{PolicyEvaluationResult, ValidationPolicy};
+use crate::unverified_chain::UnverifiedCertificateChain;
 
 /// Combines two [`ValidationPolicy`] values so that both must be met for the combination to be met.
 /// Built by the [`policy!`] macro when composing a flat sequence of policies; can also be constructed
@@ -20,14 +21,24 @@ impl<A, B> Tuple2<A, B> {
 
 impl<A: ValidationPolicy, B: ValidationPolicy> ValidationPolicy for Tuple2<A, B> {
     fn verifying_critical_extensions(&self) -> Vec<Oid<'static>> {
-        let mut exts = self.first.verifying_critical_extensions();
-        exts.extend(self.second.verifying_critical_extensions());
+        let mut exts = self
+            .first
+            .verifying_critical_extensions();
+        exts.extend(
+            self.second
+                .verifying_critical_extensions(),
+        );
         exts
     }
 
-    fn chain_meets_policy_requirements(&self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
-        self.first.chain_meets_policy_requirements(chain)?;
-        self.second.chain_meets_policy_requirements(chain)
+    fn chain_meets_policy_requirements(
+        &self,
+        chain: &UnverifiedCertificateChain<'_>,
+    ) -> PolicyEvaluationResult {
+        self.first
+            .chain_meets_policy_requirements(chain)?;
+        self.second
+            .chain_meets_policy_requirements(chain)
     }
 }
 
@@ -48,7 +59,10 @@ impl<A: ValidationPolicy, B: ValidationPolicy> ValidationPolicy for Either<A, B>
         }
     }
 
-    fn chain_meets_policy_requirements(&self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
+    fn chain_meets_policy_requirements(
+        &self,
+        chain: &UnverifiedCertificateChain<'_>,
+    ) -> PolicyEvaluationResult {
         match self {
             Self::First(a) => a.chain_meets_policy_requirements(chain),
             Self::Second(b) => b.chain_meets_policy_requirements(chain),
@@ -72,10 +86,16 @@ impl<P> WrappedOptional<P> {
 
 impl<P: ValidationPolicy> ValidationPolicy for WrappedOptional<P> {
     fn verifying_critical_extensions(&self) -> Vec<Oid<'static>> {
-        self.wrapped.as_ref().map(|p| p.verifying_critical_extensions()).unwrap_or_default()
+        self.wrapped
+            .as_ref()
+            .map(|p| p.verifying_critical_extensions())
+            .unwrap_or_default()
     }
 
-    fn chain_meets_policy_requirements(&self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
+    fn chain_meets_policy_requirements(
+        &self,
+        chain: &UnverifiedCertificateChain<'_>,
+    ) -> PolicyEvaluationResult {
         match &self.wrapped {
             Some(p) => p.chain_meets_policy_requirements(chain),
             None => Ok(()),
@@ -165,17 +185,35 @@ impl<A, B> OneOfTuple2<A, B> {
 
 impl<A: ValidationPolicy, B: ValidationPolicy> ValidationPolicy for OneOfTuple2<A, B> {
     fn verifying_critical_extensions(&self) -> Vec<Oid<'static>> {
-        let first = self.first.verifying_critical_extensions();
-        let second = self.second.verifying_critical_extensions();
-        first.into_iter().filter(|oid| second.contains(oid)).collect()
+        let first = self
+            .first
+            .verifying_critical_extensions();
+        let second = self
+            .second
+            .verifying_critical_extensions();
+        first
+            .into_iter()
+            .filter(|oid| second.contains(oid))
+            .collect()
     }
 
-    fn chain_meets_policy_requirements(&self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
-        match self.first.chain_meets_policy_requirements(chain) {
+    fn chain_meets_policy_requirements(
+        &self,
+        chain: &UnverifiedCertificateChain<'_>,
+    ) -> PolicyEvaluationResult {
+        match self
+            .first
+            .chain_meets_policy_requirements(chain)
+        {
             Ok(()) => Ok(()),
-            Err(first_reason) => match self.second.chain_meets_policy_requirements(chain) {
+            Err(first_reason) => match self
+                .second
+                .chain_meets_policy_requirements(chain)
+            {
                 Ok(()) => Ok(()),
-                Err(second_reason) => Err(PolicyFailureReason::new(format!("{first_reason} and {second_reason}"))),
+                Err(second_reason) => Err(PolicyFailureReason::new(format!(
+                    "{first_reason} and {second_reason}"
+                ))),
             },
         }
     }
@@ -196,10 +234,16 @@ impl<P> OneOfWrappedOptional<P> {
 
 impl<P: ValidationPolicy> ValidationPolicy for OneOfWrappedOptional<P> {
     fn verifying_critical_extensions(&self) -> Vec<Oid<'static>> {
-        self.wrapped.as_ref().map(|p| p.verifying_critical_extensions()).unwrap_or_default()
+        self.wrapped
+            .as_ref()
+            .map(|p| p.verifying_critical_extensions())
+            .unwrap_or_default()
     }
 
-    fn chain_meets_policy_requirements(&self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
+    fn chain_meets_policy_requirements(
+        &self,
+        chain: &UnverifiedCertificateChain<'_>,
+    ) -> PolicyEvaluationResult {
         match &self.wrapped {
             Some(p) => p.chain_meets_policy_requirements(chain),
             None => Err(PolicyFailureReason::new("alternative is disabled")),

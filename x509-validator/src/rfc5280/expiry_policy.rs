@@ -1,6 +1,6 @@
-use crate::{ValidationPolicy, PolicyEvaluationResult, PolicyFailureReason};
-use x509_validator_core::der_parser::Oid;
-use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
+use crate::der_parser::Oid;
+use crate::unverified_chain::UnverifiedCertificateChain;
+use crate::{PolicyEvaluationResult, PolicyFailureReason, ValidationPolicy};
 
 pub type Timestamp = i64;
 
@@ -26,7 +26,10 @@ impl ValidationPolicy for ExpiryPolicy {
         vec![]
     }
 
-    fn chain_meets_policy_requirements(&self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
+    fn chain_meets_policy_requirements(
+        &self,
+        chain: &UnverifiedCertificateChain<'_>,
+    ) -> PolicyEvaluationResult {
         // This is an easy check: confirm all the certs are valid.
         //
         // Note that we do this computation on the TBSCertificate Validity struct, not the public date fields. This is
@@ -44,7 +47,10 @@ impl ValidationPolicy for ExpiryPolicy {
             }
 
             if self.validation_time < not_before {
-                return Err(PolicyFailureReason::new(format!("certificate {:?} is not yet valid", cert)));
+                return Err(PolicyFailureReason::new(format!(
+                    "certificate {:?} is not yet valid",
+                    cert
+                )));
             }
 
             if self.validation_time > not_after {

@@ -1,14 +1,13 @@
 //! Backend-independent algorithm selection
 
-use x509_validator_core::asn1_rs::Any;
-use x509_validator_core::oid_registry;
-use x509_validator_core::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
-
+use crate::asn1_rs::Any;
 use crate::crypto::rsa_pss_digest_bits;
+use crate::oid_registry;
+use crate::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
 
 /// A signature algorithm named by a certificate, in backend-independent form.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum VerificationAlgorithm {
+pub(super) enum VerificationAlgorithm {
     RsaPkcs1Sha1,
     RsaPkcs1Sha256,
     RsaPkcs1Sha384,
@@ -27,9 +26,9 @@ pub enum VerificationAlgorithm {
 
 /// Maps an X.509 `signatureAlgorithm` OID (plus, for ECDSA, the signer's
 /// public-key curve OID) to the verification algorithm it names.
-pub fn verification_algorithm(
-    signature_algorithm: &AlgorithmIdentifier,
-    public_key: &SubjectPublicKeyInfo,
+pub(super) fn verification_algorithm(
+    signature_algorithm: &AlgorithmIdentifier<'_>,
+    public_key: &SubjectPublicKeyInfo<'_>,
 ) -> Option<VerificationAlgorithm> {
     let oid = &signature_algorithm.algorithm;
 
@@ -59,11 +58,15 @@ pub fn verification_algorithm(
 /// Pairs an ECDSA digest size with the curve named by the signer's public-key
 /// parameters. A curve no backend supports, or parameters naming no curve at
 /// all, yields `None`.
-pub fn ecdsa_algorithm(
-    public_key_algorithm: &AlgorithmIdentifier,
+pub(super) fn ecdsa_algorithm(
+    public_key_algorithm: &AlgorithmIdentifier<'_>,
     sha_len: usize,
 ) -> Option<VerificationAlgorithm> {
-    let curve_oid = public_key_algorithm.parameters.as_ref()?.as_oid().ok()?;
+    let curve_oid = public_key_algorithm
+        .parameters
+        .as_ref()?
+        .as_oid()
+        .ok()?;
 
     if curve_oid == oid_registry::OID_EC_P256 {
         match sha_len {
@@ -86,7 +89,7 @@ pub fn ecdsa_algorithm(
 
 /// Reads the digest named by `RSASSA-PSS-params`, which is where PSS carries
 /// it rather than in the signature algorithm OID itself.
-pub fn rsa_pss_algorithm(params: Option<&Any>) -> Option<VerificationAlgorithm> {
+pub(super) fn rsa_pss_algorithm(params: Option<&Any<'_>>) -> Option<VerificationAlgorithm> {
     match rsa_pss_digest_bits(params)? {
         256 => Some(VerificationAlgorithm::RsaPssSha256),
         384 => Some(VerificationAlgorithm::RsaPssSha384),
@@ -97,6 +100,7 @@ pub fn rsa_pss_algorithm(params: Option<&Any>) -> Option<VerificationAlgorithm> 
 
 /// Defines a crypto backend over `$krate`, a crate exposing aws-lc-rs' and
 /// ring's shared API shape.
+#[cfg(any(feature = "aws_lc", feature = "ring"))]
 macro_rules! backend {
     (
         krate: $krate:tt,
@@ -105,14 +109,14 @@ macro_rules! backend {
         ecdsa_p384: { $($p384_sha:literal => $p384_alg:ident),* $(,)? },
     ) => {
         use $krate::signature::{self, UnparsedPublicKey};
-        use x509_validator_core::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
+        use crate::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
         use crate::crypto::backend::{VerificationAlgorithm, verification_algorithm};
         use crate::crypto::{CryptoError, SignatureVerifier};
-        
+
         fn backend_algorithm(
             algorithm: VerificationAlgorithm,
         ) -> Option<&'static dyn $krate::signature::VerificationAlgorithm> {
-            // The ECDSA arms are written as guarded catch-alls so that a curve
+            // The ECDSA arms are written as guarded catch-all arms so that a curve
             // whose group names no digest at all still compiles: matching the
             // variants directly would leave an empty match with no arms.
             match algorithm {
@@ -161,8 +165,8 @@ macro_rules! backend {
         impl SignatureVerifier for $backend {
             fn verify_signature(
                 &self,
-                algorithm: &AlgorithmIdentifier,
-                public_key: &SubjectPublicKeyInfo,
+                algorithm: &AlgorithmIdentifier<'_>,
+                public_key: &SubjectPublicKeyInfo<'_>,
                 message: &[u8],
                 signature: &[u8],
             ) -> Result<(), CryptoError> {
@@ -226,7 +230,9 @@ mod tests {
             (0x03, VerificationAlgorithm::RsaPssSha512),
         ] {
             let der = pss_params(last_octet);
-            let params = Any::from_der(&der).expect("parse PSS params").1;
+            let params = Any::from_der(&der)
+                .expect("parse PSS params")
+                .1;
 
             assert_eq!(rsa_pss_algorithm(Some(&params)), Some(expected));
         }

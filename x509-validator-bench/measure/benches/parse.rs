@@ -10,10 +10,11 @@
 //! this file has `harness = false`, so an in-file `#[test]` fn would never
 //! run.
 
+use core::hint::black_box;
+
 use criterion::{criterion_group, criterion_main, Criterion};
-use std::hint::black_box;
+use x509_validator::{Certificate, FromDer};
 use x509_validator_bench_measure::roots::ROOTS;
-use x509_validator_core::{Certificate, FromDer};
 
 fn parse(c: &mut Criterion) {
     // The whole corpus, parsed once per iteration.
@@ -21,7 +22,12 @@ fn parse(c: &mut Criterion) {
         b.iter(|| {
             for der in ROOTS {
                 let (_, certificate) = Certificate::from_der(black_box(der)).expect("parse root");
-                black_box(certificate.tbs_certificate.extensions().len());
+                black_box(
+                    certificate
+                        .tbs_certificate
+                        .extensions()
+                        .len(),
+                );
             }
         })
     });
@@ -33,7 +39,12 @@ fn parse(c: &mut Criterion) {
         let der = ROOTS[0];
         b.iter(|| {
             let (_, certificate) = Certificate::from_der(black_box(der)).expect("parse root");
-            black_box(certificate.tbs_certificate.extensions().len())
+            black_box(
+                certificate
+                    .tbs_certificate
+                    .extensions()
+                    .len(),
+            )
         })
     });
 }

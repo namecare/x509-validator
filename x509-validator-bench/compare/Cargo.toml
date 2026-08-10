@@ -5,12 +5,14 @@ edition = "2021"
 description = "Comparison benchmarks for x509-validator: backend against backend, parser against parser. Not published."
 publish = false
 
+[lints]
+workspace = true
+
 [dependencies]
-x509-validator = { path = "../../x509-validator", features = ["aws_lc", "ring", "rust_crypto"] }
-x509-validator-core = { path = "../../x509-validator-core" }
-x509-validator-testkit = { path = "../../x509-validator-testkit" }
-rsa = "0.10.0-rc.18"
-rand = { version = "0.10.2", features = ["thread_rng"] }
+x509-validator = { workspace = true, features = ["aws_lc", "ring", "rust_crypto"] }
+x509-validator-testkit.workspace = true
+rsa.workspace = true
+rand.workspace = true
 
 [dev-dependencies]
 divan = "0.1.21"

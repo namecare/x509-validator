@@ -17,12 +17,11 @@ backend! {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use x509_validator_testkit::rcgen::KeyPair;
-    use x509_validator_core::oid_registry;
-    use x509_validator_core::CertificateExt;
-    use x509_validator_core::Certificate;
     use x509_validator_testkit::self_signed;
+
+    use super::*;
+    use crate::{Certificate, CertificateExt, oid_registry};
 
     #[test]
     fn ecdsa_p256_round_trip_verifies() {
@@ -30,13 +29,16 @@ mod tests {
         let der: &'static [u8] = Box::leak(self_signed(&key_pair).into_boxed_slice());
         let cert = Certificate::parse(der).expect("parse certificate");
 
-                let result = AwsLc.verify_signature(
+        let result = AwsLc.verify_signature(
             &cert.signature_algorithm,
             cert.public_key(),
             cert.tbs_certificate.as_ref(),
             cert.signature_value.as_ref(),
         );
-        assert!(result.is_ok(), "expected valid signature to verify, got {result:?}");
+        assert!(
+            result.is_ok(),
+            "expected valid signature to verify, got {result:?}"
+        );
     }
 
     #[test]
@@ -45,7 +47,7 @@ mod tests {
         let der: &'static [u8] = Box::leak(self_signed(&key_pair).into_boxed_slice());
         let cert = Certificate::parse(der).expect("parse certificate");
 
-                let result = AwsLc.verify_signature(
+        let result = AwsLc.verify_signature(
             &cert.signature_algorithm,
             cert.public_key(),
             b"tampered message",
@@ -64,7 +66,8 @@ mod tests {
         let der: &'static [u8] = Box::leak(self_signed(&key_pair).into_boxed_slice());
         let cert = Certificate::parse(der).expect("parse certificate");
 
-        let result = AwsLc.verify_signature(&algorithm, cert.public_key(), b"message", b"signature");
+        let result =
+            AwsLc.verify_signature(&algorithm, cert.public_key(), b"message", b"signature");
         assert!(matches!(result, Err(CryptoError::InvalidKey(_))));
     }
 }

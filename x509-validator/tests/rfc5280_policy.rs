@@ -1,16 +1,26 @@
 //! RFC 5280 policy composition: that each sub-policy is wired into
 //! RFC5280Policy and can independently reject a chain.
 
-use x509_validator::{PolicyEvaluationResult, PolicyFailureReason, RFC5280Policy, Timestamp, ValidationPolicy};
+use x509_validator::{
+    PolicyEvaluationResult, PolicyFailureReason, RFC5280Policy, Timestamp, ValidationPolicy,
+};
 
 mod tests {
-    use super::*;
-    use x509_validator_core::oid_registry::{OID_X509_EXT_BASIC_CONSTRAINTS, OID_X509_EXT_KEY_USAGE, OID_X509_EXT_NAME_CONSTRAINTS};
+    use x509_validator::oid_registry::{
+        OID_X509_EXT_BASIC_CONSTRAINTS, OID_X509_EXT_KEY_USAGE, OID_X509_EXT_NAME_CONSTRAINTS,
+    };
     use x509_validator_testkit::rcgen::CertificateParams;
     use x509_validator_testkit::time::{Duration, OffsetDateTime};
-    use x509_validator_testkit::{chain_of, dns_subtree, issue_leaf, name_constraints, self_signed_ca_with};
+    use x509_validator_testkit::{
+        chain_of, dns_subtree, issue_leaf, name_constraints, self_signed_ca_with,
+    };
 
-    fn with_validity(not_before: Timestamp, not_after: Timestamp) -> impl FnOnce(&mut CertificateParams) {
+    use super::*;
+
+    fn with_validity(
+        not_before: Timestamp,
+        not_after: Timestamp,
+    ) -> impl FnOnce(&mut CertificateParams) {
         move |params: &mut CertificateParams| {
             params.not_before = OffsetDateTime::UNIX_EPOCH + Duration::seconds(not_before);
             params.not_after = OffsetDateTime::UNIX_EPOCH + Duration::seconds(not_after);
@@ -34,14 +44,17 @@ mod tests {
         // genuinely wired into the composition.
         let root = self_signed_ca_with("root", |params: &mut CertificateParams| {
             with_validity(1000, 2000)(params);
-            params.name_constraints = Some(name_constraints(vec![], vec![dns_subtree("example.com")]));
+            params.name_constraints =
+                Some(name_constraints(vec![], vec![dns_subtree("example.com")]));
         });
         let leaf = issue_leaf("leaf", &["www.example.com"], &root);
         let chain = chain_of(vec![leaf, root.der]);
 
         let policy = RFC5280Policy::new(1500);
         assert_eq!(
-            policy.chain_meets_policy_requirements(&chain).unwrap_err(),
+            policy
+                .chain_meets_policy_requirements(&chain)
+                .unwrap_err(),
             PolicyFailureReason::new("name is in an excluded subtree")
         );
     }
@@ -56,7 +69,11 @@ mod tests {
         let chain = chain_of(vec![leaf, root.der]);
 
         let policy = RFC5280Policy::new(1500);
-        assert!(policy.chain_meets_policy_requirements(&chain).is_err());
+        assert!(
+            policy
+                .chain_meets_policy_requirements(&chain)
+                .is_err()
+        );
     }
 
     #[test]
@@ -67,7 +84,9 @@ mod tests {
 
         let policy = RFC5280Policy::new(9999);
         assert_eq!(
-            policy.chain_meets_policy_requirements(&chain).unwrap_err(),
+            policy
+                .chain_meets_policy_requirements(&chain)
+                .unwrap_err(),
             PolicyFailureReason::new("certificate has expired")
         );
     }
@@ -80,7 +99,11 @@ mod tests {
 
         // The same chain at the same "now" is rejected with expiry enabled.
         let enabled = RFC5280Policy::new(9999);
-        assert!(enabled.chain_meets_policy_requirements(&chain).is_err());
+        assert!(
+            enabled
+                .chain_meets_policy_requirements(&chain)
+                .is_err()
+        );
 
         let root2 = self_signed_ca_with("root", with_validity(1000, 2000));
         let leaf2 = issue_leaf("leaf", &[], &root2);
@@ -93,14 +116,17 @@ mod tests {
     fn with_validity_check_disabled_still_enforces_the_other_policies() {
         let root = self_signed_ca_with("root", |params: &mut CertificateParams| {
             with_validity(1000, 2000)(params);
-            params.name_constraints = Some(name_constraints(vec![], vec![dns_subtree("example.com")]));
+            params.name_constraints =
+                Some(name_constraints(vec![], vec![dns_subtree("example.com")]));
         });
         let leaf = issue_leaf("leaf", &["www.example.com"], &root);
         let chain = chain_of(vec![leaf, root.der]);
 
         let policy = RFC5280Policy::with_validity_check_disabled();
         assert_eq!(
-            policy.chain_meets_policy_requirements(&chain).unwrap_err(),
+            policy
+                .chain_meets_policy_requirements(&chain)
+                .unwrap_err(),
             PolicyFailureReason::new("name is in an excluded subtree")
         );
     }
@@ -110,9 +136,18 @@ mod tests {
         let policy = RFC5280Policy::new(1500);
         let oids = policy.verifying_critical_extensions();
 
-        assert!(oids.contains(&OID_X509_EXT_BASIC_CONSTRAINTS), "missing basicConstraints OID");
-        assert!(oids.contains(&OID_X509_EXT_NAME_CONSTRAINTS), "missing nameConstraints OID");
-        assert!(oids.contains(&OID_X509_EXT_KEY_USAGE), "missing keyUsage OID");
+        assert!(
+            oids.contains(&OID_X509_EXT_BASIC_CONSTRAINTS),
+            "missing basicConstraints OID"
+        );
+        assert!(
+            oids.contains(&OID_X509_EXT_NAME_CONSTRAINTS),
+            "missing nameConstraints OID"
+        );
+        assert!(
+            oids.contains(&OID_X509_EXT_KEY_USAGE),
+            "missing keyUsage OID"
+        );
     }
 }
 
@@ -125,19 +160,22 @@ mod tests {
 /// enforces a rule the composition forgot to wire up (or vice versa) shows
 /// up as a failure in exactly one variant.
 mod conformance {
-    use super::*;
+    use x509_validator::oid_registry::OID_X509_EXT_KEY_USAGE;
     use x509_validator::unverified_chain::UnverifiedCertificateChain;
-    use x509_validator::{BasicConstraintsPolicy, ExpiryPolicy, NameConstraintsPolicy, VersionPolicy};
-    use x509_validator_core::oid_registry::OID_X509_EXT_KEY_USAGE;
-    use x509_validator_core::Certificate;
-    use x509_validator_core::CertificateExt;
+    use x509_validator::{
+        BasicConstraintsPolicy, Certificate, CertificateExt, ExpiryPolicy, NameConstraintsPolicy,
+        VersionPolicy,
+    };
     use x509_validator_testkit::rcgen::CertificateParams;
     use x509_validator_testkit::time::{Duration, OffsetDateTime};
     use x509_validator_testkit::{
-        broken_name_constraints_extension, broken_subject_alt_name_extension, chain_of, directory_name_subtree, dns_subtree,
-        ipv4_subtree, issue_ca, issue_leaf, issue_leaf_with, issue_self_issued_ca, name_constraints,
-        raw_name_constraints_extension, raw_subject_alt_name_extension, self_signed_ca_with, Ca, RawGeneralName,
+        Ca, RawGeneralName, broken_name_constraints_extension, broken_subject_alt_name_extension,
+        chain_of, directory_name_subtree, dns_subtree, ipv4_subtree, issue_ca, issue_leaf,
+        issue_leaf_with, issue_self_issued_ca, name_constraints, raw_name_constraints_extension,
+        raw_subject_alt_name_extension, self_signed_ca_with,
     };
+
+    use super::*;
 
     /// The validation time every test that doesn't care about expiry uses;
     /// it sits inside the default validity window of the test certificates.
@@ -156,13 +194,21 @@ mod conformance {
     }
 
     impl PolicyUnderTest {
-        fn evaluate(self, now: Timestamp, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
+        fn evaluate(
+            self,
+            now: Timestamp,
+            chain: &UnverifiedCertificateChain<'_>,
+        ) -> PolicyEvaluationResult {
             match self {
                 Self::Composed => RFC5280Policy::new(now).chain_meets_policy_requirements(chain),
                 Self::Version => VersionPolicy.chain_meets_policy_requirements(chain),
                 Self::Expiry => ExpiryPolicy::new(now).chain_meets_policy_requirements(chain),
-                Self::BasicConstraints => BasicConstraintsPolicy.chain_meets_policy_requirements(chain),
-                Self::NameConstraints => NameConstraintsPolicy.chain_meets_policy_requirements(chain),
+                Self::BasicConstraints => {
+                    BasicConstraintsPolicy.chain_meets_policy_requirements(chain)
+                }
+                Self::NameConstraints => {
+                    NameConstraintsPolicy.chain_meets_policy_requirements(chain)
+                }
             }
         }
     }
@@ -235,12 +281,15 @@ mod conformance {
         let parsed = Certificate::parse(leaf_der).unwrap();
 
         assert!(
-            !parsed.tbs_certificate.extensions().is_empty(),
+            !parsed
+                .tbs_certificate
+                .extensions()
+                .is_empty(),
             "fixture must carry extensions for this rule to mean anything"
         );
 
         let mut downgraded = parsed.clone();
-        downgraded.tbs_certificate.version = x509_validator_core::x509::X509Version::V1;
+        downgraded.tbs_certificate.version = x509_validator::x509::X509Version::V1;
         let chain = UnverifiedCertificateChain::new(vec![downgraded]);
 
         for_both_policies(PolicyUnderTest::Version, |policy| {
@@ -267,7 +316,11 @@ mod conformance {
     /// Builds a root/intermediate/leaf chain where the certificate at
     /// `position` has the given validity window and every other
     /// certificate is valid for all of `1000..=9000`.
-    fn chain_with_validity_at(position: Position, not_before: Timestamp, not_after: Timestamp) -> UnverifiedCertificateChain<'static> {
+    fn chain_with_validity_at(
+        position: Position,
+        not_before: Timestamp,
+        not_after: Timestamp,
+    ) -> UnverifiedCertificateChain<'static> {
         let wide = validity(1000, 9000);
         let narrow = validity(not_before, not_after);
 
@@ -296,17 +349,29 @@ mod conformance {
     /// Asserts that `now` rejects a chain whose certificate at `position`
     /// has the given window, and that disabling validity checking accepts
     /// the very same chain.
-    fn assert_expiry_rejected_at(position: Position, not_before: Timestamp, not_after: Timestamp, now: Timestamp) {
+    fn assert_expiry_rejected_at(
+        position: Position,
+        not_before: Timestamp,
+        not_after: Timestamp,
+        now: Timestamp,
+    ) {
         let chain = chain_with_validity_at(position, not_before, not_after);
 
         for_both_policies(PolicyUnderTest::Expiry, |policy| {
-            assert!(policy.evaluate(now, &chain).is_err(), "{policy:?} at {position:?}");
+            assert!(
+                policy.evaluate(now, &chain).is_err(),
+                "{policy:?} at {position:?}"
+            );
         });
 
         // The same chain must pass once validity checking is switched off,
         // which also proves nothing *else* about the chain is at fault.
         let disabled = RFC5280Policy::with_validity_check_disabled();
-        assert_eq!(disabled.chain_meets_policy_requirements(&chain), Ok(()), "{position:?}");
+        assert_eq!(
+            disabled.chain_meets_policy_requirements(&chain),
+            Ok(()),
+            "{position:?}"
+        );
     }
 
     #[test]
@@ -370,10 +435,24 @@ mod conformance {
 
         // Interleave the evaluations to show neither policy's answer
         // depends on when, or in what order, it is invoked.
-        assert_eq!(before_expiry.chain_meets_policy_requirements(&chain), Ok(()));
-        assert!(after_expiry.chain_meets_policy_requirements(&chain).is_err());
-        assert_eq!(before_expiry.chain_meets_policy_requirements(&chain), Ok(()));
-        assert!(after_expiry.chain_meets_policy_requirements(&chain).is_err());
+        assert_eq!(
+            before_expiry.chain_meets_policy_requirements(&chain),
+            Ok(())
+        );
+        assert!(
+            after_expiry
+                .chain_meets_policy_requirements(&chain)
+                .is_err()
+        );
+        assert_eq!(
+            before_expiry.chain_meets_policy_requirements(&chain),
+            Ok(())
+        );
+        assert!(
+            after_expiry
+                .chain_meets_policy_requirements(&chain)
+                .is_err()
+        );
     }
 
     // -----------------------------------------------------------------
@@ -387,7 +466,9 @@ mod conformance {
         // bit. Absent, negative, or undecodable basicConstraints all fail.
         let ca_unconstrained = self_signed_ca_with("root", |_| {}).der;
         let ca_path_len_zero = self_signed_ca_with("root", |params: &mut CertificateParams| {
-            params.is_ca = x509_validator_testkit::rcgen::IsCa::Ca(x509_validator_testkit::rcgen::BasicConstraints::Constrained(0));
+            params.is_ca = x509_validator_testkit::rcgen::IsCa::Ca(
+                x509_validator_testkit::rcgen::BasicConstraints::Constrained(0),
+            );
         })
         .der;
         let not_a_ca = self_signed_ca_with("root", |params: &mut CertificateParams| {
@@ -395,7 +476,11 @@ mod conformance {
         })
         .der;
 
-        for (der, expected_valid) in [(ca_unconstrained, true), (ca_path_len_zero, true), (not_a_ca, false)] {
+        for (der, expected_valid) in [
+            (ca_unconstrained, true),
+            (ca_path_len_zero, true),
+            (not_a_ca, false),
+        ] {
             let chain = chain_of(vec![der]);
             for_both_policies(PolicyUnderTest::BasicConstraints, |policy| {
                 assert_eq!(
@@ -411,14 +496,24 @@ mod conformance {
     fn intermediate_ca_must_be_marked_as_ca() {
         // An intermediate that does not assert the CA bit cannot issue.
         let root = self_signed_ca_with("root", |_| {});
-        let bad_intermediate = issue_ca("intermediate", &root, None, |params: &mut CertificateParams| {
-            params.is_ca = x509_validator_testkit::rcgen::IsCa::NoCa;
-        });
+        let bad_intermediate = issue_ca(
+            "intermediate",
+            &root,
+            None,
+            |params: &mut CertificateParams| {
+                params.is_ca = x509_validator_testkit::rcgen::IsCa::NoCa;
+            },
+        );
         let leaf = issue_leaf("leaf", &["www.example.com"], &bad_intermediate);
         let bad_chain = chain_of(vec![leaf, bad_intermediate.der, root.der]);
 
         for_both_policies(PolicyUnderTest::BasicConstraints, |policy| {
-            assert!(policy.evaluate(NOW, &bad_chain).is_err(), "{policy:?}");
+            assert!(
+                policy
+                    .evaluate(NOW, &bad_chain)
+                    .is_err(),
+                "{policy:?}"
+            );
         });
 
         // Swapping in a properly marked intermediate fixes it, proving the
@@ -440,7 +535,12 @@ mod conformance {
         let bad_chain = chain_of(vec![leaf, bad_root.der]);
 
         for_both_policies(PolicyUnderTest::BasicConstraints, |policy| {
-            assert!(policy.evaluate(NOW, &bad_chain).is_err(), "{policy:?}");
+            assert!(
+                policy
+                    .evaluate(NOW, &bad_chain)
+                    .is_err(),
+                "{policy:?}"
+            );
         });
 
         let good_root = self_signed_ca_with("root", |_| {});
@@ -483,7 +583,9 @@ mod conformance {
     fn path_length_constraints_on_roots_are_applied() {
         // Same rule, but the constraint lives on the trust anchor.
         let root = self_signed_ca_with("root", |params: &mut CertificateParams| {
-            params.is_ca = x509_validator_testkit::rcgen::IsCa::Ca(x509_validator_testkit::rcgen::BasicConstraints::Constrained(0));
+            params.is_ca = x509_validator_testkit::rcgen::IsCa::Ca(
+                x509_validator_testkit::rcgen::BasicConstraints::Constrained(0),
+            );
         });
         let first_level = issue_ca("first", &root, None, |_| {});
         let second_level = issue_ca("second", &first_level, None, |_| {});
@@ -499,7 +601,9 @@ mod conformance {
         // certificates that follow, excluding the end entity itself. A
         // leaf issued directly by the root therefore fits exactly.
         let root = self_signed_ca_with("root", |params: &mut CertificateParams| {
-            params.is_ca = x509_validator_testkit::rcgen::IsCa::Ca(x509_validator_testkit::rcgen::BasicConstraints::Constrained(0));
+            params.is_ca = x509_validator_testkit::rcgen::IsCa::Ca(
+                x509_validator_testkit::rcgen::BasicConstraints::Constrained(0),
+            );
         });
         let leaf = issue_leaf("leaf", &["www.example.com"], &root);
         let fits = chain_of(vec![leaf, root.der]);
@@ -516,7 +620,9 @@ mod conformance {
         // itself under a fresh key keeps the same subject as its issuer,
         // so that hop must not consume the budget.
         let root = self_signed_ca_with("root", |params: &mut CertificateParams| {
-            params.is_ca = x509_validator_testkit::rcgen::IsCa::Ca(x509_validator_testkit::rcgen::BasicConstraints::Constrained(0));
+            params.is_ca = x509_validator_testkit::rcgen::IsCa::Ca(
+                x509_validator_testkit::rcgen::BasicConstraints::Constrained(0),
+            );
         });
         let self_issued = issue_self_issued_ca(&root, Some(0));
         let leaf = issue_leaf("leaf", &["www.example.com"], &self_issued);
@@ -531,7 +637,9 @@ mod conformance {
         // test above would pass even if self-issued certificates were
         // simply never counted for any reason.
         let root = self_signed_ca_with("root", |params: &mut CertificateParams| {
-            params.is_ca = x509_validator_testkit::rcgen::IsCa::Ca(x509_validator_testkit::rcgen::BasicConstraints::Constrained(0));
+            params.is_ca = x509_validator_testkit::rcgen::IsCa::Ca(
+                x509_validator_testkit::rcgen::BasicConstraints::Constrained(0),
+            );
         });
         let other_named = issue_ca("someone-else", &root, Some(0), |_| {});
         let sub = issue_ca("sub", &other_named, Some(0), |_| {});
@@ -621,7 +729,11 @@ mod conformance {
             let chain = constrained_chain(placement, constrain, name);
             for_both_policies(PolicyUnderTest::NameConstraints, |policy| {
                 let result = policy.evaluate(NOW, &chain);
-                assert_eq!(result.is_ok(), expect_ok, "{policy:?} {placement:?} expect_ok={expect_ok}");
+                assert_eq!(
+                    result.is_ok(),
+                    expect_ok,
+                    "{policy:?} {placement:?} expect_ok={expect_ok}"
+                );
 
                 if let (Some(reason), Err(failure)) = (expected_reason, &result) {
                     assert_eq!(
@@ -640,19 +752,24 @@ mod conformance {
 
     fn dns_san(name: &'static str) -> impl Fn(&mut CertificateParams) {
         move |params: &mut CertificateParams| {
-            params.subject_alt_names = vec![x509_validator_testkit::rcgen::SanType::DnsName(name.try_into().unwrap())];
+            params.subject_alt_names = vec![x509_validator_testkit::rcgen::SanType::DnsName(
+                name.try_into().unwrap(),
+            )];
         }
     }
 
-    fn ip_san(addr: std::net::IpAddr) -> impl Fn(&mut CertificateParams) {
+    fn ip_san(addr: core::net::IpAddr) -> impl Fn(&mut CertificateParams) {
         move |params: &mut CertificateParams| {
-            params.subject_alt_names = vec![x509_validator_testkit::rcgen::SanType::IpAddress(addr)];
+            params.subject_alt_names =
+                vec![x509_validator_testkit::rcgen::SanType::IpAddress(addr)];
         }
     }
 
     fn uri_san(uri: &'static str) -> impl Fn(&mut CertificateParams) {
         move |params: &mut CertificateParams| {
-            params.subject_alt_names = vec![x509_validator_testkit::rcgen::SanType::URI(uri.try_into().unwrap())];
+            params.subject_alt_names = vec![x509_validator_testkit::rcgen::SanType::URI(
+                uri.try_into().unwrap(),
+            )];
         }
     }
 
@@ -661,7 +778,8 @@ mod conformance {
         // A name inside the excluded subtree is rejected; one outside it
         // is not.
         let excluded = |params: &mut CertificateParams| {
-            params.name_constraints = Some(name_constraints(vec![], vec![dns_subtree("example.com")]));
+            params.name_constraints =
+                Some(name_constraints(vec![], vec![dns_subtree("example.com")]));
         };
         assert_constraint_outcome(&excluded, &dns_san("www.example.com"), false);
         assert_constraint_outcome(&excluded, &dns_san("www.example.org"), true);
@@ -670,7 +788,8 @@ mod conformance {
     #[test]
     fn dns_name_permitted_subtrees() {
         let permitted = |params: &mut CertificateParams| {
-            params.name_constraints = Some(name_constraints(vec![dns_subtree("example.com")], vec![]));
+            params.name_constraints =
+                Some(name_constraints(vec![dns_subtree("example.com")], vec![]));
         };
         assert_constraint_outcome(&permitted, &dns_san("www.example.com"), true);
         assert_constraint_outcome(&permitted, &dns_san("www.example.org"), false);
@@ -679,7 +798,10 @@ mod conformance {
     #[test]
     fn ip_address_excluded_subtrees() {
         let excluded = |params: &mut CertificateParams| {
-            params.name_constraints = Some(name_constraints(vec![], vec![ipv4_subtree([127, 0, 0, 0], [255, 0, 0, 0])]));
+            params.name_constraints = Some(name_constraints(
+                vec![],
+                vec![ipv4_subtree([127, 0, 0, 0], [255, 0, 0, 0])],
+            ));
         };
         assert_constraint_outcome(&excluded, &ip_san("127.0.0.1".parse().unwrap()), false);
         assert_constraint_outcome(&excluded, &ip_san("10.0.0.1".parse().unwrap()), true);
@@ -688,7 +810,10 @@ mod conformance {
     #[test]
     fn ip_address_permitted_subtrees() {
         let permitted = |params: &mut CertificateParams| {
-            params.name_constraints = Some(name_constraints(vec![ipv4_subtree([127, 0, 0, 0], [255, 0, 0, 0])], vec![]));
+            params.name_constraints = Some(name_constraints(
+                vec![ipv4_subtree([127, 0, 0, 0], [255, 0, 0, 0])],
+                vec![],
+            ));
         };
         assert_constraint_outcome(&permitted, &ip_san("127.0.0.1".parse().unwrap()), true);
         assert_constraint_outcome(&permitted, &ip_san("10.0.0.1".parse().unwrap()), false);
@@ -701,7 +826,10 @@ mod conformance {
         let excluded = |params: &mut CertificateParams| {
             params
                 .custom_extensions
-                .push(raw_name_constraints_extension(&[], &[RawGeneralName::uri("example.com")]));
+                .push(raw_name_constraints_extension(
+                    &[],
+                    &[RawGeneralName::uri("example.com")],
+                ));
         };
         assert_constraint_outcome(&excluded, &uri_san("https://www.example.com/path"), false);
         assert_constraint_outcome(&excluded, &uri_san("https://www.example.org/path"), true);
@@ -712,7 +840,10 @@ mod conformance {
         let permitted = |params: &mut CertificateParams| {
             params
                 .custom_extensions
-                .push(raw_name_constraints_extension(&[RawGeneralName::uri("example.com")], &[]));
+                .push(raw_name_constraints_extension(
+                    &[RawGeneralName::uri("example.com")],
+                    &[],
+                ));
         };
         assert_constraint_outcome(&permitted, &uri_san("https://www.example.com/path"), true);
         assert_constraint_outcome(&permitted, &uri_san("https://www.example.org/path"), false);
@@ -726,7 +857,10 @@ mod conformance {
         // directoryName subtree is rejected — whatever the names are.
         for constraint_name in ["Excluded", "Other"] {
             let excluded = move |params: &mut CertificateParams| {
-                params.name_constraints = Some(name_constraints(vec![], vec![directory_name_subtree(constraint_name)]));
+                params.name_constraints = Some(name_constraints(
+                    vec![],
+                    vec![directory_name_subtree(constraint_name)],
+                ));
             };
             assert_constraint_outcome_because(
                 &excluded,
@@ -741,7 +875,10 @@ mod conformance {
     fn directory_name_permitted_subtrees_always_fail() {
         for constraint_name in ["Permitted", "Other"] {
             let permitted = move |params: &mut CertificateParams| {
-                params.name_constraints = Some(name_constraints(vec![directory_name_subtree(constraint_name)], vec![]));
+                params.name_constraints = Some(name_constraints(
+                    vec![directory_name_subtree(constraint_name)],
+                    vec![],
+                ));
             };
             assert_constraint_outcome_because(
                 &permitted,
@@ -764,21 +901,26 @@ mod conformance {
         ];
 
         let excluded = |params: &mut CertificateParams| {
-            params.custom_extensions.push(raw_name_constraints_extension(
-                &[],
-                &[
-                    RawGeneralName::uri("example.com"),
-                    RawGeneralName::dns("example.org"),
-                    RawGeneralName::ip(&[127, 0, 0, 1, 255, 0, 0, 0]),
-                ],
-            ));
+            params
+                .custom_extensions
+                .push(raw_name_constraints_extension(
+                    &[],
+                    &[
+                        RawGeneralName::uri("example.com"),
+                        RawGeneralName::dns("example.org"),
+                        RawGeneralName::ip(&[127, 0, 0, 1, 255, 0, 0, 0]),
+                    ],
+                ));
         };
 
         for (label, name) in &names {
             for placement in PLACEMENTS {
                 let chain = constrained_chain(placement, &excluded, name.as_ref());
                 for_both_policies(PolicyUnderTest::NameConstraints, |policy| {
-                    assert!(policy.evaluate(NOW, &chain).is_err(), "{policy:?} {placement:?} {label}");
+                    assert!(
+                        policy.evaluate(NOW, &chain).is_err(),
+                        "{policy:?} {placement:?} {label}"
+                    );
                 });
             }
         }
@@ -806,21 +948,29 @@ mod conformance {
             let name = move |params: &mut CertificateParams| {
                 params
                     .custom_extensions
-                    .push(raw_subject_alt_name_extension(std::slice::from_ref(&matching_name)));
+                    .push(raw_subject_alt_name_extension(core::slice::from_ref(
+                        &matching_name,
+                    )));
             };
 
             let excluded_subtree = subtree.clone();
             let excluded = move |params: &mut CertificateParams| {
                 params
                     .custom_extensions
-                    .push(raw_name_constraints_extension(&[], std::slice::from_ref(&excluded_subtree)));
+                    .push(raw_name_constraints_extension(
+                        &[],
+                        core::slice::from_ref(&excluded_subtree),
+                    ));
             };
 
             let permitted_subtree = subtree.clone();
             let permitted = move |params: &mut CertificateParams| {
                 params
                     .custom_extensions
-                    .push(raw_name_constraints_extension(std::slice::from_ref(&permitted_subtree), &[]));
+                    .push(raw_name_constraints_extension(
+                        core::slice::from_ref(&permitted_subtree),
+                        &[],
+                    ));
             };
 
             for placement in PLACEMENTS {
@@ -866,7 +1016,10 @@ mod conformance {
             for placement in PLACEMENTS {
                 let chain = constrained_chain(placement, &both, name.as_ref());
                 for_both_policies(PolicyUnderTest::NameConstraints, |policy| {
-                    assert!(policy.evaluate(NOW, &chain).is_err(), "{policy:?} {placement:?} {label}");
+                    assert!(
+                        policy.evaluate(NOW, &chain).is_err(),
+                        "{policy:?} {placement:?} {label}"
+                    );
                 });
             }
         }
@@ -878,13 +1031,18 @@ mod conformance {
         // constraints it was meant to express cannot be checked, so the
         // chain cannot be trusted.
         let broken = |params: &mut CertificateParams| {
-            params.custom_extensions.push(broken_name_constraints_extension());
+            params
+                .custom_extensions
+                .push(broken_name_constraints_extension());
         };
 
         for placement in PLACEMENTS {
             let chain = constrained_chain(placement, &broken, &dns_san("www.example.com"));
             for_both_policies(PolicyUnderTest::NameConstraints, |policy| {
-                assert!(policy.evaluate(NOW, &chain).is_err(), "{policy:?} {placement:?}");
+                assert!(
+                    policy.evaluate(NOW, &chain).is_err(),
+                    "{policy:?} {placement:?}"
+                );
             });
         }
     }
@@ -895,16 +1053,22 @@ mod conformance {
         // constrained: the names it carries cannot be enumerated, so a
         // constraint cannot be shown to hold.
         let constrain = |params: &mut CertificateParams| {
-            params.name_constraints = Some(name_constraints(vec![], vec![dns_subtree("example.com")]));
+            params.name_constraints =
+                Some(name_constraints(vec![], vec![dns_subtree("example.com")]));
         };
         let broken_san = |params: &mut CertificateParams| {
-            params.custom_extensions.push(broken_subject_alt_name_extension());
+            params
+                .custom_extensions
+                .push(broken_subject_alt_name_extension());
         };
 
         for placement in PLACEMENTS {
             let chain = constrained_chain(placement, &constrain, &broken_san);
             for_both_policies(PolicyUnderTest::NameConstraints, |policy| {
-                assert!(policy.evaluate(NOW, &chain).is_err(), "{policy:?} {placement:?}");
+                assert!(
+                    policy.evaluate(NOW, &chain).is_err(),
+                    "{policy:?} {placement:?}"
+                );
             });
         }
     }
@@ -921,9 +1085,15 @@ mod conformance {
         // not block validation — but deliberately does not enforce the
         // rule, matching what mainstream implementations do.
         let root = self_signed_ca_with("root", |_| {});
-        let intermediate = issue_ca("intermediate", &root, Some(0), |params: &mut CertificateParams| {
-            params.key_usages = vec![x509_validator_testkit::rcgen::KeyUsagePurpose::DigitalSignature];
-        });
+        let intermediate = issue_ca(
+            "intermediate",
+            &root,
+            Some(0),
+            |params: &mut CertificateParams| {
+                params.key_usages =
+                    vec![x509_validator_testkit::rcgen::KeyUsagePurpose::DigitalSignature];
+            },
+        );
         let leaf = issue_leaf("leaf", &["www.example.com"], &intermediate);
         let chain = chain_of(vec![leaf, intermediate.der, root.der]);
 
@@ -932,7 +1102,11 @@ mod conformance {
 
         // And the OID is claimed, which is what stops the critical
         // extension from failing the chain elsewhere in verification.
-        assert!(policy.verifying_critical_extensions().contains(&OID_X509_EXT_KEY_USAGE));
+        assert!(
+            policy
+                .verifying_critical_extensions()
+                .contains(&OID_X509_EXT_KEY_USAGE)
+        );
     }
 
     #[test]
@@ -942,9 +1116,16 @@ mod conformance {
         // extensions it handles; an unrecognized one is absent from that
         // list, which is what causes verification to reject the chain.
         let root = self_signed_ca_with("root", |_| {});
-        let leaf = issue_leaf_with("leaf", &["www.example.com"], &root, |params: &mut CertificateParams| {
-            params.custom_extensions.push(x509_validator_testkit::weird_critical_extension());
-        });
+        let leaf = issue_leaf_with(
+            "leaf",
+            &["www.example.com"],
+            &root,
+            |params: &mut CertificateParams| {
+                params
+                    .custom_extensions
+                    .push(x509_validator_testkit::weird_critical_extension());
+            },
+        );
         let leaf_der: &'static [u8] = Box::leak(leaf.into_boxed_slice());
         let parsed = Certificate::parse(leaf_der).unwrap();
 
@@ -958,7 +1139,11 @@ mod conformance {
             .map(|extension| extension.oid.clone())
             .collect();
 
-        assert_eq!(unhandled.len(), 1, "expected exactly one unhandled critical extension");
+        assert_eq!(
+            unhandled.len(),
+            1,
+            "expected exactly one unhandled critical extension"
+        );
         assert_eq!(unhandled[0].to_id_string(), "1.2.3.4.5");
     }
 }

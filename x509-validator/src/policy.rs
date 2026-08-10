@@ -1,13 +1,35 @@
-use x509_validator_core::der_parser::Oid;
-use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
+use std::fmt;
 
-pub use x509_validator_core::error::PolicyFailureReason;
+use crate::der_parser::Oid;
+use crate::unverified_chain::UnverifiedCertificateChain;
 
 /// The result of evaluating a [`ValidationPolicy`] against a candidate certificate chain.
 ///
 /// `Ok(())` means the chain meets the policy requirements; `Err(reason)` means the chain
 /// fails to meet the policy requirements, with the associated reason.
 pub type PolicyEvaluationResult = Result<(), PolicyFailureReason>;
+
+/// Why a chain was rejected by policy evaluation.
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct PolicyFailureReason(String);
+
+impl PolicyFailureReason {
+    pub fn new(reason: impl Into<String>) -> Self {
+        Self(reason.into())
+    }
+}
+
+impl fmt::Display for PolicyFailureReason {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl fmt::Debug for PolicyFailureReason {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 /// A [`ValidationPolicy`] implements a series of checks on an [`UnverifiedCertificateChain`] to determine
 /// whether that chain should be trusted.
@@ -46,5 +68,8 @@ pub trait ValidationPolicy {
     ///
     /// Each of these candidate chains is then handed to a [`ValidationPolicy`] to be checked against the certificate policy.
     /// The checking is done in this method.
-    fn chain_meets_policy_requirements(&self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult;
+    fn chain_meets_policy_requirements(
+        &self,
+        chain: &UnverifiedCertificateChain<'_>,
+    ) -> PolicyEvaluationResult;
 }

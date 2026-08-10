@@ -1,8 +1,7 @@
 //! Certificate store lookup behaviour.
 
 use x509_validator::store::CertificateStore;
-use x509_validator::Certificate;
-use x509_validator_core::CertificateExt;
+use x509_validator::{Certificate, CertificateExt};
 use x509_validator_testkit::{cert, self_signed_ca};
 
 fn store_cert(subject_cn: &str) -> Certificate<'static> {
@@ -22,8 +21,12 @@ fn append_and_find_by_subject_round_trip() {
 
 #[test]
 fn find_by_subject_returns_empty_slice_for_unknown_subject() {
-    let store: CertificateStore = CertificateStore::new();
-    assert!(store.find_by_subject(b"nope").is_empty());
+    let store: CertificateStore<'_> = CertificateStore::new();
+    assert!(
+        store
+            .find_by_subject(b"nope")
+            .is_empty()
+    );
 }
 
 #[test]

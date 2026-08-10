@@ -62,7 +62,7 @@ Two further caveats:
   depth.
 - x509-cert's numbers move with the allocator; x509-parser's do not.
 
-Note that *our* parser is not our code: `x509_validator_core::Certificate` is
+Note that *our* parser is not our code: `x509_validator::Certificate` is
 a re-export of `x509_parser::certificate::X509Certificate`, so this row is
 x509-parser's performance with no wrapper of ours in it.
 
