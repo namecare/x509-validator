@@ -4,10 +4,7 @@ pub mod validator;
 
 pub use x509_validator_core::*;
 
-// This shadows core's `Validator` trait, re-exported above via
-// `x509_validator_core::*`. That is deliberate: the concrete type is what
-// callers of this crate want under that name, and the trait remains reachable
-// as `x509_validator_core::Validator`.
+// The concrete validator. Core's trait is re-exported above as `BaseValidator`.
 pub use validator::Validator;
 
 pub mod policy;

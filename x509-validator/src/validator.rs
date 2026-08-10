@@ -5,10 +5,7 @@ use crate::store::CertificateStore;
 use x509_validator_core::error::PolicyFailure;
 use x509_validator_core::unverified_chain::UnverifiedCertificateChain;
 use x509_validator_core::validated_chain::ValidatedCertificateChain;
-use x509_validator_core::validator::Validator as ValidatorTrait;
-
-// Re-exported so consumers of this crate can name the validation result
-// alongside `Validator`, rather than reaching into core for it.
+use x509_validator_core::validator::BaseValidator;
 pub use x509_validator_core::validator::ChainValidationResult;
 use x509_validator_core::{Certificate, CertificateExt};
 
@@ -187,7 +184,7 @@ where
     }
 }
 
-impl<'a, P> ValidatorTrait<'a> for Validator<'a, P>
+impl<'a, P> BaseValidator<'a> for Validator<'a, P>
 where
     P: ValidationPolicy,
 {

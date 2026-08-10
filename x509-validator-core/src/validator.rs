@@ -17,11 +17,11 @@ pub enum ChainValidationResult<'a> {
 /// Implementations decide how chain building, signature verification,
 /// and any additional acceptance criteria work, and how they are configured;
 /// construction is left to the implementing type.
-pub trait Validator<'a> {
+pub trait BaseValidator<'a> {
     /// Validates a leaf certificate by building chains through `intermediates`
     /// to the implementation's trusted roots.
     fn validate(&self, leaf: Certificate<'a>, intermediates: Vec<Certificate<'a>>) -> ChainValidationResult<'a>;
 
-    /// Validates DER-encoded input, parsing it and delegating to [`Validator::validate`].
+    /// Validates DER-encoded input, parsing it and delegating to [`BaseValidator::validate`].
     fn validate_raw(&self, leaf: &'a [u8], intermediates: &'a [&'a [u8]]) -> ChainValidationResult<'a>;
 }
