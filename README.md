@@ -16,14 +16,14 @@ X.509 certificate chain validator.
 
 ## Overview
 
-This library makes it possible to validate X.509 certificate chain against a set of root certificates and a ``ValidationPolicy``.  This is an essential building-block for a wide range
+This library validates an X.509 certificate chain against a set of root certificates and a policy. This is an essential building block for a wide range
 of PKI applications. It ships with a default verifier and a number of built-in verifier policies.
 
-    This library was havily inspired and follows the design of [swift-certificates].
+> This library is heavily inspired by, and follows the design of, the [verifier from the swift-certificates library][ref].
 
 ## Requirements
 
-- Rust 2021 edition. 
+- Rust 1.85 or newer, edition 2024.
 
 ## Installation
 
@@ -33,13 +33,15 @@ Add the dependency and pick a crypto backend:
 x509-validator = { version = "0.1.0", features = ["aws_lc"] }
 ```
 
-| Feature | Backend | Notes                                      |
-|---|---|--------------------------------------------|
+| Feature | Backend | Notes |
+|---|---|---|
 | `aws_lc` | [aws-lc-rs](https://github.com/aws/aws-lc-rs) | Fastest of the three. Needs a C toolchain. |
-| `ring` | [ring](https://github.com/briansmith/ring) | Close behind, except at ECDSA P-384.       |
-| `rust_crypto` | [RustCrypto](https://github.com/RustCrypto) | Pure Rust. Slowest.                        |
+| `ring` | [ring](https://github.com/briansmith/ring) | Close behind, except at ECDSA P-384. |
+| `rust_crypto` | [RustCrypto](https://github.com/RustCrypto) | Pure Rust. The slowest. |
 
-    You can provide your own backend <link to example>
+There is no default backend: without one of these features the crate compiles
+but verifies nothing. You can also provide your own by implementing
+`SignatureVerifier` — see the [`custom_crypto_backend`][custom-backend] example.
 
 ## Example code
 
@@ -94,21 +96,22 @@ Runnable versions of this and more are in [examples]:
 Parsing is done by [x509-parser]. `x509_validator_core::Certificate` is a re-export
 of its `X509Certificate`.
 
-Crypto is swapable via the feature flags above or can be provided a `SignatureVerifier`.
+Crypto is swappable via the feature flags above, or you can supply your own
+`SignatureVerifier`.
 
-Policy is where the actual rules live. A `ValidationPolicy` gets each candidate chain and
-accepts or rejects it. 
+Policy is where the actual rules live. A `ValidationPolicy` receives each candidate chain and
+accepts or rejects it.
 
 ## Benchmarks
 
 Two crates, in [x509-validator-bench]:
 
 - [`measure`][bench-measure] — Regression benchmarks.
-- [`compare`][bench-compare] — Compare backends and parsers, with [results][bench-results] for Apple Silicon.
+- [`compare`][bench-compare] — Compare backends and parsers ([results][bench-results]).
 
 ## Contributing
 
-Contributions are welcome. Please read the [Code of Conduct][coc] first.
+Thanks for your help improving the project! We are so happy to have you! We have a [contributing guide][contribute] to help you get involved in the X509Validator project, and everyone taking part is expected to follow our [Code of Conduct][coc].
 
 ## License
 
@@ -120,11 +123,13 @@ X509Validator is distributed under the following two licenses:
 These are included as LICENSE-APACHE and LICENSE-MIT respectively.  
 You may use this software under the terms of any of these licenses, at your option.
 
-[swift-certificates]: https://github.com/apple/swift-certificates/tree/main/Sources/X509/Verifier
+[ref]: https://github.com/apple/swift-certificates/tree/main/Sources/X509/Verifier
 [x509-parser]: https://github.com/rusticata/x509-parser
 [examples]: examples/examples
+[custom-backend]: examples/examples/custom_crypto_backend.rs
 [x509-validator-bench]: x509-validator-bench
 [bench-measure]: x509-validator-bench/measure/README.md
 [bench-compare]: x509-validator-bench/compare/README.md
 [bench-results]: x509-validator-bench/compare/README.md#results
 [coc]: CODE_OF_CONDUCT.md
+[contribute]: CONTRIBUTING.md
