@@ -369,6 +369,11 @@ impl CaSpec {
     }
 }
 
+pub fn self_signed(key_pair: &KeyPair) -> Vec<u8> {
+    let params = CertificateParams::default();
+    params.self_signed(key_pair).expect("self-sign").der().to_vec()
+}
+
 #[cfg(test)]
 mod ca_spec_tests {
     use super::*;
