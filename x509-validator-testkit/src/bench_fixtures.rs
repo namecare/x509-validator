@@ -11,12 +11,14 @@
 //! against them and `measure` runs the parity scenarios over them. Two
 //! copies would be two specifications, and they would drift.
 
+use std::sync::OnceLock;
+
+use time::{Duration, OffsetDateTime};
+use x509_validator::Certificate;
+
 use crate::parse::cert;
 use crate::rcgen::{KeyPair, PKCS_ECDSA_P384_SHA384};
 use crate::{CaSpec, LeafSpec, Ski};
-use std::sync::OnceLock;
-use time::{Duration, OffsetDateTime};
-use x509_validator::Certificate;
 
 /// The instant every validity window is anchored to, and the time expiry
 /// checks are pinned to. Fixed rather than "now" so a benchmark run is not
@@ -138,12 +140,12 @@ fn build() -> Parity {
         .self_signed();
 
     Parity {
-        ca1: cert(ca1.der.clone()),
+        ca1: cert(ca1.der),
         ca1_cross_signed_by_ca2: cert(ca1_cross.der),
         ca1_with_alternative_private_key: cert(ca1_alternative.der),
-        ca2: cert(ca2.der.clone()),
+        ca2: cert(ca2.der),
         ca2_cross_signed_by_ca1: cert(ca2_cross.der),
-        intermediate1: cert(intermediate1.der.clone()),
+        intermediate1: cert(intermediate1.der),
         intermediate1_without_ski_aki: cert(intermediate1_without_ski_aki.der),
         intermediate1_with_incorrect_ski_aki: cert(intermediate1_with_incorrect_ski_aki.der),
         localhost_leaf: cert(localhost_leaf),
@@ -160,10 +162,13 @@ mod tests {
     fn parity_set_is_built_once_and_chains_correctly() {
         let a = parity();
         let b = parity();
-        assert!(std::ptr::eq(a, b), "fixtures must be built exactly once");
+        assert!(core::ptr::eq(a, b), "fixtures must be built exactly once");
 
         // The leaf chains to intermediate1, which chains to ca1.
-        assert_eq!(a.localhost_leaf.issuer().as_raw(), a.intermediate1.subject().as_raw());
+        assert_eq!(
+            a.localhost_leaf.issuer().as_raw(),
+            a.intermediate1.subject().as_raw()
+        );
         assert_eq!(a.intermediate1.issuer().as_raw(), a.ca1.subject().as_raw());
     }
 
@@ -184,8 +189,14 @@ mod tests {
             &p.isolated_self_signed_weird_critical,
         ] {
             let validity = cert.tbs_certificate.validity();
-            assert!(REFERENCE_TIME >= validity.not_before.timestamp(), "not yet valid at reference time");
-            assert!(REFERENCE_TIME <= validity.not_after.timestamp(), "expired at reference time");
+            assert!(
+                REFERENCE_TIME >= validity.not_before.timestamp(),
+                "not yet valid at reference time"
+            );
+            assert!(
+                REFERENCE_TIME <= validity.not_after.timestamp(),
+                "expired at reference time"
+            );
         }
     }
 }

@@ -15,7 +15,7 @@ fn main() {
 
 /// leaf → intermediate → root, the common case.
 #[divan::bench(args = BACKENDS)]
-fn validate_three_cert_chain(bencher: divan::Bencher, backend: Backend) {
+fn validate_three_cert_chain(bencher: divan::Bencher<'_, '_>, backend: Backend) {
     let parity = fixtures::parity();
 
     // Confirm the chain actually validates before timing anything: if this
@@ -23,8 +23,13 @@ fn validate_three_cert_chain(bencher: divan::Bencher, backend: Backend) {
     // error path and every number would be meaningless.
     let roots = CertificateStore::from_iter(vec![parity.ca1.clone()]);
     let intermediates = CertificateStore::from_iter(vec![parity.intermediate1.clone()]);
-    let validator = Validator::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::REFERENCE_TIME), backend.provider);
-    let result = validator.validate_with_diagnostics(&parity.localhost_leaf, &intermediates, &mut |_| {});
+    let validator = Validator::with_policy_and_backend(
+        roots,
+        RFC5280Policy::new(fixtures::REFERENCE_TIME),
+        backend.provider,
+    );
+    let result =
+        validator.validate_with_diagnostics(&parity.localhost_leaf, &intermediates, &mut |_| {});
     assert!(
         result.is_ok(),
         "three-cert chain must validate successfully for {}, but validation failed",
@@ -41,8 +46,16 @@ fn validate_three_cert_chain(bencher: divan::Bencher, backend: Backend) {
             (roots, intermediates)
         })
         .bench_values(|(roots, intermediates)| {
-            let validator = Validator::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::REFERENCE_TIME), backend.provider);
-            divan::black_box(validator.validate_with_diagnostics(divan::black_box(&parity.localhost_leaf), &intermediates, &mut |_| {}))
+            let validator = Validator::with_policy_and_backend(
+                roots,
+                RFC5280Policy::new(fixtures::REFERENCE_TIME),
+                backend.provider,
+            );
+            divan::black_box(validator.validate_with_diagnostics(
+                divan::black_box(&parity.localhost_leaf),
+                &intermediates,
+                &mut |_| {},
+            ))
         });
 }
 
@@ -55,12 +68,16 @@ fn validate_three_cert_chain(bencher: divan::Bencher, backend: Backend) {
 /// average one. It also parses real certificates, which carry policy OIDs and
 /// CRL/OCSP pointers the generated fixtures do not.
 #[divan::bench(args = BACKENDS)]
-fn validate_apple_receipt_chain(bencher: divan::Bencher, backend: Backend) {
+fn validate_apple_receipt_chain(bencher: divan::Bencher<'_, '_>, backend: Backend) {
     let chain = fixtures::apple::chain();
 
     let roots = CertificateStore::from_iter(vec![chain.root.clone()]);
     let intermediates = CertificateStore::from_iter(vec![chain.intermediate.clone()]);
-    let validator = Validator::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::apple::SIGNED_DATE), backend.provider);
+    let validator = Validator::with_policy_and_backend(
+        roots,
+        RFC5280Policy::new(fixtures::apple::SIGNED_DATE),
+        backend.provider,
+    );
     let result = validator.validate_with_diagnostics(&chain.leaf, &intermediates, &mut |_| {});
     assert!(
         result.is_ok(),
@@ -75,15 +92,23 @@ fn validate_apple_receipt_chain(bencher: divan::Bencher, backend: Backend) {
             (roots, intermediates)
         })
         .bench_values(|(roots, intermediates)| {
-            let validator = Validator::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::apple::SIGNED_DATE), backend.provider);
-            divan::black_box(validator.validate_with_diagnostics(divan::black_box(&chain.leaf), &intermediates, &mut |_| {}))
+            let validator = Validator::with_policy_and_backend(
+                roots,
+                RFC5280Policy::new(fixtures::apple::SIGNED_DATE),
+                backend.provider,
+            );
+            divan::black_box(validator.validate_with_diagnostics(
+                divan::black_box(&chain.leaf),
+                &intermediates,
+                &mut |_| {},
+            ))
         });
 }
 
 /// The same chain where the intermediate store also holds decoys that must be
 /// rejected — the cost of issuer search rather than the happy path alone.
 #[divan::bench(args = BACKENDS)]
-fn validate_with_cross_signed_candidates(bencher: divan::Bencher, backend: Backend) {
+fn validate_with_cross_signed_candidates(bencher: divan::Bencher<'_, '_>, backend: Backend) {
     let parity = fixtures::parity();
 
     let roots = CertificateStore::from_iter(vec![parity.ca1.clone(), parity.ca2.clone()]);
@@ -92,8 +117,13 @@ fn validate_with_cross_signed_candidates(bencher: divan::Bencher, backend: Backe
         parity.ca1_cross_signed_by_ca2.clone(),
         parity.ca2_cross_signed_by_ca1.clone(),
     ]);
-    let validator = Validator::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::REFERENCE_TIME), backend.provider);
-    let result = validator.validate_with_diagnostics(&parity.localhost_leaf, &intermediates, &mut |_| {});
+    let validator = Validator::with_policy_and_backend(
+        roots,
+        RFC5280Policy::new(fixtures::REFERENCE_TIME),
+        backend.provider,
+    );
+    let result =
+        validator.validate_with_diagnostics(&parity.localhost_leaf, &intermediates, &mut |_| {});
     assert!(
         result.is_ok(),
         "chain with cross-signed decoys must validate successfully for {}, but validation failed",
@@ -111,7 +141,15 @@ fn validate_with_cross_signed_candidates(bencher: divan::Bencher, backend: Backe
             (roots, intermediates)
         })
         .bench_values(|(roots, intermediates)| {
-            let validator = Validator::with_policy_and_backend(roots, RFC5280Policy::new(fixtures::REFERENCE_TIME), backend.provider);
-            divan::black_box(validator.validate_with_diagnostics(divan::black_box(&parity.localhost_leaf), &intermediates, &mut |_| {}))
+            let validator = Validator::with_policy_and_backend(
+                roots,
+                RFC5280Policy::new(fixtures::REFERENCE_TIME),
+                backend.provider,
+            );
+            divan::black_box(validator.validate_with_diagnostics(
+                divan::black_box(&parity.localhost_leaf),
+                &intermediates,
+                &mut |_| {},
+            ))
         });
 }

@@ -19,7 +19,7 @@ X.509 certificate chain validator.
 This library validates an X.509 certificate chain against a set of root certificates and a policy. This is an essential building block for a wide range
 of PKI applications. It ships with a default verifier and a number of built-in verifier policies.
 
-> This library is heavily inspired by, and follows the design of, the [verifier from the swift-certificates library][ref].
+> This library is heavily inspired by, and follows the design of, the [verifier from the swift-certificates library][ref]. Some pragmatic ideas and project structure has been taking from [rustls](https://github.com/rustls/rustls/tree/main).
 
 ## Requirements
 
@@ -33,10 +33,10 @@ Add the dependency and pick a crypto backend:
 x509-validator = { version = "0.1.0", features = ["aws_lc"] }
 ```
 
-| Feature | Backend | Notes |
-|---|---|---|
-| `aws_lc` | [aws-lc-rs](https://github.com/aws/aws-lc-rs) | Fastest of the three. Needs a C toolchain. |
-| `ring` | [ring](https://github.com/briansmith/ring) | Close behind, except at ECDSA P-384. |
+| Feature | Backend | Notes                   |
+|---|---|-------------------------|
+| `aws_lc` | [aws-lc-rs](https://github.com/aws/aws-lc-rs) | Fastest.                |
+| `ring` | [ring](https://github.com/briansmith/ring) | Close to awc_lc.        |
 | `rust_crypto` | [RustCrypto](https://github.com/RustCrypto) | Pure Rust. The slowest. |
 
 There is no default backend: without one of these features the crate compiles

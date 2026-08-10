@@ -19,8 +19,8 @@ pub type SubjectPublicKeyInfo<'a> = x509_parser::x509::SubjectPublicKeyInfo<'a>;
 pub type RsaSsaPssParams<'a> = x509_parser::signature_algorithm::RsaSsaPssParams<'a>;
 pub type Any<'a> = x509_parser::asn1_rs::Any<'a>;
 
-pub use x509_parser::x509::X509Version;
 pub use x509_parser::prelude::FromDer;
+pub use x509_parser::x509::X509Version;
 
 pub mod der_parser {
     pub use x509_parser::der_parser::*;
@@ -54,22 +54,21 @@ pub mod asn1_rs {
     pub use x509_parser::asn1_rs::*;
 }
 
-pub mod policy;
-pub mod diagnostic;
-pub mod rfc5280;
-pub mod server_identity_policy;
 pub mod all_of_policies;
 pub mod any_policy;
+pub mod diagnostic;
 pub mod one_of_policies;
+pub mod policy;
 pub mod policy_builder;
+pub mod rfc5280;
+pub mod server_identity_policy;
 pub mod store;
 
-pub use policy::*;
-pub use diagnostic::*;
-pub use rfc5280::*;
-pub use server_identity_policy::ServerIdentityPolicy;
 pub use all_of_policies::AllOfPolicies;
 pub use any_policy::AnyPolicy;
+pub use diagnostic::*;
 pub use one_of_policies::OneOfPolicies;
-pub use policy_builder::{Tuple2, Either, WrappedOptional, OneOfTuple2, OneOfWrappedOptional};
-
+pub use policy::*;
+pub use policy_builder::{Either, OneOfTuple2, OneOfWrappedOptional, Tuple2, WrappedOptional};
+pub use rfc5280::*;
+pub use server_identity_policy::ServerIdentityPolicy;

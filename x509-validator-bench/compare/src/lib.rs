@@ -25,8 +25,8 @@ pub struct Backend {
     pub provider: &'static dyn SignatureVerifier,
 }
 
-impl std::fmt::Debug for Backend {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Debug for Backend {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_str(self.name)
     }
 }
@@ -35,21 +35,43 @@ impl std::fmt::Debug for Backend {
 /// stay comparable between runs.
 pub const BACKENDS: &[Backend] = &[
     #[cfg(feature = "aws_lc")]
-    Backend { name: "aws_lc", provider: &x509_validator::crypto::aws_lc::DEFAULT_PROVIDER },
+    Backend {
+        name: "aws_lc",
+        provider: &x509_validator::crypto::aws_lc::DEFAULT_PROVIDER,
+    },
     #[cfg(feature = "ring")]
-    Backend { name: "ring", provider: &x509_validator::crypto::ring::DEFAULT_PROVIDER },
+    Backend {
+        name: "ring",
+        provider: &x509_validator::crypto::ring::DEFAULT_PROVIDER,
+    },
     #[cfg(feature = "rust_crypto")]
-    Backend { name: "rust_crypto", provider: &x509_validator::crypto::rust_crypto::DEFAULT_PROVIDER },
+    Backend {
+        name: "rust_crypto",
+        provider: &x509_validator::crypto::rust_crypto::DEFAULT_PROVIDER,
+    },
 ];
 
 /// The backend used by benchmarks that have no backend axis, preferring
 /// aws-lc-rs when it is compiled in. Mirrors the selection the integration
 /// tests use.
 #[cfg(feature = "aws_lc")]
-pub const DEFAULT_BACKEND: Backend = Backend { name: "aws_lc", provider: &x509_validator::crypto::aws_lc::DEFAULT_PROVIDER };
+pub const DEFAULT_BACKEND: Backend = Backend {
+    name: "aws_lc",
+    provider: &x509_validator::crypto::aws_lc::DEFAULT_PROVIDER,
+};
 #[cfg(all(feature = "ring", not(feature = "aws_lc")))]
-pub const DEFAULT_BACKEND: Backend = Backend { name: "ring", provider: &x509_validator::crypto::ring::DEFAULT_PROVIDER };
-#[cfg(all(feature = "rust_crypto", not(feature = "aws_lc"), not(feature = "ring")))]
-pub const DEFAULT_BACKEND: Backend = Backend { name: "rust_crypto", provider: &x509_validator::crypto::rust_crypto::DEFAULT_PROVIDER };
+pub const DEFAULT_BACKEND: Backend = Backend {
+    name: "ring",
+    provider: &x509_validator::crypto::ring::DEFAULT_PROVIDER,
+};
+#[cfg(all(
+    feature = "rust_crypto",
+    not(feature = "aws_lc"),
+    not(feature = "ring")
+))]
+pub const DEFAULT_BACKEND: Backend = Backend {
+    name: "rust_crypto",
+    provider: &x509_validator::crypto::rust_crypto::DEFAULT_PROVIDER,
+};
 #[cfg(not(any(feature = "aws_lc", feature = "ring", feature = "rust_crypto")))]
 compile_error!("x509-validator-bench-compare requires at least one crypto backend feature: aws_lc, ring, or rust_crypto");

@@ -1,11 +1,11 @@
-use crate::policy::{PolicyEvaluationResult, ValidationPolicy};
-use std::net::{Ipv4Addr, Ipv6Addr};
+use core::net::{Ipv4Addr, Ipv6Addr};
+
 use crate::der_parser::Oid;
 use crate::extensions::GeneralName;
 use crate::oid_registry::OID_X509_EXT_SUBJECT_ALT_NAME;
+use crate::policy::{PolicyEvaluationResult, ValidationPolicy};
 use crate::unverified_chain::UnverifiedCertificateChain;
-use crate::Certificate;
-use crate::PolicyFailureReason;
+use crate::{Certificate, PolicyFailureReason};
 
 const ASCII_PERIOD: u8 = b'.';
 const ASCII_ASTERISK: u8 = b'*';
@@ -50,9 +50,16 @@ impl ValidationPolicy for ServerIdentityPolicy {
         vec![subject_alt_name_oid()]
     }
 
-    fn chain_meets_policy_requirements(&self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
+    fn chain_meets_policy_requirements(
+        &self,
+        chain: &UnverifiedCertificateChain<'_>,
+    ) -> PolicyEvaluationResult {
         // We only validate the leaf node in this policy.
-        has_valid_identity_for_service(chain.leaf(), self.server_hostname.as_ref(), self.server_ip.as_ref())
+        has_valid_identity_for_service(
+            chain.leaf(),
+            self.server_hostname.as_ref(),
+            self.server_ip.as_ref(),
+        )
     }
 }
 
@@ -66,7 +73,7 @@ impl ValidationPolicy for ServerIdentityPolicy {
 /// The algorithm we're implementing is specified in RFC 6125 Section 6 if you want to
 /// follow along at home.
 fn has_valid_identity_for_service(
-    leaf: &Certificate,
+    leaf: &Certificate<'_>,
     server_hostname: Option<&PreparedServerHostname>,
     server_ip: Option<&IpAddress>,
 ) -> PolicyEvaluationResult {
@@ -79,7 +86,12 @@ fn has_valid_identity_for_service(
     let subject_alt_names = leaf
         .tbs_certificate
         .subject_alternative_name()
-        .map_err(|error| PolicyFailureReason::new(format!("error parsing SAN field, cert cannot be trusted: {}", error)))?
+        .map_err(|error| {
+            PolicyFailureReason::new(format!(
+                "error parsing SAN field, cert cannot be trusted: {}",
+                error
+            ))
+        })?
         .map(|ext| ext.value.general_names.clone())
         .unwrap_or_default();
 
@@ -95,7 +107,9 @@ fn has_valid_identity_for_service(
                 }
             }
             GeneralName::IPAddress(value) => {
-                if let (Some(server_ip), Some(certificate_ip)) = (server_ip, IpAddress::from_san_bytes(value)) {
+                if let (Some(server_ip), Some(certificate_ip)) =
+                    (server_ip, IpAddress::from_san_bytes(value))
+                {
                     if match_ip_address(server_ip, &certificate_ip) {
                         return Ok(());
                     }
@@ -107,7 +121,9 @@ fn has_valid_identity_for_service(
 
     if checked_match {
         // We had some subject alternative names, but none matched. We failed here.
-        return Err(PolicyFailureReason::new("none of the names in the SAN extension matched"));
+        return Err(PolicyFailureReason::new(
+            "none of the names in the SAN extension matched",
+        ));
     }
 
     // In the absence of any matchable subjectAlternativeNames, we can fall back to checking
@@ -116,9 +132,16 @@ fn has_valid_identity_for_service(
     //
     // As distinguished names move from least significant to most significant, we actually
     // want the _last_ CN value.
-    let Some(common_name) = leaf.subject().iter_common_name().last().and_then(|cn| cn.as_str().ok()) else {
+    let Some(common_name) = leaf
+        .subject()
+        .iter_common_name()
+        .last()
+        .and_then(|cn| cn.as_str().ok())
+    else {
         // No CN, no match.
-        return Err(PolicyFailureReason::new("no SAN extension and no common name"));
+        return Err(PolicyFailureReason::new(
+            "no SAN extension and no common name",
+        ));
     };
 
     // We have a common name. Let's check it against the provided hostname. We never check
@@ -126,7 +149,9 @@ fn has_valid_identity_for_service(
     if match_hostname(server_hostname, common_name.as_bytes()) {
         Ok(())
     } else {
-        Err(PolicyFailureReason::new("common name does not match expected hostname"))
+        Err(PolicyFailureReason::new(
+            "common name does not match expected hostname",
+        ))
     }
 }
 
@@ -160,10 +185,10 @@ enum IpAddress {
 impl IpAddress {
     fn parse(s: &str) -> Option<Self> {
         if let Ok(v4) = s.parse::<Ipv4Addr>() {
-            return Some(IpAddress::V4(v4));
+            return Some(Self::V4(v4));
         }
         if let Ok(v6) = s.parse::<Ipv6Addr>() {
-            return Some(IpAddress::V6(v6));
+            return Some(Self::V6(v6));
         }
         None
     }
@@ -175,12 +200,12 @@ impl IpAddress {
             4 => {
                 let mut octets = [0u8; 4];
                 octets.copy_from_slice(bytes);
-                Some(IpAddress::V4(Ipv4Addr::from(octets)))
+                Some(Self::V4(Ipv4Addr::from(octets)))
             }
             16 => {
                 let mut octets = [0u8; 16];
                 octets.copy_from_slice(bytes);
-                Some(IpAddress::V6(Ipv6Addr::from(octets)))
+                Some(Self::V6(Ipv6Addr::from(octets)))
             }
             _ => None,
         }
@@ -244,7 +269,7 @@ impl PreparedServerHostname {
 }
 
 /// Whether this character is a valid DNS character, which is the ASCII
-/// letters, digits, the hypen, and the period.
+/// letters, digits, the hyphen, and the period.
 fn is_valid_dns_character(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || byte == b'-' || byte == ASCII_PERIOD
 }
@@ -262,7 +287,9 @@ fn case_insensitive_ascii_match(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
         return false;
     }
-    a.iter().zip(b.iter()).all(|(&x, &y)| x.eq_ignore_ascii_case(&y))
+    a.iter()
+        .zip(b.iter())
+        .all(|(&x, &y)| x.eq_ignore_ascii_case(&y))
 }
 
 /// This type contains a certificate hostname that has been analysed and prepared for matching.
@@ -329,7 +356,10 @@ impl<'a> AnalysedCertificateHostname<'a> {
         if let Some(asterisk_index) = asterisk_index {
             // One final check: if we found a wildcard, we need to confirm that the first label isn't an IDNA A label.
             let prefix_len = base_name.len().min(4);
-            if case_insensitive_ascii_match(&base_name[..prefix_len], &ASCII_IDNA_IDENTIFIER[..prefix_len]) {
+            if case_insensitive_ascii_match(
+                &base_name[..prefix_len],
+                &ASCII_IDNA_IDENTIFIER[..prefix_len],
+            ) {
                 return None;
             }
 
@@ -347,7 +377,9 @@ impl<'a> AnalysedCertificateHostname<'a> {
     fn valid_match_for_name(&self, target: &PreparedServerHostname) -> bool {
         match self {
             // For non-wildcard names, we just do a straightforward comparison.
-            AnalysedCertificateHostname::SingleName(base_name) => case_insensitive_ascii_match(base_name, &target.bytes),
+            AnalysedCertificateHostname::SingleName(base_name) => {
+                case_insensitive_ascii_match(base_name, &target.bytes)
+            }
 
             AnalysedCertificateHostname::Wildcard {
                 base_name,
@@ -364,10 +396,13 @@ impl<'a> AnalysedCertificateHostname<'a> {
                 // the characters *before* the wildcard are the prefix of the target first label, and that the
                 // characters *after* the wildcard are the suffix of the target first label. This works well because
                 // the empty string is a prefix and suffix of all strings.
-                let (wildcard_label, remaining_components) = split_around_index(base_name, *first_period_index);
-                let (target_first_label, target_remaining_components) = split_around_index(&target.bytes, target.first_period_index);
+                let (wildcard_label, remaining_components) =
+                    split_around_index(base_name, *first_period_index);
+                let (target_first_label, target_remaining_components) =
+                    split_around_index(&target.bytes, target.first_period_index);
 
-                if !case_insensitive_ascii_match(remaining_components, target_remaining_components) {
+                if !case_insensitive_ascii_match(remaining_components, target_remaining_components)
+                {
                     // Wildcard is irrelevant, the remaining components don't match.
                     return false;
                 }
@@ -377,9 +412,11 @@ impl<'a> AnalysedCertificateHostname<'a> {
                     return false;
                 }
 
-                let (wildcard_prefix, wildcard_suffix) = split_around_index(wildcard_label, Some(*asterisk_index));
+                let (wildcard_prefix, wildcard_suffix) =
+                    split_around_index(wildcard_label, Some(*asterisk_index));
                 let target_before_wildcard = &target_first_label[..wildcard_prefix.len()];
-                let target_after_wildcard = &target_first_label[target_first_label.len() - wildcard_suffix.len()..];
+                let target_after_wildcard =
+                    &target_first_label[target_first_label.len() - wildcard_suffix.len()..];
 
                 case_insensitive_ascii_match(target_before_wildcard, wildcard_prefix)
                     && case_insensitive_ascii_match(target_after_wildcard, wildcard_suffix)

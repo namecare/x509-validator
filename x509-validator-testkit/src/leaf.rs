@@ -1,13 +1,19 @@
-use crate::ca::{base_params, Ca};
 use rcgen::string::Ia5String;
 use rcgen::{CertificateParams, DistinguishedName, KeyPair, SanType};
+
+use crate::ca::{Ca, base_params};
 
 /// A non-CA leaf certificate issued by a CA, with the given DNS SANs.
 pub fn issue_leaf(subject_cn: &str, dns_sans: &[&str], issuer: &Ca) -> Vec<u8> {
     issue_leaf_with(subject_cn, dns_sans, issuer, |_| {})
 }
 
-pub fn issue_leaf_with(subject_cn: &str, dns_sans: &[&str], issuer: &Ca, configure: impl FnOnce(&mut CertificateParams)) -> Vec<u8> {
+pub fn issue_leaf_with(
+    subject_cn: &str,
+    dns_sans: &[&str],
+    issuer: &Ca,
+    configure: impl FnOnce(&mut CertificateParams),
+) -> Vec<u8> {
     let mut params = base_params(subject_cn);
     params.subject_alt_names = dns_sans
         .iter()
@@ -16,16 +22,31 @@ pub fn issue_leaf_with(subject_cn: &str, dns_sans: &[&str], issuer: &Ca, configu
     configure(&mut params);
 
     let key_pair = KeyPair::generate().expect("generate key pair");
-    params.signed_by(&key_pair, &issuer.issuer()).expect("sign leaf").der().to_vec()
+    params
+        .signed_by(&key_pair, &issuer.issuer())
+        .expect("sign leaf")
+        .der()
+        .to_vec()
 }
 
 /// A non-CA leaf certificate issued by a CA, with the given IP address SANs.
-pub fn issue_leaf_with_ip_sans(subject_cn: &str, ip_sans: Vec<std::net::IpAddr>, issuer: &Ca) -> Vec<u8> {
+pub fn issue_leaf_with_ip_sans(
+    subject_cn: &str,
+    ip_sans: Vec<core::net::IpAddr>,
+    issuer: &Ca,
+) -> Vec<u8> {
     let mut params = base_params(subject_cn);
-    params.subject_alt_names = ip_sans.into_iter().map(SanType::IpAddress).collect();
+    params.subject_alt_names = ip_sans
+        .into_iter()
+        .map(SanType::IpAddress)
+        .collect();
 
     let key_pair = KeyPair::generate().expect("generate key pair");
-    params.signed_by(&key_pair, &issuer.issuer()).expect("sign leaf").der().to_vec()
+    params
+        .signed_by(&key_pair, &issuer.issuer())
+        .expect("sign leaf")
+        .der()
+        .to_vec()
 }
 
 /// A non-CA leaf certificate issued by a CA whose only subjectAltName
@@ -39,25 +60,42 @@ pub fn issue_leaf_with_email_sans(subject_cn: &str, email_sans: &[&str], issuer:
         .collect();
 
     let key_pair = KeyPair::generate().expect("generate key pair");
-    params.signed_by(&key_pair, &issuer.issuer()).expect("sign leaf").der().to_vec()
+    params
+        .signed_by(&key_pair, &issuer.issuer())
+        .expect("sign leaf")
+        .der()
+        .to_vec()
 }
 
 /// A non-CA leaf certificate issued by a CA whose subject distinguished
 /// name is built by the caller. Useful for subjects that the convenience
 /// helpers can't express, such as a DN carrying several commonName
 /// attributes or none at all.
-pub fn issue_leaf_with_dn(dn: DistinguishedName, issuer: &Ca, configure: impl FnOnce(&mut CertificateParams)) -> Vec<u8> {
+pub fn issue_leaf_with_dn(
+    dn: DistinguishedName,
+    issuer: &Ca,
+    configure: impl FnOnce(&mut CertificateParams),
+) -> Vec<u8> {
     let mut params = base_params("");
     params.distinguished_name = dn;
     configure(&mut params);
 
     let key_pair = KeyPair::generate().expect("generate key pair");
-    params.signed_by(&key_pair, &issuer.issuer()).expect("sign leaf").der().to_vec()
+    params
+        .signed_by(&key_pair, &issuer.issuer())
+        .expect("sign leaf")
+        .der()
+        .to_vec()
 }
 
 /// A non-CA leaf issued by `issuer`, carrying an `authorityKeyIdentifier`
 /// when `include_aki` is set.
-pub fn issue_leaf_with_aki(subject_cn: &str, dns_sans: &[&str], issuer: &Ca, include_aki: bool) -> Vec<u8> {
+pub fn issue_leaf_with_aki(
+    subject_cn: &str,
+    dns_sans: &[&str],
+    issuer: &Ca,
+    include_aki: bool,
+) -> Vec<u8> {
     issue_leaf_with(subject_cn, dns_sans, issuer, |params| {
         params.use_authority_key_identifier_extension = include_aki;
     })
@@ -103,7 +141,10 @@ impl LeafSpec {
     }
 
     pub fn dns_sans(mut self, dns_sans: &[&str]) -> Self {
-        self.dns_sans = dns_sans.iter().map(|name| name.to_string()).collect();
+        self.dns_sans = dns_sans
+            .iter()
+            .map(|name| name.to_string())
+            .collect();
         self
     }
 
@@ -125,7 +166,9 @@ impl LeafSpec {
         params.subject_alt_names = self
             .dns_sans
             .iter()
-            .map(|name| SanType::DnsName(Ia5String::try_from(name.as_str()).expect("valid dns san")))
+            .map(|name| {
+                SanType::DnsName(Ia5String::try_from(name.as_str()).expect("valid dns san"))
+            })
             .collect();
         if let Some(not_before) = self.not_before {
             params.not_before = not_before;
@@ -142,28 +185,39 @@ impl LeafSpec {
             params.custom_extensions.push(ext);
         }
 
-        let key_pair = self.key_pair.unwrap_or_else(|| KeyPair::generate().expect("generate key pair"));
+        let key_pair = self
+            .key_pair
+            .unwrap_or_else(|| KeyPair::generate().expect("generate key pair"));
         (params, key_pair)
     }
 
     pub fn signed_by(self, issuer: &Ca) -> Vec<u8> {
         let (params, key_pair) = self.build(false);
-        params.signed_by(&key_pair, &issuer.issuer()).expect("sign leaf").der().to_vec()
+        params
+            .signed_by(&key_pair, &issuer.issuer())
+            .expect("sign leaf")
+            .der()
+            .to_vec()
     }
 
     /// A self-signed certificate carrying `basicConstraints: CA`, for
     /// fixtures that stand alone rather than chaining to an issuer.
     pub fn self_signed(self) -> Vec<u8> {
         let (params, key_pair) = self.build(true);
-        params.self_signed(&key_pair).expect("self-sign").der().to_vec()
+        params
+            .self_signed(&key_pair)
+            .expect("self-sign")
+            .der()
+            .to_vec()
     }
 }
 
 #[cfg(test)]
 mod leaf_spec_tests {
-    use super::*;
     use time::{Duration, OffsetDateTime};
     use x509_validator::{Certificate, CertificateExt};
+
+    use super::*;
 
     #[test]
     fn leaf_spec_honours_validity_and_sans() {
@@ -177,8 +231,22 @@ mod leaf_spec_tests {
             .signed_by(&root);
 
         let parsed = Certificate::parse(&der).expect("parse");
-        assert_eq!(parsed.tbs_certificate.validity().not_before.timestamp(), not_before.unix_timestamp());
-        assert_eq!(parsed.tbs_certificate.validity().not_after.timestamp(), not_after.unix_timestamp());
+        assert_eq!(
+            parsed
+                .tbs_certificate
+                .validity()
+                .not_before
+                .timestamp(),
+            not_before.unix_timestamp()
+        );
+        assert_eq!(
+            parsed
+                .tbs_certificate
+                .validity()
+                .not_after
+                .timestamp(),
+            not_after.unix_timestamp()
+        );
     }
 
     #[test]
@@ -190,7 +258,12 @@ mod leaf_spec_tests {
             .signed_by(&root);
 
         let parsed = Certificate::parse(&der).expect("parse");
-        assert!(parsed.tbs_certificate.extensions().iter().any(|e| e.critical && e.oid.to_id_string() == "1.2.3.4.5"));
+        assert!(
+            parsed
+                .tbs_certificate
+                .extensions()
+                .iter()
+                .any(|e| e.critical && e.oid.to_id_string() == "1.2.3.4.5")
+        );
     }
 }
-

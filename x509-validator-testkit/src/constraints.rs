@@ -16,7 +16,10 @@ pub fn directory_name_subtree(common_name: &str) -> GeneralSubtree {
     GeneralSubtree::DirectoryName(dn)
 }
 
-pub fn name_constraints(permitted: Vec<GeneralSubtree>, excluded: Vec<GeneralSubtree>) -> NameConstraints {
+pub fn name_constraints(
+    permitted: Vec<GeneralSubtree>,
+    excluded: Vec<GeneralSubtree>,
+) -> NameConstraints {
     NameConstraints {
         permitted_subtrees: permitted,
         excluded_subtrees: excluded,

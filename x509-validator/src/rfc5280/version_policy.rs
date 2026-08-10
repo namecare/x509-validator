@@ -1,5 +1,5 @@
-use crate::policy::{PolicyEvaluationResult, PolicyFailureReason, ValidationPolicy};
 use crate::der_parser::Oid;
+use crate::policy::{PolicyEvaluationResult, PolicyFailureReason, ValidationPolicy};
 use crate::unverified_chain::UnverifiedCertificateChain;
 use crate::x509::X509Version;
 
@@ -13,10 +13,16 @@ impl ValidationPolicy for VersionPolicy {
         vec![]
     }
 
-    fn chain_meets_policy_requirements(&self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
+    fn chain_meets_policy_requirements(
+        &self,
+        chain: &UnverifiedCertificateChain<'_>,
+    ) -> PolicyEvaluationResult {
         for certificate in chain.iter() {
             let is_v1 = certificate.tbs_certificate.version == X509Version::V1;
-            let has_extensions = !certificate.tbs_certificate.extensions().is_empty();
+            let has_extensions = !certificate
+                .tbs_certificate
+                .extensions()
+                .is_empty();
             if is_v1 && has_extensions {
                 return Err(PolicyFailureReason::new(format!(
                     "version 1 certificate contains extensions but should not: {:?}",

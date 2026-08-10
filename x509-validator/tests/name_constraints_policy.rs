@@ -1,9 +1,10 @@
-use x509_validator::{NameConstraintsPolicy, PolicyFailureReason, ValidationPolicy};
+use x509_validator::{
+    CertificateExt, NameConstraintsPolicy, PolicyFailureReason, ValidationPolicy,
+};
 use x509_validator_testkit::rcgen::CertificateParams;
-use x509_validator::CertificateExt;
 use x509_validator_testkit::{
-    chain_of, dns_subtree, issue_leaf, issue_leaf_with, name_constraints, raw_name_constraints_extension, self_signed_ca_with,
-    RawGeneralName,
+    RawGeneralName, chain_of, dns_subtree, issue_leaf, issue_leaf_with, name_constraints,
+    raw_name_constraints_extension, self_signed_ca_with,
 };
 
 #[test]
@@ -34,7 +35,11 @@ fn leaf_name_outside_permitted_subtree_is_rejected() {
     let leaf = issue_leaf("leaf", &["www.evil.com"], &root);
     let chain = chain_of(vec![leaf, root.der]);
     let policy = NameConstraintsPolicy;
-    assert!(policy.chain_meets_policy_requirements(&chain).is_err());
+    assert!(
+        policy
+            .chain_meets_policy_requirements(&chain)
+            .is_err()
+    );
 }
 
 #[test]
@@ -46,7 +51,9 @@ fn leaf_name_in_excluded_subtree_is_rejected() {
     let chain = chain_of(vec![leaf, root.der]);
     let policy = NameConstraintsPolicy;
     assert_eq!(
-        policy.chain_meets_policy_requirements(&chain).unwrap_err(),
+        policy
+            .chain_meets_policy_requirements(&chain)
+            .unwrap_err(),
         PolicyFailureReason::new("name is in an excluded subtree")
     );
 }
@@ -60,18 +67,28 @@ fn constraints_apply_transitively_through_intermediate() {
     let leaf = issue_leaf("leaf", &["www.evil.com"], &intermediate);
     let chain = chain_of(vec![leaf, intermediate.der, root.der]);
     let policy = NameConstraintsPolicy;
-    assert!(policy.chain_meets_policy_requirements(&chain).is_err());
+    assert!(
+        policy
+            .chain_meets_policy_requirements(&chain)
+            .is_err()
+    );
 }
 
 #[test]
 fn self_signed_single_certificate_enforces_its_own_constraints() {
     let root = self_signed_ca_with("root", |params: &mut CertificateParams| {
-        params.subject_alt_names = vec![x509_validator_testkit::rcgen::SanType::DnsName("www.evil.com".try_into().unwrap())];
+        params.subject_alt_names = vec![x509_validator_testkit::rcgen::SanType::DnsName(
+            "www.evil.com".try_into().unwrap(),
+        )];
         params.name_constraints = Some(name_constraints(vec![dns_subtree("example.com")], vec![]));
     });
     let chain = chain_of(vec![root.der]);
     let policy = NameConstraintsPolicy;
-    assert!(policy.chain_meets_policy_requirements(&chain).is_err());
+    assert!(
+        policy
+            .chain_meets_policy_requirements(&chain)
+            .is_err()
+    );
 }
 
 #[test]
@@ -79,13 +96,18 @@ fn directory_name_constraint_is_rejected_outright() {
     let root = self_signed_ca_with("root", |params: &mut CertificateParams| {
         let mut dn = x509_validator_testkit::rcgen::DistinguishedName::new();
         dn.push(x509_validator_testkit::rcgen::DnType::CommonName, "example");
-        params.name_constraints = Some(name_constraints(vec![x509_validator_testkit::rcgen::GeneralSubtree::DirectoryName(dn)], vec![]));
+        params.name_constraints = Some(name_constraints(
+            vec![x509_validator_testkit::rcgen::GeneralSubtree::DirectoryName(dn)],
+            vec![],
+        ));
     });
     let leaf = issue_leaf("leaf", &["www.example.com"], &root);
     let chain = chain_of(vec![leaf, root.der]);
     let policy = NameConstraintsPolicy;
     assert_eq!(
-        policy.chain_meets_policy_requirements(&chain).unwrap_err(),
+        policy
+            .chain_meets_policy_requirements(&chain)
+            .unwrap_err(),
         PolicyFailureReason::new("directoryName name constraints are not supported")
     );
 }
@@ -98,7 +120,8 @@ fn undecodable_dns_san() -> x509_validator_testkit::rcgen::CustomExtension {
     let mut contents = vec![0x30, name.len() as u8];
     contents.extend_from_slice(&name);
 
-    let mut extension = x509_validator_testkit::rcgen::CustomExtension::from_oid_content(&[2, 5, 29, 17], contents);
+    let mut extension =
+        x509_validator_testkit::rcgen::CustomExtension::from_oid_content(&[2, 5, 29, 17], contents);
     extension.set_criticality(false);
     extension
 }
@@ -109,7 +132,9 @@ fn name_that_cannot_be_decoded_is_rejected_rather_than_skipped() {
         params.name_constraints = Some(name_constraints(vec![dns_subtree("example.com")], vec![]));
     });
     let leaf = issue_leaf_with("leaf", &[], &root, |params: &mut CertificateParams| {
-        params.custom_extensions.push(undecodable_dns_san());
+        params
+            .custom_extensions
+            .push(undecodable_dns_san());
     });
     let chain = chain_of(vec![leaf, root.der]);
 
@@ -124,7 +149,11 @@ fn name_that_cannot_be_decoded_is_rejected_rather_than_skipped() {
     // An undecodable name can never be compared against the permitted subtree, so it must fail the
     // chain rather than slip past unexamined.
     let policy = NameConstraintsPolicy;
-    assert!(policy.chain_meets_policy_requirements(&chain).is_err());
+    assert!(
+        policy
+            .chain_meets_policy_requirements(&chain)
+            .is_err()
+    );
 }
 
 #[test]
@@ -134,18 +163,30 @@ fn unsupported_constraint_kind_is_rejected_even_with_no_name_of_that_kind() {
     // a chain we cannot fully check — the certificate's own names have no say in that.
     let rfc822 = || vec![RawGeneralName::rfc822("bar.com")];
     for (permitted, excluded, expected) in [
-        (rfc822(), vec![], "unable to validate permitted subtree, unsupported constraint kind"),
-        (vec![], rfc822(), "unable to validate excluded subtree, unsupported constraint kind"),
+        (
+            rfc822(),
+            vec![],
+            "unable to validate permitted subtree, unsupported constraint kind",
+        ),
+        (
+            vec![],
+            rfc822(),
+            "unable to validate excluded subtree, unsupported constraint kind",
+        ),
     ] {
         let root = self_signed_ca_with("root", |params: &mut CertificateParams| {
-            params.custom_extensions.push(raw_name_constraints_extension(&permitted, &excluded));
+            params
+                .custom_extensions
+                .push(raw_name_constraints_extension(&permitted, &excluded));
         });
         let leaf = issue_leaf("leaf", &["www.example.com"], &root);
         let chain = chain_of(vec![leaf, root.der]);
 
         let policy = NameConstraintsPolicy;
         assert_eq!(
-            policy.chain_meets_policy_requirements(&chain).unwrap_err(),
+            policy
+                .chain_meets_policy_requirements(&chain)
+                .unwrap_err(),
             PolicyFailureReason::new(expected)
         );
     }

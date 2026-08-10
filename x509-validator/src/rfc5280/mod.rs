@@ -1,20 +1,20 @@
-pub mod version_policy;
-pub mod expiry_policy;
 pub mod basic_constraints_policy;
 pub mod dns_names;
+pub mod expiry_policy;
 pub mod ip_constraints;
-pub mod uri_constraints;
 pub mod name_constraints_policy;
+pub mod uri_constraints;
+pub mod version_policy;
 
-pub use version_policy::VersionPolicy;
-pub use expiry_policy::{ExpiryPolicy, Timestamp};
 pub use basic_constraints_policy::BasicConstraintsPolicy;
+pub use expiry_policy::{ExpiryPolicy, Timestamp};
 pub use name_constraints_policy::NameConstraintsPolicy;
+pub use version_policy::VersionPolicy;
 
-use crate::{ValidationPolicy, PolicyEvaluationResult};
 use crate::der_parser::Oid;
 use crate::oid_registry::OID_X509_EXT_KEY_USAGE;
 use crate::unverified_chain::UnverifiedCertificateChain;
+use crate::{PolicyEvaluationResult, ValidationPolicy};
 
 /// A [`ValidationPolicy`] that implements the core chain verification policies from RFC 5280.
 ///
@@ -54,9 +54,17 @@ impl RFC5280Policy {
 
 impl ValidationPolicy for RFC5280Policy {
     fn verifying_critical_extensions(&self) -> Vec<Oid<'static>> {
-        let mut oids = self.version_policy.verifying_critical_extensions();
-        oids.extend(self.basic_constraints_policy.verifying_critical_extensions());
-        oids.extend(self.name_constraints_policy.verifying_critical_extensions());
+        let mut oids = self
+            .version_policy
+            .verifying_critical_extensions();
+        oids.extend(
+            self.basic_constraints_policy
+                .verifying_critical_extensions(),
+        );
+        oids.extend(
+            self.name_constraints_policy
+                .verifying_critical_extensions(),
+        );
         // The presence of keyUsage here requires some explanation, because this policy doesn't _actually_ compute
         // on it in any way.
         //
@@ -68,13 +76,19 @@ impl ValidationPolicy for RFC5280Policy {
         oids
     }
 
-    fn chain_meets_policy_requirements(&self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
-        self.version_policy.chain_meets_policy_requirements(chain)?;
+    fn chain_meets_policy_requirements(
+        &self,
+        chain: &UnverifiedCertificateChain<'_>,
+    ) -> PolicyEvaluationResult {
+        self.version_policy
+            .chain_meets_policy_requirements(chain)?;
         if let Some(expiry) = &self.expiry_policy {
             expiry.chain_meets_policy_requirements(chain)?;
         }
-        self.basic_constraints_policy.chain_meets_policy_requirements(chain)?;
-        self.name_constraints_policy.chain_meets_policy_requirements(chain)?;
+        self.basic_constraints_policy
+            .chain_meets_policy_requirements(chain)?;
+        self.name_constraints_policy
+            .chain_meets_policy_requirements(chain)?;
         Ok(())
     }
 }

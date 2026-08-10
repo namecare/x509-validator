@@ -1,5 +1,5 @@
-use crate::policy::{PolicyEvaluationResult, ValidationPolicy};
 use crate::der_parser::Oid;
+use crate::policy::{PolicyEvaluationResult, ValidationPolicy};
 use crate::unverified_chain::UnverifiedCertificateChain;
 
 /// Use this to build a policy where all of the sub-policies must be met for the overall policy to be met.
@@ -33,10 +33,15 @@ impl<P> AllOfPolicies<P> {
 
 impl<P: ValidationPolicy> ValidationPolicy for AllOfPolicies<P> {
     fn verifying_critical_extensions(&self) -> Vec<Oid<'static>> {
-        self.policy.verifying_critical_extensions()
+        self.policy
+            .verifying_critical_extensions()
     }
 
-    fn chain_meets_policy_requirements(&self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
-        self.policy.chain_meets_policy_requirements(chain)
+    fn chain_meets_policy_requirements(
+        &self,
+        chain: &UnverifiedCertificateChain<'_>,
+    ) -> PolicyEvaluationResult {
+        self.policy
+            .chain_meets_policy_requirements(chain)
     }
 }

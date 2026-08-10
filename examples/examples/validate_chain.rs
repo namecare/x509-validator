@@ -38,9 +38,11 @@ fn main() {
     }
 
     let roots = CertificateStore::from_iter([chain.root.clone()]);
-    let validator = Validator::with_policy_and_backend(roots, RFC5280Policy::new(validation_time()), BACKEND);
+    let validator =
+        Validator::with_policy_and_backend(roots, RFC5280Policy::new(validation_time()), BACKEND);
 
-    let result = validator.validate_with_diagnostics(&chain.leaf, &CertificateStore::new(), &mut |_| {});
+    let result =
+        validator.validate_with_diagnostics(&chain.leaf, &CertificateStore::new(), &mut |_| {});
     println!(
         "\nwithout the intermediate: {}",
         match result {
@@ -50,7 +52,11 @@ fn main() {
             Err(reasons) if reasons.is_empty() =>
                 "rejected — no chain to a trusted root could be built".to_string(),
             Err(reasons) => {
-                let listed = reasons.iter().map(ToString::to_string).collect::<Vec<_>>().join("; ");
+                let listed = reasons
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join("; ");
                 format!("rejected — {listed}")
             }
         }

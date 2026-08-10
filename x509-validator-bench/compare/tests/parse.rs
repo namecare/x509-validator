@@ -10,15 +10,19 @@
 //! read the same list. They were once separate copies, which meant this test
 //! could pass while the benchmark measured a different set of certificates.
 
-use x509_validator_bench_compare::roots::ROOTS;
 use x509_validator::{Certificate, FromDer};
+use x509_validator_bench_compare::roots::ROOTS;
 
 #[test]
 fn every_root_parses_and_corpus_is_complete() {
     assert_eq!(ROOTS.len(), 137, "corpus should hold every vendored root");
     for der in ROOTS {
         let (_, certificate) = Certificate::from_der(der).expect("every vendored root parses");
-        assert!(!certificate.tbs_certificate.subject.as_raw().is_empty());
+        assert!(!certificate
+            .tbs_certificate
+            .subject
+            .as_raw()
+            .is_empty());
     }
 }
 
