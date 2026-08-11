@@ -13,20 +13,28 @@ x509-validator = { workspace = true, features = ["aws_lc", "ring", "rust_crypto"
 x509-validator-testkit.workspace = true
 rsa.workspace = true
 rand.workspace = true
+x509-verify = { version = "0.4.8", optional = true }
+openssl = { version = "0.10.81", optional = true }
+rustls-webpki = { version = "0.103", optional = true, features = ["aws-lc-rs", "alloc", "std"] }
+rustls-pki-types = { version = "1", optional = true }
 
 [dev-dependencies]
 divan = "0.1.21"
 x509-cert = "0.3.0"
 der = "0.8.1"
+const-oid = "0.10"
 
 [features]
 default = ["aws_lc", "ring", "rust_crypto"]
 aws_lc = ["x509-validator/aws_lc"]
 ring = ["x509-validator/ring"]
 rust_crypto = ["x509-validator/rust_crypto"]
+verify_peer = ["dep:x509-verify"]
+openssl = ["dep:openssl"]
+verifiers = ["dep:rustls-webpki", "dep:rustls-pki-types"]
 
 [[bench]]
-name = "crypto_atomic"
+name = "internals"
 harness = false
 
 [[bench]]
@@ -34,5 +42,10 @@ name = "parsers"
 harness = false
 
 [[bench]]
-name = "backends"
+name = "verifiers"
+harness = false
+required-features = ["verifiers"]
+
+[[bench]]
+name = "rust_vs_swift"
 harness = false

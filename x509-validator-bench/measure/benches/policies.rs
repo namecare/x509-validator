@@ -1,15 +1,4 @@
 //! Policy evaluation cost, measured against a prebuilt chain.
-//!
-//! No crypto is involved: these call `chain_meets_policy_requirements`
-//! directly rather than going through the validator. Policy work is a rounding
-//! error next to signature verification, which is exactly why it belongs
-//! here — a policy regression would be invisible in an end-to-end number.
-//!
-//! `dns_names`, `ip_constraints`, and `uri_constraints` have no policy
-//! implementations of their own — they are helpers reached through
-//! `NameConstraintsPolicy` and `ServerIdentityPolicy`, and are benchmarked
-//! through those.
-
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use x509_validator::policy::ValidationPolicy;
 use x509_validator::rfc5280::{

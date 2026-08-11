@@ -16,13 +16,7 @@ function run_clippy() {
   fi
 }
 
-# `x509-validator` has no default crypto backend, and the three backends are
-# what most of the crate is. Linting them together would compile every
-# backend at once and never once produce the single-backend configuration a
-# downstream user actually gets, so each one is linted on its own.
-#
-# The bare run has no backend at all: that configuration compiles but
-# verifies nothing, and it is easy to break without noticing.
+# The bare run has no backend at all
 run_clippy --package x509-validator --no-default-features --all-targets
 
 for backend in aws_lc ring rust_crypto ; do
@@ -30,9 +24,7 @@ for backend in aws_lc ring rust_crypto ; do
 done
 
 # The remaining members are linted individually rather than with
-# `--workspace`, because a workspace-wide build unifies features across
-# members: one crate enabling a backend would silently enable it for all of
-# them, which is the situation this whole script exists to avoid.
+# `--workspace`
 for p in $(admin/all-workspace-members) ; do
   case "$p" in
     x509-validator)

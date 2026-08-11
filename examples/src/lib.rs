@@ -1,15 +1,4 @@
 //! Shared setup for the runnable examples.
-//!
-//! Every example needs a certificate chain to validate. Rather than ship DER
-//! fixtures — which would need regenerating each time their validity window
-//! lapsed — each example generates its own chain at startup, so the code an
-//! example is actually demonstrating is the only thing a reader has to look
-//! at, and `cargo run --example <name>` works from a clean checkout.
-//!
-//! The generator lives in `x509-validator-testkit`, an unpublished internal
-//! crate. It stands in for whatever a real caller's certificates arrive
-//! from — a TLS handshake, a PEM file on disk, a bundle fetched from a
-//! peer. Nothing below is part of `x509-validator`'s public API.
 
 use time::{Duration, OffsetDateTime};
 use x509_validator::crypto::SignatureVerifier;
@@ -17,17 +6,9 @@ use x509_validator::Certificate;
 use x509_validator_testkit::{cert, rcgen, CaSpec, LeafSpec};
 
 /// The crypto backend the examples verify signatures with.
-///
-/// A backend is chosen at compile time by feature; this crate enables
-/// `aws_lc`. Swapping to `ring` or `rust_crypto` means changing the feature
-/// and this one constant — no other line in any example moves.
 pub const BACKEND: &dyn SignatureVerifier = &x509_validator::crypto::aws_lc::DEFAULT_PROVIDER;
 
 /// A freshly generated root → intermediate → leaf chain.
-///
-/// `Certificate` borrows the DER it was parsed from, so these are backed by
-/// leaked buffers and live for the whole process. That suits a short example
-/// binary; a real caller would own the DER and keep it alive itself.
 pub struct DemoChain {
     pub root: Certificate<'static>,
     pub intermediate: Certificate<'static>,
@@ -79,9 +60,6 @@ pub fn demo_chain_with(
 }
 
 /// A key pair for `algorithm`.
-///
-/// The certificate generator cannot itself generate RSA keys, so those are
-/// generated with OpenSSL and handed over as PEM.
 fn key_pair_for(algorithm: &'static rcgen::SignatureAlgorithm) -> rcgen::KeyPair {
     if algorithm == &rcgen::PKCS_RSA_SHA256 {
         let rsa = openssl::rsa::Rsa::generate(2048).expect("generate RSA key");

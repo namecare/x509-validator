@@ -6,12 +6,13 @@
 //! binary. This integration test is where the completeness and parseability
 //! checks actually execute.
 //!
-//! The corpus itself lives in `src/roots.rs` so this test and the benchmark
-//! read the same list. They were once separate copies, which meant this test
-//! could pass while the benchmark measured a different set of certificates.
+//! The corpus itself is re-exported from the crate root so this test and the
+//! benchmark read the same list. They were once separate copies, which meant
+//! this test could pass while the benchmark measured a different set of
+//! certificates.
 
 use x509_validator::{Certificate, FromDer};
-use x509_validator_bench_compare::roots::ROOTS;
+use x509_validator_bench_compare::ROOTS;
 
 #[test]
 fn every_root_parses_and_corpus_is_complete() {
@@ -35,5 +36,24 @@ fn x509_cert_parses_every_root_too() {
 
     for der in ROOTS {
         x509_cert::Certificate::from_der(der).expect("x509-cert parses every vendored root");
+    }
+}
+
+/// openssl must parse the whole corpus too, for the same reason x509-cert
+/// must: a benchmark whose rival silently fails is timing an error path.
+#[test]
+#[cfg(feature = "openssl")]
+fn openssl_parses_every_root_too() {
+    for der in ROOTS {
+        let certificate =
+            openssl::x509::X509::from_der(der).expect("openssl parses every vendored root");
+        assert!(
+            certificate
+                .subject_name()
+                .entries()
+                .count()
+                > 0,
+            "a parsed root should carry a non-empty subject",
+        );
     }
 }

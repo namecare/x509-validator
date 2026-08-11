@@ -116,7 +116,8 @@ accepts or rejects it.
 Two crates, in [x509-validator-bench]:
 
 - [`measure`][bench-measure] — Regression benchmarks.
-- [`compare`][bench-compare] — Compare backends and parsers ([results][bench-results]).
+- [`compare`][bench-compare] — Compare backends, parsers, other verifiers, and
+  the Swift original across four groups ([index][bench-results]).
 
 ## Contributing
 
@@ -139,6 +140,6 @@ You may use this software under the terms of any of these licenses, at your opti
 [x509-validator-bench]: https://github.com/namecare/x509-validator/tree/master/x509-validator-bench
 [bench-measure]: https://github.com/namecare/x509-validator/blob/master/x509-validator-bench/measure/README.md
 [bench-compare]: https://github.com/namecare/x509-validator/blob/master/x509-validator-bench/compare/README.md
-[bench-results]: https://github.com/namecare/x509-validator/blob/master/x509-validator-bench/compare/README.md#results
+[bench-results]: https://github.com/namecare/x509-validator/blob/master/x509-validator-bench/compare/README.md#groups
 [coc]: https://github.com/namecare/x509-validator/blob/master/CODE_OF_CONDUCT.md
 [contribute]: https://github.com/namecare/x509-validator/blob/master/CONTRIBUTING.md

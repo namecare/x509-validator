@@ -1,15 +1,6 @@
 //! Finding out *why* a chain was rejected.
 //!
 //!     cargo run -p x509-validator-examples --example diagnostics
-//!
-//! A failed validation returns a list of policy failure reasons, which tells
-//! you what went wrong but not where in the search it happened. The
-//! diagnostic callback is the verbose channel: the validator reports every
-//! step of chain building through it — issuers considered, signatures that
-//! did not check out, chains that reached a root but failed policy.
-//!
-//! The callback fires on successful validations too, which makes it just as
-//! useful for understanding which of several candidate paths was chosen.
 
 use x509_validator::rfc5280::RFC5280Policy;
 use x509_validator::store::CertificateStore;

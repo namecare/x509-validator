@@ -1,24 +1,22 @@
-//! Shared fixtures and the backend registry for the comparison suite.
-//!
-//! This crate answers "which is faster?" — backend against backend, parser
-//! against parser. Its counterpart, `x509-validator-bench-measure`, answers
-//! "did our own code get slower?" and is the one worth tracking over time.
-//!
-//! Certificate generation is expensive and must never land inside a timed
-//! region, so everything here is built once and reused across benchmarks.
+//! Types the comparison benchmarks need but cannot declare themselves.
 
-pub mod fixtures;
-pub mod roots;
 pub mod signatures;
 
 use x509_validator::crypto::SignatureVerifier;
+use x509_validator::der_parser::Oid;
+use x509_validator::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS;
+use x509_validator::policy::{PolicyEvaluationResult, PolicyFailureReason, ValidationPolicy};
+use x509_validator::rfc5280::RFC5280Policy;
+use x509_validator::unverified_chain::UnverifiedCertificateChain;
+/// The generated parity set, the vendored real chain, and the Mozilla CA
+/// bundle roots all live in `x509-validator-testkit`, which is where their
+/// provenance is recorded; both benchmark crates and the fuzz corpus draw
+/// from that one copy.
+pub use x509_validator_testkit::bench_fixtures::{parity, Parity, REFERENCE_TIME};
+pub use x509_validator_testkit::real_chain::apple;
+pub use x509_validator_testkit::roots::ROOTS;
 
 /// One crypto backend, paired with the name it appears under in the report.
-///
-/// divan's `args` values must be `Copy` and either `ToString` or `Debug`.
-/// A `&dyn SignatureVerifier` has no useful derived `Debug`, so the impl
-/// below is written by hand and prints just the name — which is what labels
-/// the row.
 #[derive(Clone, Copy)]
 pub struct Backend {
     pub name: &'static str,
@@ -75,3 +73,60 @@ pub const DEFAULT_BACKEND: Backend = Backend {
 };
 #[cfg(not(any(feature = "aws_lc", feature = "ring", feature = "rust_crypto")))]
 compile_error!("x509-validator-bench-compare requires at least one crypto backend feature: aws_lc, ring, or rust_crypto");
+
+/// Rejects any chain containing a specific certificate, so that a scenario
+/// can force the search past the shortest path onto a longer one.
+///
+/// A benchmark cannot declare this itself: `ValidationPolicy` is implemented
+/// on a named type, and the same mock is needed by more than one target.
+pub struct FailIfCertInChain {
+    pub forbidden: Vec<u8>,
+    pub inner: RFC5280Policy,
+}
+
+impl FailIfCertInChain {
+    pub fn new(forbidden: Vec<u8>, at: i64) -> Self {
+        Self {
+            forbidden,
+            inner: RFC5280Policy::new(at),
+        }
+    }
+}
+
+impl ValidationPolicy for FailIfCertInChain {
+    fn verifying_critical_extensions(&self) -> Vec<Oid<'static>> {
+        vec![OID_X509_EXT_BASIC_CONSTRAINTS]
+    }
+
+    fn chain_meets_policy_requirements(
+        &self,
+        chain: &UnverifiedCertificateChain<'_>,
+    ) -> PolicyEvaluationResult {
+        if chain
+            .iter()
+            .any(|cert| cert.as_ref() == self.forbidden.as_slice())
+        {
+            return Err(PolicyFailureReason::new(
+                "chain contains forbidden certificate",
+            ));
+        }
+        self.inner
+            .chain_meets_policy_requirements(chain)
+    }
+}
+
+/// Accepts every chain, so an outcome is decided purely by chain building.
+pub struct IgnoreBasicConstraints;
+
+impl ValidationPolicy for IgnoreBasicConstraints {
+    fn verifying_critical_extensions(&self) -> Vec<Oid<'static>> {
+        vec![OID_X509_EXT_BASIC_CONSTRAINTS]
+    }
+
+    fn chain_meets_policy_requirements(
+        &self,
+        _chain: &UnverifiedCertificateChain<'_>,
+    ) -> PolicyEvaluationResult {
+        Ok(())
+    }
+}

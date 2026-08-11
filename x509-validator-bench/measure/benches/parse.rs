@@ -1,14 +1,4 @@
 //! DER parsing cost over a realistic corpus of root certificates.
-//!
-//! One parser only — the one the library actually uses. This is not a
-//! comparison (that lives in the `compare` crate); it is here so a change in
-//! parsing cost is visible as a trend over time. Parsing happens before any
-//! crypto is reached, so it is backend-independent and the numbers are small
-//! enough that a regression would be swallowed by an end-to-end measurement.
-//!
-//! Corpus completeness is asserted in the `compare` crate's `tests/parse.rs`;
-//! this file has `harness = false`, so an in-file `#[test]` fn would never
-//! run.
 
 use core::hint::black_box;
 

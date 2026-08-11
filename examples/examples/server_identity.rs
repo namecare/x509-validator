@@ -1,17 +1,6 @@
-//! Validating a server's certificate the way a TLS client does: chain
-//! validity *and* the leaf being authoritative for the hostname you dialled.
+//! Validating a server's certificate the way a TLS client does.
 //!
 //!     cargo run -p x509-validator-examples --example server_identity
-//!
-//! `RFC5280Policy` alone says nothing about hostnames — a perfectly valid
-//! chain for `example.com` is still the wrong certificate if you asked for
-//! `attacker.test`. `ServerIdentityPolicy` adds the RFC 6125 check.
-//!
-//! Both must hold, which is the other thing this example shows: a policy
-//! that runs two sub-policies in sequence. Combining policies is just
-//! implementing `ValidationPolicy` over the ones you want — the trait is two
-//! methods, and the union of their handled critical extensions is what makes
-//! the pair accept certificates neither would accept alone.
 
 use x509_validator::der_parser::Oid;
 use x509_validator::policy::{PolicyEvaluationResult, ValidationPolicy};
