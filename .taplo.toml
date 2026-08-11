@@ -1,5 +1,3 @@
-# `target/` holds build artifacts. `cargo package` in particular writes a
-# rewritten Cargo.toml there, which taplo would otherwise try to format.
 exclude = ["target/**"]
 
 [formatting]

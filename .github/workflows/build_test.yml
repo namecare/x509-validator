@@ -192,37 +192,31 @@ jobs:
       - name: Measure coverage
         run: ./admin/coverage --json --summary-only --output-path coverage.json
 
-      - name: Extract line coverage
+      - name: Build the report
         id: cov
         run: |
           pct=$(jq -r '.data[0].totals.lines.percent' coverage.json)
           printf 'pct=%.0f\n' "$pct" >> "$GITHUB_OUTPUT"
-
-      # A table in the run summary, so the number is reachable from the
-      # Actions tab on every event, including the pushes that get no comment.
-      - name: Write job summary
-        run: |
           {
-            echo '### Coverage'
+            echo "### Coverage: $(printf '%.1f' "$pct")% of lines"
             echo
-            echo '```'
-            REPORT_ONLY=1 ./admin/coverage --summary-only
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+            echo '<details><summary>Per-file breakdown</summary>'
+            echo
+            ROOT="$PWD" jq -rf admin/coverage-table.jq coverage.json
+            echo
+            echo '</details>'
+          } > report.md
 
-      # Edits one comment in place rather than adding one per push, so a
-      # long-running PR does not accumulate a wall of stale numbers.
+      - name: Write job summary
+        run: cat report.md >> "$GITHUB_STEP_SUMMARY"
+
       - name: Comment on the pull request
         if: github.event_name == 'pull_request'
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: coverage
-          message: |
-            **Coverage: ${{ steps.cov.outputs.pct }}%** of lines
+          path: report.md
 
-      # master only. A pull request measures the branch, not the project, and
-      # without this guard whichever PR ran last would decide what the README
-      # badge claims.
       - name: Update the coverage badge
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         run: |

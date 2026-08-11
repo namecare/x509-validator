@@ -23,8 +23,15 @@
 
 set -euo pipefail
 
+readonly SCOPE='x509-validator-testkit|x509-validator-bench|/fuzz/|/examples/'
+
+report() {
+  cargo llvm-cov report --ignore-filename-regex "$SCOPE" "$@"
+}
+
 if [ -n "${REPORT_ONLY:-}" ]; then
-  exec cargo llvm-cov report "$@"
+  report "$@"
+  exit
 fi
 
 # One run per backend, accumulated into a single report. A combined
@@ -42,4 +49,4 @@ done
 # the public surface, so it belongs in the measurement.
 cargo llvm-cov --no-report --package x509-validator --no-default-features --all-targets
 
-cargo llvm-cov report "$@"
+report "$@"
