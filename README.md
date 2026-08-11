@@ -1,8 +1,8 @@
 <p align="center">
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset=".local/logo-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset=".local/logo-light.png">
-  <img width="33%" alt="X509-validator" src=".local/logo-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/namecare/x509-validator/master/.local/logo-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/namecare/x509-validator/master/.local/logo-light.png">
+  <img width="33%" alt="X509-validator" src="https://raw.githubusercontent.com/namecare/x509-validator/master/.local/logo-light.png">
 </picture>
 </p>
 
@@ -37,7 +37,7 @@ x509-validator = { version = "0.1.0", features = ["aws_lc"] }
 | Feature | Backend | Notes                   |
 |---|---|-------------------------|
 | `aws_lc` | [aws-lc-rs](https://github.com/aws/aws-lc-rs) | Fastest.                |
-| `ring` | [ring](https://github.com/briansmith/ring) | Close to awc_lc.        |
+| `ring` | [ring](https://github.com/briansmith/ring) | Close to aws_lc.        |
 | `rust_crypto` | [RustCrypto](https://github.com/RustCrypto) | Pure Rust. The slowest. |
 
 There is no default backend: without one of these features the crate compiles
@@ -134,11 +134,11 @@ You may use this software under the terms of any of these licenses, at your opti
 
 [ref]: https://github.com/apple/swift-certificates/tree/main/Sources/X509/Verifier
 [x509-parser]: https://github.com/rusticata/x509-parser
-[examples]: examples/examples
-[custom-backend]: examples/examples/custom_crypto_backend.rs
-[x509-validator-bench]: x509-validator-bench
-[bench-measure]: x509-validator-bench/measure/README.md
-[bench-compare]: x509-validator-bench/compare/README.md
-[bench-results]: x509-validator-bench/compare/README.md#results
-[coc]: CODE_OF_CONDUCT.md
-[contribute]: CONTRIBUTING.md
+[examples]: https://github.com/namecare/x509-validator/tree/master/examples/examples
+[custom-backend]: https://github.com/namecare/x509-validator/blob/master/examples/examples/custom_crypto_backend.rs
+[x509-validator-bench]: https://github.com/namecare/x509-validator/tree/master/x509-validator-bench
+[bench-measure]: https://github.com/namecare/x509-validator/blob/master/x509-validator-bench/measure/README.md
+[bench-compare]: https://github.com/namecare/x509-validator/blob/master/x509-validator-bench/compare/README.md
+[bench-results]: https://github.com/namecare/x509-validator/blob/master/x509-validator-bench/compare/README.md#results
+[coc]: https://github.com/namecare/x509-validator/blob/master/CODE_OF_CONDUCT.md
+[contribute]: https://github.com/namecare/x509-validator/blob/master/CONTRIBUTING.md
