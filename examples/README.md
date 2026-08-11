@@ -25,7 +25,7 @@ todo: list of all examples with small desc
 
 ## Requirements
 
-- Rust 1.85 or newer, edition 2024.
+- Rust 1.88 or newer, edition 2024.
 
 ## Usage
 

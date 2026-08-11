@@ -1,0 +1,33 @@
+#!/bin/bash
+
+# Measures test coverage across every crypto backend.
+#
+# Passes through any extra arguments to the final report step, so CI can ask
+# for lcov while a local run gets the default summary:
+#
+#   admin/coverage                              # human-readable table
+#   admin/coverage --lcov --output-path out.info
+#   admin/coverage --html && open target/llvm-cov/html/index.html
+#
+# Needs a nightly toolchain and the llvm-tools component:
+#
+#   rustup toolchain install nightly --component llvm-tools
+
+set -euo pipefail
+
+# One run per backend, accumulated into a single report. A combined
+# `--all-features` run would compile every backend at once and never produce
+# the single-backend configuration a downstream user actually gets; worse for
+# coverage specifically, the backend-dispatch arms would all appear covered
+# because some *other* backend's run entered them.
+cargo llvm-cov clean --workspace
+
+for backend in aws_lc ring rust_crypto ; do
+  cargo llvm-cov --no-report --package x509-validator --features $backend --all-targets
+done
+
+# The backend-free configuration compiles but verifies nothing. It is part of
+# the public surface, so it belongs in the measurement.
+cargo llvm-cov --no-report --package x509-validator --no-default-features --all-targets
+
+cargo llvm-cov report "$@"

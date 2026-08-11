@@ -2,7 +2,7 @@
 name = "x509-validator-testkit"
 version = "0.0.0"
 edition.workspace = true
-rust-version = "1.85"
+rust-version = "1.88"
 description = "Certificate-building helpers for x509-validator's test suites."
 publish = false
 

@@ -1,0 +1,249 @@
+name: Build+test
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  merge_group:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-test-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  build:
+    name: Build+test (${{ matrix.rust }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        rust: [stable, beta, nightly]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        exclude:
+          # beta and nightly exist here as an early warning for upstream
+          # regressions, which are toolchain bugs rather than platform bugs.
+          # Linux catches those; the other two runners would only spend
+          # aws-lc-sys build minutes to reach the same answer.
+          - { os: windows-latest, rust: beta }
+          - { os: windows-latest, rust: nightly }
+          - { os: macos-latest, rust: beta }
+          - { os: macos-latest, rust: nightly }
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.rust }}-${{ matrix.os }}
+
+      # aws-lc-sys builds vendored C and needs nasm to assemble its x86_64
+      # routines on Windows; the other two runners have a working toolchain
+      # already. cmake is present on all GitHub-hosted images.
+      - name: Install nasm
+        if: runner.os == 'Windows'
+        uses: ilammy/setup-nasm@v1
+
+      - name: cargo build (debug; no backend)
+        run: cargo build --locked --package x509-validator --no-default-features
+
+      - name: cargo test (release; per backend)
+        run: |
+          cargo test --locked --release --package x509-validator --features aws_lc --all-targets
+          cargo test --locked --release --package x509-validator --features ring --all-targets
+          cargo test --locked --release --package x509-validator --features rust_crypto --all-targets
+
+      - name: cargo test (release; doctests)
+        run: |
+          cargo test --locked --release --package x509-validator --features aws_lc --doc
+          cargo test --locked --release --package x509-validator --features ring --doc
+          cargo test --locked --release --package x509-validator --features rust_crypto --doc
+
+      # Catches a broken published tarball — most likely via `exclude`
+      # dropping a file the build needs, which no other job would notice
+      # because the working tree still has it.
+      - name: cargo package
+        run: cargo package --locked --package x509-validator --features aws_lc
+
+  msrv:
+    name: MSRV
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      # Pinned to the `rust-version` in x509-validator/Cargo.toml. Bump both
+      # together, or the manifest starts making a promise CI never checks.
+      #
+      # 1.88 rather than 1.85 because `time 0.3.55` (reached transitively via
+      # x509-parser -> asn1-rs) requires it. The crate's own source builds on
+      # 1.85; the floor comes entirely from that dependency.
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.88"
+
+      - uses: Swatinem/rust-cache@v2
+
+      - run: |
+          cargo check --locked --lib --package x509-validator --features aws_lc
+          cargo check --locked --lib --package x509-validator --features ring
+          cargo check --locked --lib --package x509-validator --features rust_crypto
+
+  features:
+    name: Features
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Install rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      # The backend-free configuration compiles but verifies nothing. That is
+      # a deliberate part of the design and easy to break without noticing,
+      # so it is checked and tested on its own rather than only as a
+      # side effect of some other job.
+      - name: cargo check (debug; no backend)
+        run: cargo check --locked --package x509-validator --no-default-features --all-targets
+
+      - name: cargo test (debug; no backend)
+        run: cargo test --locked --package x509-validator --no-default-features --all-targets
+
+      - name: cargo test (debug; per backend)
+        run: |
+          cargo test --locked --package x509-validator --features aws_lc
+          cargo test --locked --package x509-validator --features ring
+          cargo test --locked --package x509-validator --features rust_crypto
+
+      # Two backends at once is a configuration a downstream user reaches by
+      # accident via feature unification, so it has to at least compile.
+      - name: cargo check (debug; backend combinations)
+        run: |
+          cargo check --locked --package x509-validator --features aws_lc,ring
+          cargo check --locked --package x509-validator --features aws_lc,rust_crypto
+          cargo check --locked --package x509-validator --features ring,rust_crypto
+          cargo check --locked --package x509-validator --all-features
+
+      - name: cargo test (release; no run)
+        run: cargo test --locked --release --package x509-validator --features aws_lc --no-run
+
+  docs:
+    name: Check for documentation errors
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      # Nightly, to mirror what docs.rs builds with.
+      - name: Install rust toolchain
+        uses: dtolnay/rust-toolchain@nightly
+
+      - uses: Swatinem/rust-cache@v2
+
+      # One pass per backend: an intra-doc link inside a backend-gated module
+      # is invisible to every run that does not enable it.
+      - name: cargo doc (per backend)
+        run: |
+          cargo doc --locked --package x509-validator --features aws_lc --no-deps
+          cargo doc --locked --package x509-validator --features ring --no-deps
+          cargo doc --locked --package x509-validator --features rust_crypto --no-deps
+        env:
+          RUSTDOCFLAGS: -Dwarnings
+
+  coverage:
+    name: Measure coverage
+    runs-on: ubuntu-latest
+    # Coverage informs review; by merge_group the review is over, and the
+    # number cannot change the outcome.
+    if: github.event_name != 'merge_group'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Install rust toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: llvm-tools
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/cache-cargo-install-action@v2
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Measure coverage
+        run: ./admin/coverage --lcov --output-path final.info
+
+      - name: Report to codecov.io
+        uses: codecov/codecov-action@v5
+        with:
+          files: final.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+          # Codecov's uploader fails for reasons that have nothing to do with
+          # the commit under test. That is not a reason to fail the build.
+          fail_ci_if_error: false
+
+  minver:
+    name: Check minimum versions of direct dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Install rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-minimal-versions
+        uses: taiki-e/install-action@cargo-minimal-versions
+
+      - name: Install cargo-hack
+        uses: taiki-e/install-action@cargo-hack
+
+      # Proves the lower bound of every direct dependency is real: `"0.18.1"`
+      # has to actually build, not just happen to resolve to a newer release.
+      # RUSTC_BOOTSTRAP, because -Zminimal-versions is nightly-only.
+      - name: Check direct-minimal-versions
+        working-directory: x509-validator/
+        run: cargo minimal-versions --direct --ignore-private check --each-feature
+        env:
+          RUSTC_BOOTSTRAP: 1
+
+  semver:
+    name: Check semver compatibility
+    runs-on: ubuntu-latest
+    # cargo-semver-checks diffs against the last release on crates.io. Until
+    # 0.1.0 is published there is no baseline, so the job has nothing to
+    # compare against and fails for a reason unrelated to the commit. It runs
+    # anyway to prove the wiring works; drop `continue-on-error` once the
+    # first release lands and the comparison becomes real.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Check semver
+        uses: obi1kenobi/cargo-semver-checks-action@v2
+        with:
+          package: x509-validator
+          feature-group: all-features

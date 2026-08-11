@@ -18,7 +18,7 @@ body — the DER is hand-encoded instead, so negative tests can reach cases a we
 
 ## Requirements
 
-- Rust 1.85 or newer, edition 2024.
+- Rust 1.88 or newer, edition 2024.
 
 ## Installation
 

@@ -54,10 +54,19 @@ jobs:
       - name: Fuzz
         working-directory: fuzz
         run: |
+          # Only parse_certificate takes raw DER. The other targets wrap their
+          # input in length-prefixed frames, where spliced tokens desynchronize
+          # the framing instead of reaching the parser.
+          dict=""
+          if [ -f "${{ matrix.fuzzer }}.dict" ]; then
+            dict="-dict=${{ matrix.fuzzer }}.dict"
+          fi
+
           cargo fuzz run ${{ matrix.fuzzer }} -- \
             -max_total_time=${{ github.event_name == 'schedule' && 900 || 60 }} \
             -max_len=8192 \
-            -print_final_stats=1
+            -print_final_stats=1 \
+            $dict
 
       - name: Minimize corpus
         if: github.event_name == 'schedule'

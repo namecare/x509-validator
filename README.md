@@ -8,7 +8,7 @@
 
 # X509Validator 
 
-[![Tests](https://github.com/namecare/x509-validator/actions/workflows/tests.yml/badge.svg?branch=master)](https://github.com/namecare/x509-validator/actions/workflows/tests.yml?query=branch%3Amaster)
+[![Build+test](https://github.com/namecare/x509-validator/actions/workflows/build_test.yml/badge.svg?branch=master)](https://github.com/namecare/x509-validator/actions/workflows/build_test.yml?query=branch%3Amaster)
 [![Documentation](https://docs.rs/x509-validator/badge.svg)](https://docs.rs/x509-validator/)
 [![Crates.io](https://img.shields.io/crates/v/x509-validator.svg)](https://crates.io/crates/x509-validator)
 
@@ -23,7 +23,7 @@ of PKI applications. It ships with a default verifier and a number of built-in v
 
 ## Requirements
 
-- Rust 1.85 or newer, edition 2024.
+- Rust 1.88 or newer, edition 2024.
 
 ## Installation
 
