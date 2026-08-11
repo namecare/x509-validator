@@ -1,6 +1,7 @@
-use crate::raw::der_tlv;
 use rcgen::{CertificateParams, DistinguishedName, DnType, IsCa, Issuer, KeyPair};
 use time::{Duration, OffsetDateTime};
+
+use crate::raw::der_tlv;
 
 /// A CA (or self-signed root) produced for use as an issuer in further
 /// `issue_ca`/`issue_leaf` calls. Keeps the params and key pair alongside
@@ -34,7 +35,7 @@ impl Ca {
         KeyPair::from_pem(&self.key_pair.serialize_pem()).expect("round-trip key pair")
     }
 
-    pub fn cross_signed_by(&self, issuer: &Ca) -> Ca {
+    pub fn cross_signed_by(&self, issuer: &Self) -> Self {
         let mut params = self.params.clone();
         params.use_authority_key_identifier_extension = true;
         let key_pair = self.copy_of_key_pair();
@@ -43,7 +44,11 @@ impl Ca {
             .expect("cross-sign CA")
             .der()
             .to_vec();
-        Ca { der, params, key_pair }
+        Self {
+            der,
+            params,
+            key_pair,
+        }
     }
 
     /// The `subjectKeyIdentifier` value this CA's own certificate carries,
@@ -51,7 +56,8 @@ impl Ca {
     /// another certificate whose `authorityKeyIdentifier` must equal — or
     /// deliberately differ from — this one.
     pub fn key_identifier(&self) -> Vec<u8> {
-        self.params.key_identifier(&self.key_pair)
+        self.params
+            .key_identifier(&self.key_pair)
     }
 }
 
@@ -70,7 +76,11 @@ impl Ca {
 /// certificates issued by this identity will carry, independently of the
 /// signing key — the mismatch RFC 5280 §4.2.1.1 does not forbid, and which
 /// chain building has to tolerate.
-pub fn signing_identity(subject_cn: &str, key_pair: KeyPair, authority_key_identifier: Option<Vec<u8>>) -> Ca {
+pub fn signing_identity(
+    subject_cn: &str,
+    key_pair: KeyPair,
+    authority_key_identifier: Option<Vec<u8>>,
+) -> Ca {
     let mut params = base_params(subject_cn);
     params.is_ca = IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
     if let Some(bytes) = authority_key_identifier {
@@ -104,8 +114,16 @@ pub fn issue_ca_with_key_and_name(
     apply_ski(&mut params, ski, true);
     configure(&mut params);
 
-    let der = params.signed_by(&key_pair, &issuer.issuer()).expect("sign CA").der().to_vec();
-    Ca { der, params, key_pair }
+    let der = params
+        .signed_by(&key_pair, &issuer.issuer())
+        .expect("sign CA")
+        .der()
+        .to_vec();
+    Ca {
+        der,
+        params,
+        key_pair,
+    }
 }
 
 pub(crate) fn base_params(subject_cn: &str) -> CertificateParams {
@@ -128,12 +146,25 @@ pub fn self_signed_ca_with(subject_cn: &str, configure: impl FnOnce(&mut Certifi
     params.is_ca = IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
     configure(&mut params);
     let key_pair = KeyPair::generate().expect("generate key pair");
-    let der = params.self_signed(&key_pair).expect("self-sign CA").der().to_vec();
-    Ca { der, params, key_pair }
+    let der = params
+        .self_signed(&key_pair)
+        .expect("self-sign CA")
+        .der()
+        .to_vec();
+    Ca {
+        der,
+        params,
+        key_pair,
+    }
 }
 
 /// A CA certificate issued by another CA (path length optionally constrained).
-pub fn issue_ca(subject_cn: &str, issuer: &Ca, path_len_constraint: Option<u8>, configure: impl FnOnce(&mut CertificateParams)) -> Ca {
+pub fn issue_ca(
+    subject_cn: &str,
+    issuer: &Ca,
+    path_len_constraint: Option<u8>,
+    configure: impl FnOnce(&mut CertificateParams),
+) -> Ca {
     let mut params = base_params(subject_cn);
     params.is_ca = IsCa::Ca(match path_len_constraint {
         Some(n) => rcgen::BasicConstraints::Constrained(n),
@@ -142,8 +173,16 @@ pub fn issue_ca(subject_cn: &str, issuer: &Ca, path_len_constraint: Option<u8>, 
     configure(&mut params);
 
     let key_pair = KeyPair::generate().expect("generate key pair");
-    let der = params.signed_by(&key_pair, &issuer.issuer()).expect("sign CA").der().to_vec();
-    Ca { der, params, key_pair }
+    let der = params
+        .signed_by(&key_pair, &issuer.issuer())
+        .expect("sign CA")
+        .der()
+        .to_vec();
+    Ca {
+        der,
+        params,
+        key_pair,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -195,7 +234,9 @@ pub(crate) fn apply_ski(params: &mut CertificateParams, ski: Ski, is_ca: bool) {
         Ski::Absent => {
             if is_ca {
                 params.is_ca = IsCa::NoCa;
-                params.custom_extensions.push(manual_basic_constraints_ca());
+                params
+                    .custom_extensions
+                    .push(manual_basic_constraints_ca());
             }
         }
     }
@@ -224,8 +265,16 @@ pub fn issue_ca_with_key_ids(
     apply_ski(&mut params, ski, true);
 
     let key_pair = KeyPair::generate().expect("generate key pair");
-    let der = params.signed_by(&key_pair, &issuer.issuer()).expect("sign CA").der().to_vec();
-    Ca { der, params, key_pair }
+    let der = params
+        .signed_by(&key_pair, &issuer.issuer())
+        .expect("sign CA")
+        .der()
+        .to_vec();
+    Ca {
+        der,
+        params,
+        key_pair,
+    }
 }
 
 /// Like [`issue_ca_with_key_ids`], but reusing an existing `key_pair` rather
@@ -245,8 +294,16 @@ pub fn issue_ca_with_key(
     apply_ski(&mut params, ski, true);
     configure(&mut params);
 
-    let der = params.signed_by(&key_pair, &issuer.issuer()).expect("sign CA").der().to_vec();
-    Ca { der, params, key_pair }
+    let der = params
+        .signed_by(&key_pair, &issuer.issuer())
+        .expect("sign CA")
+        .der()
+        .to_vec();
+    Ca {
+        der,
+        params,
+        key_pair,
+    }
 }
 
 /// A self-signed CA whose `subjectKeyIdentifier` is controlled by `ski`,
@@ -258,8 +315,16 @@ pub fn self_signed_ca_with_key_ids(subject_cn: &str, key_pair: Option<KeyPair>, 
     apply_ski(&mut params, ski, true);
 
     let key_pair = key_pair.unwrap_or_else(|| KeyPair::generate().expect("generate key pair"));
-    let der = params.self_signed(&key_pair).expect("self-sign CA").der().to_vec();
-    Ca { der, params, key_pair }
+    let der = params
+        .self_signed(&key_pair)
+        .expect("self-sign CA")
+        .der()
+        .to_vec();
+    Ca {
+        der,
+        params,
+        key_pair,
+    }
 }
 
 /// A CA certificate issued by another CA, keeping the issuer's own subject
@@ -276,8 +341,16 @@ pub fn issue_self_issued_ca(issuer: &Ca, path_len_constraint: Option<u8>) -> Ca 
     });
 
     let key_pair = KeyPair::generate().expect("generate key pair");
-    let der = params.signed_by(&key_pair, &issuer.issuer()).expect("sign CA").der().to_vec();
-    Ca { der, params, key_pair }
+    let der = params
+        .signed_by(&key_pair, &issuer.issuer())
+        .expect("sign CA")
+        .der()
+        .to_vec();
+    Ca {
+        der,
+        params,
+        key_pair,
+    }
 }
 
 /// A CA built from an explicit specification rather than the defaults in
@@ -352,32 +425,55 @@ impl CaSpec {
         }
         apply_ski(&mut params, self.ski, true);
 
-        let key_pair = self.key_pair.unwrap_or_else(|| KeyPair::generate().expect("generate key pair"));
+        let key_pair = self
+            .key_pair
+            .unwrap_or_else(|| KeyPair::generate().expect("generate key pair"));
         (params, key_pair)
     }
 
     pub fn self_signed(self) -> Ca {
         let (params, key_pair) = self.build();
-        let der = params.self_signed(&key_pair).expect("self-sign CA").der().to_vec();
-        Ca { der, params, key_pair }
+        let der = params
+            .self_signed(&key_pair)
+            .expect("self-sign CA")
+            .der()
+            .to_vec();
+        Ca {
+            der,
+            params,
+            key_pair,
+        }
     }
 
     pub fn signed_by(self, issuer: &Ca) -> Ca {
         let (params, key_pair) = self.build();
-        let der = params.signed_by(&key_pair, &issuer.issuer()).expect("sign CA").der().to_vec();
-        Ca { der, params, key_pair }
+        let der = params
+            .signed_by(&key_pair, &issuer.issuer())
+            .expect("sign CA")
+            .der()
+            .to_vec();
+        Ca {
+            der,
+            params,
+            key_pair,
+        }
     }
 }
 
 pub fn self_signed(key_pair: &KeyPair) -> Vec<u8> {
     let params = CertificateParams::default();
-    params.self_signed(key_pair).expect("self-sign").der().to_vec()
+    params
+        .self_signed(key_pair)
+        .expect("self-sign")
+        .der()
+        .to_vec()
 }
 
 #[cfg(test)]
 mod ca_spec_tests {
-    use super::*;
     use x509_validator::{Certificate, CertificateExt};
+
+    use super::*;
 
     #[test]
     fn ca_spec_honours_key_algorithm_and_validity() {
@@ -412,9 +508,17 @@ mod ca_spec_tests {
     #[test]
     fn ca_spec_signed_by_chains_to_issuer() {
         let root = CaSpec::new("spec issuer").self_signed();
-        let intermediate = CaSpec::new("spec intermediate").path_len(Some(1)).signed_by(&root);
+        let intermediate = CaSpec::new("spec intermediate")
+            .path_len(Some(1))
+            .signed_by(&root);
 
         let parsed = Certificate::parse(&intermediate.der).expect("parse");
-        assert_eq!(parsed.issuer().as_raw(), Certificate::parse(&root.der).expect("parse").subject().as_raw());
+        assert_eq!(
+            parsed.issuer().as_raw(),
+            Certificate::parse(&root.der)
+                .expect("parse")
+                .subject()
+                .as_raw()
+        );
     }
 }

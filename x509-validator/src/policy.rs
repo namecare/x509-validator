@@ -1,4 +1,5 @@
 use std::fmt;
+
 use crate::der_parser::Oid;
 use crate::unverified_chain::UnverifiedCertificateChain;
 
@@ -67,5 +68,8 @@ pub trait ValidationPolicy {
     ///
     /// Each of these candidate chains is then handed to a [`ValidationPolicy`] to be checked against the certificate policy.
     /// The checking is done in this method.
-    fn chain_meets_policy_requirements(&self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult;
+    fn chain_meets_policy_requirements(
+        &self,
+        chain: &UnverifiedCertificateChain<'_>,
+    ) -> PolicyEvaluationResult;
 }

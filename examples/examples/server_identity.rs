@@ -13,12 +13,12 @@
 //! methods, and the union of their handled critical extensions is what makes
 //! the pair accept certificates neither would accept alone.
 
+use x509_validator::der_parser::Oid;
 use x509_validator::policy::{PolicyEvaluationResult, ValidationPolicy};
 use x509_validator::rfc5280::RFC5280Policy;
 use x509_validator::store::CertificateStore;
-use x509_validator::{Validator, ServerIdentityPolicy};
-use x509_validator::der_parser::Oid;
 use x509_validator::unverified_chain::UnverifiedCertificateChain;
+use x509_validator::{ServerIdentityPolicy, Validator};
 use x509_validator_examples::{demo_chain, validation_time, BACKEND};
 
 /// RFC 5280 chain rules plus RFC 6125 server identity — the pair a TLS
@@ -41,34 +41,53 @@ impl ValidationPolicy for WebPkiPolicy {
     /// The union: a critical extension is handled if either sub-policy
     /// handles it.
     fn verifying_critical_extensions(&self) -> Vec<Oid<'static>> {
-        let mut oids = self.rfc5280.verifying_critical_extensions();
-        oids.extend(self.identity.verifying_critical_extensions());
+        let mut oids = self
+            .rfc5280
+            .verifying_critical_extensions();
+        oids.extend(
+            self.identity
+                .verifying_critical_extensions(),
+        );
         oids
     }
 
-    fn chain_meets_policy_requirements(&self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
-        self.rfc5280.chain_meets_policy_requirements(chain)?;
-        self.identity.chain_meets_policy_requirements(chain)
+    fn chain_meets_policy_requirements(
+        &self,
+        chain: &UnverifiedCertificateChain<'_>,
+    ) -> PolicyEvaluationResult {
+        self.rfc5280
+            .chain_meets_policy_requirements(chain)?;
+        self.identity
+            .chain_meets_policy_requirements(chain)
     }
 }
 
 fn main() {
     let chain = demo_chain(&["example.com", "*.example.com"]);
 
-    for hostname in ["example.com", "api.example.com", "deep.api.example.com", "attacker.test"] {
+    for hostname in [
+        "example.com",
+        "api.example.com",
+        "deep.api.example.com",
+        "attacker.test",
+    ] {
         let roots = CertificateStore::from_iter([chain.root.clone()]);
         let intermediates = CertificateStore::from_iter([chain.intermediate.clone()]);
 
         let policy = WebPkiPolicy::new(validation_time(), hostname);
         let validator = Validator::with_policy_and_backend(roots, policy, BACKEND);
 
-        let verdict = match validator.validate_with_diagnostics(&chain.leaf, &intermediates, &mut |_| {}) {
-            Ok(_) => "accepted".to_string(),
-            Err(reasons) => {
-                let first = reasons.first().map(ToString::to_string).unwrap_or_else(|| "no reason given".into());
-                format!("rejected — {first}")
-            }
-        };
+        let verdict =
+            match validator.validate_with_diagnostics(&chain.leaf, &intermediates, &mut |_| {}) {
+                Ok(_) => "accepted".to_string(),
+                Err(reasons) => {
+                    let first = reasons
+                        .first()
+                        .map(ToString::to_string)
+                        .unwrap_or_else(|| "no reason given".into());
+                    format!("rejected — {first}")
+                }
+            };
 
         println!("{hostname:<24} {verdict}");
     }

@@ -2,11 +2,14 @@
 name = "x509-validator-testkit"
 version = "0.0.0"
 edition.workspace = true
-rust-version = "1.85"
+rust-version = "1.88"
 description = "Certificate-building helpers for x509-validator's test suites."
 publish = false
 
+[lints]
+workspace = true
+
 [dependencies]
 rcgen = "0.14.8"
-time = "0.3"
-x509-validator = { path = "../x509-validator" }
+time.workspace = true
+x509-validator.workspace = true

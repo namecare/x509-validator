@@ -1,0 +1,47 @@
+#!/bin/bash
+
+# Runs clippy on every package in this repo.
+#
+# Passes through any extra arguments to each invocation.
+#
+# Exits non-zero if any clippy invocation exits non-zero,
+# but always runs them all.
+
+rc=0
+script_args="$@"
+
+function run_clippy() {
+  if ! ( set -x ; cargo clippy --locked "$@" $script_args ) ; then
+    rc=$PIPESTATUS
+  fi
+}
+
+# `x509-validator` has no default crypto backend, and the three backends are
+# what most of the crate is. Linting them together would compile every
+# backend at once and never once produce the single-backend configuration a
+# downstream user actually gets, so each one is linted on its own.
+#
+# The bare run has no backend at all: that configuration compiles but
+# verifies nothing, and it is easy to break without noticing.
+run_clippy --package x509-validator --no-default-features --all-targets
+
+for backend in aws_lc ring rust_crypto ; do
+  run_clippy --package x509-validator --features $backend --all-targets
+done
+
+# The remaining members are linted individually rather than with
+# `--workspace`, because a workspace-wide build unifies features across
+# members: one crate enabling a backend would silently enable it for all of
+# them, which is the situation this whole script exists to avoid.
+for p in $(admin/all-workspace-members) ; do
+  case "$p" in
+    x509-validator)
+      # covered by the per-backend loop above
+      continue
+      ;;
+  esac
+
+  run_clippy --package $p --all-features --all-targets
+done
+
+exit $rc

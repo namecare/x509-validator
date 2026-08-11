@@ -1,0 +1,103 @@
+#!/usr/bin/env python3
+
+"""Regenerates `fuzz/corpus/` from the certificates vendored in the testkit.
+
+The corpus is committed, so this only needs running when the seeds or the
+framing change. It replaces the corpus wholesale: inputs libFuzzer discovered
+during a local run are deliberately dropped, because the committed corpus is
+meant to be a small curated starting point rather than an accumulating cache.
+
+The framing mirrors `fuzz/fuzzers/common::frames` — a two-byte big-endian
+length before each part. Changing one without the other silently invalidates
+every framed entry.
+"""
+
+import pathlib
+import shutil
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+DATA = ROOT / "x509-validator-testkit" / "data"
+CORPUS = ROOT / "fuzz" / "corpus"
+
+APPLE = DATA / "apple"
+MOZILLA = DATA / "mozilla"
+
+
+def frame(*parts: bytes) -> bytes:
+    out = bytearray()
+    for part in parts:
+        if len(part) >= 0x10000:
+            raise ValueError(f"part of {len(part)} bytes does not fit in a u16 frame")
+        out += len(part).to_bytes(2, "big")
+        out += part
+    return bytes(out)
+
+
+def write(target: str, name: str, data: bytes) -> None:
+    directory = CORPUS / target
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / name).write_bytes(data)
+
+
+def main() -> None:
+    if CORPUS.exists():
+        shutil.rmtree(CORPUS)
+
+    leaf = (APPLE / "receipt_signing_leaf.der").read_bytes()
+    intermediate = (APPLE / "wwdr_g6_intermediate.der").read_bytes()
+    root = (APPLE / "apple_root_ca_g3.der").read_bytes()
+
+    mozilla = sorted(MOZILLA.glob("*.der"))
+    digicert = next(p for p in mozilla if "DigiCert_Global_Root_CA" in p.name).read_bytes()
+    isrg = next(p for p in mozilla if "ISRG_Root_X1" in p.name).read_bytes()
+
+    # `parse_certificate` takes bare DER, so every vendored certificate is a
+    # corpus entry as-is. These are what give the parser its real-world
+    # encoding variety: two decades of CAs, each with its own encoder.
+    single = CORPUS / "parse_certificate"
+    single.mkdir(parents=True, exist_ok=True)
+    for source in mozilla + sorted(APPLE.glob("*.der")):
+        shutil.copyfile(source, single / source.name)
+
+    # `validate_chain` reads a leading selector byte: even picks the stub
+    # verifier that accepts every signature, odd picks the real backend. Only
+    # the stub keeps reaching chain building once a mutation breaks a
+    # signature, so both are seeded.
+    for prefix, tag in [(b"\x00", "stub"), (b"\x01", "real")]:
+        for name, parts in [
+            ("apple-full-chain", (leaf, intermediate, root)),
+            ("apple-leaf-only", (leaf,)),
+            ("apple-missing-intermediate", (leaf, root)),
+            ("apple-reversed", (root, intermediate, leaf)),
+            ("self-signed-root", (root, root)),
+            ("unrelated-roots", (leaf, digicert, isrg)),
+        ]:
+            write("validate_chain", f"{name}-{tag}", prefix + frame(*parts))
+
+    for name, hostname in [
+        ("apple-exact", b"Prod ECC Mac App Store and iTunes Store Receipt Signing"),
+        ("apple-mismatch", b"www.example.com"),
+        ("bare-dot", b"."),
+        ("trailing-dot", b"www.example.com."),
+        ("empty", b""),
+        ("wildcard", b"*.example.com"),
+    ]:
+        write("server_identity", name, frame(leaf, hostname, b""))
+
+    write("server_identity", "ipv4", frame(leaf, b"", b"10.0.0.1"))
+    write("server_identity", "ipv6", frame(leaf, b"", b"::1"))
+
+    for name, parts in [
+        ("apple-chain", (leaf, intermediate, root)),
+        ("apple-two", (leaf, intermediate)),
+        ("roots-only", (digicert, isrg)),
+        ("single", (leaf,)),
+    ]:
+        write("name_constraints", name, frame(*parts))
+
+    total = sum(1 for path in CORPUS.rglob("*") if path.is_file())
+    print(f"seeded {total} corpus files under {CORPUS.relative_to(ROOT)}")
+
+
+if __name__ == "__main__":
+    main()

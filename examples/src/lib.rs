@@ -42,7 +42,10 @@ pub fn demo_chain(dns_names: &[&str]) -> DemoChain {
 
 /// As [`demo_chain`], with every certificate in the chain signed using
 /// `algorithm`.
-pub fn demo_chain_with(dns_names: &[&str], algorithm: &'static rcgen::SignatureAlgorithm) -> DemoChain {
+pub fn demo_chain_with(
+    dns_names: &[&str],
+    algorithm: &'static rcgen::SignatureAlgorithm,
+) -> DemoChain {
     let now = OffsetDateTime::now_utc();
     let window = (now - Duration::days(1), now + Duration::days(365));
     let key = || key_pair_for(algorithm);
@@ -57,15 +60,20 @@ pub fn demo_chain_with(dns_names: &[&str], algorithm: &'static rcgen::SignatureA
         .validity(window.0, window.1)
         .signed_by(&root);
 
-    let leaf = LeafSpec::new(dns_names.first().copied().unwrap_or("example.com"))
-        .key_pair(key())
-        .dns_sans(dns_names)
-        .validity(window.0, window.1)
-        .signed_by(&intermediate);
+    let leaf = LeafSpec::new(
+        dns_names
+            .first()
+            .copied()
+            .unwrap_or("example.com"),
+    )
+    .key_pair(key())
+    .dns_sans(dns_names)
+    .validity(window.0, window.1)
+    .signed_by(&intermediate);
 
     DemoChain {
-        root: cert(root.der.clone()),
-        intermediate: cert(intermediate.der.clone()),
+        root: cert(root.der),
+        intermediate: cert(intermediate.der),
         leaf: cert(leaf),
     }
 }

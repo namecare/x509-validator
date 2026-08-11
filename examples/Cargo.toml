@@ -5,8 +5,11 @@ edition = "2021"
 description = "Runnable examples for x509-validator. Not published."
 publish = false
 
+[lints]
+workspace = true
+
 [dependencies]
-x509-validator = { path = "../x509-validator", features = ["aws_lc"] }
+x509-validator = { workspace = true, features = ["aws_lc"] }
 
 # The examples validate certificates, so they need certificates to validate.
 # Generating them here keeps every example self-contained: `cargo run

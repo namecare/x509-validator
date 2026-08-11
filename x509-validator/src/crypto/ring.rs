@@ -17,12 +17,11 @@ backend! {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use x509_validator_testkit::rcgen::KeyPair;
-    use crate::oid_registry;
-    use crate::CertificateExt;
-    use crate::Certificate;
     use x509_validator_testkit::self_signed;
+
+    use super::*;
+    use crate::{Certificate, CertificateExt, oid_registry};
 
     #[test]
     fn ecdsa_p256_round_trip_verifies() {
@@ -30,13 +29,16 @@ mod tests {
         let der: &'static [u8] = Box::leak(self_signed(&key_pair).into_boxed_slice());
         let cert = Certificate::parse(der).expect("parse certificate");
 
-                let result = Ring.verify_signature(
+        let result = Ring.verify_signature(
             &cert.signature_algorithm,
             cert.public_key(),
             cert.tbs_certificate.as_ref(),
             cert.signature_value.as_ref(),
         );
-        assert!(result.is_ok(), "expected valid signature to verify, got {result:?}");
+        assert!(
+            result.is_ok(),
+            "expected valid signature to verify, got {result:?}"
+        );
     }
 
     #[test]
@@ -45,7 +47,7 @@ mod tests {
         let der: &'static [u8] = Box::leak(self_signed(&key_pair).into_boxed_slice());
         let cert = Certificate::parse(der).expect("parse certificate");
 
-                let result = Ring.verify_signature(
+        let result = Ring.verify_signature(
             &cert.signature_algorithm,
             cert.public_key(),
             b"tampered message",

@@ -1,0 +1,123 @@
+name: Lints
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lints-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  format:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      # `fuzz/` is its own workspace, so `--all` does not reach it.
+      - name: Check formatting (fuzz)
+        run: cargo fmt --all --manifest-path fuzz/Cargo.toml -- --check
+
+  format-unstable:
+    name: Format (unstable)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install rust nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt
+      - name: Check formatting (unstable)
+        run: cargo fmt --all -- --check --config-path .rustfmt.unstable.toml
+      - name: Check formatting (unstable, fuzz)
+        run: >-
+          cargo fmt --all --manifest-path fuzz/Cargo.toml --
+          --check --config-path .rustfmt.unstable.toml
+      - if: ${{ failure() }}
+        run: echo "Nightly formatting check failed. Please run \`cargo +nightly fmt-unstable\`"
+
+  taplo:
+    name: Format (TOML)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: taplo-cli
+      - run: taplo fmt --check
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: ./admin/clippy -- --deny warnings
+
+  clippy-nightly:
+    name: Clippy (Nightly)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install rust toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      # Do not deny warnings, as nightly clippy sometimes has false positives.
+      - run: ./admin/clippy
+      # The fuzzers are nightly-only and live in their own workspace, so they
+      # are unreachable from `admin/clippy`.
+      - run: cargo clippy --manifest-path fuzz/Cargo.toml --all-targets
+
+  check-external-types:
+    name: Validate external types appearing in public API
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-03-20
+      - uses: taiki-e/cache-cargo-install-action@v2
+        with:
+          tool: cargo-check-external-types
+      - name: run cargo-check-external-types for x509-validator/
+        working-directory: x509-validator/
+        run: cargo check-external-types --features aws_lc
+
+  typos:
+    name: Spelling
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: crate-ci/typos@master
+        with:
+          config: .github/typos.toml
+
+  audit:
+    name: Advisories and licenses
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+          arguments: --workspace --all-features

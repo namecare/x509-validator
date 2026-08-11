@@ -112,7 +112,10 @@ fn is_valid_dns_name(name: &[u8], is_constraint: bool) -> bool {
     // rewrite it.
     while !bytes.is_empty() {
         let label: &[u8];
-        if let Some(period_index) = bytes.iter().position(|&b| b == ASCII_PERIOD) {
+        if let Some(period_index) = bytes
+            .iter()
+            .position(|&b| b == ASCII_PERIOD)
+        {
             label = &bytes[..period_index];
             bytes = &bytes[period_index + 1..];
         } else {
@@ -191,7 +194,9 @@ fn case_insensitive_ascii_match(a: &[u8], b: &[u8]) -> bool {
         return false;
     }
     const MASK: u8 = !(1 << 5);
-    a.iter().zip(b.iter()).all(|(&x, &y)| (x & MASK) == (y & MASK))
+    a.iter()
+        .zip(b.iter())
+        .all(|(&x, &y)| (x & MASK) == (y & MASK))
 }
 
 struct ReverseDnsLabels<'a> {
@@ -200,7 +205,9 @@ struct ReverseDnsLabels<'a> {
 
 impl<'a> ReverseDnsLabels<'a> {
     fn new(name: &'a [u8]) -> Self {
-        Self { remaining: Some(name) }
+        Self {
+            remaining: Some(name),
+        }
     }
 
     fn has_more_labels(&self) -> bool {
@@ -217,7 +224,10 @@ impl<'a> Iterator for ReverseDnsLabels<'a> {
 
         // We walk backwards from the end until we find a period, then
         // we slice out that section and return it.
-        match base.iter().rposition(|&b| b == ASCII_PERIOD) {
+        match base
+            .iter()
+            .rposition(|&b| b == ASCII_PERIOD)
+        {
             Some(period_index) => {
                 // Ok, we found a period. Slice out that section, then drop the
                 // period and save the updated base.
@@ -267,8 +277,16 @@ pub(crate) mod fixtures {
             ("d.c*.b.a", "d.c.b.a", false),
             ("d.c*.b.a", "d.cc.b.a", false),
             // Case sensitivity
-            ("abcdefghijklmnopqrstuvwxyz", "ABCDEFGHIJKLMNOPQRSTUVWXYZ", true),
-            ("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz", true),
+            (
+                "abcdefghijklmnopqrstuvwxyz",
+                "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+                true,
+            ),
+            (
+                "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+                "abcdefghijklmnopqrstuvwxyz",
+                true,
+            ),
             ("aBc", "Abc", true),
             // Digits
             ("a1", "a1", true),
@@ -337,7 +355,11 @@ pub(crate) mod fixtures {
             ("www.bath.org", "www.bath.org", true),
             // IDN tests
             ("xn--poema-9qae5a.com.br", "xn--poema-9qae5a.com.br", true),
-            ("*.xn--poema-9qae5a.com.br", "www.xn--poema-9qae5a.com.br", false),
+            (
+                "*.xn--poema-9qae5a.com.br",
+                "www.xn--poema-9qae5a.com.br",
+                false,
+            ),
             ("*.xn--poema-9qae5a.com.br", "xn--poema-9qae5a.com.br", true),
             ("xn--poema-*.com.br", "xn--poema-9qae5a.com.br", false),
             ("xn--*-9qae5a.com.br", "xn--poema-9qae5a.com.br", false),
@@ -365,7 +387,11 @@ pub(crate) mod fixtures {
             ("*.us", ".us", false),
             ("*", "foo", false),
             // IDN variants of wildcards and registry controlled domains.
-            ("*.xn--poema-9qae5a.com.br", ".xn--poema-9qae5a.com.br", true),
+            (
+                "*.xn--poema-9qae5a.com.br",
+                ".xn--poema-9qae5a.com.br",
+                true,
+            ),
             ("*.example.xn--mgbaam7a8h", ".example.xn--mgbaam7a8h", true),
             ("*.xn--mgbaam7a8h", ".xn--mgbaam7a8h", false),
             // Wildcards should be permissible for 'private' registry-controlled
@@ -433,8 +459,16 @@ pub(crate) mod fixtures {
         fixtures.push(("example.com.au".to_string(), long_domain, false));
 
         // Long labels: 63 bytes is the maximum, 64 is one too many.
-        fixtures.push((format!("{label_63}.example.com"), "example.com".to_string(), true));
-        fixtures.push((format!("{label_64}.example.com"), "example.com".to_string(), false));
+        fixtures.push((
+            format!("{label_63}.example.com"),
+            "example.com".to_string(),
+            true,
+        ));
+        fixtures.push((
+            format!("{label_64}.example.com"),
+            "example.com".to_string(),
+            false,
+        ));
         fixtures.push((
             format!("{label_63}.example.com"),
             format!("{label_63}.example.com"),
@@ -491,7 +525,10 @@ mod tests {
     }
 
     fn matches(dns_name: &str, constraint: &str) -> bool {
-        NameConstraintsPolicy::dns_name_matches_constraint(dns_name.as_bytes(), constraint.as_bytes())
+        NameConstraintsPolicy::dns_name_matches_constraint(
+            dns_name.as_bytes(),
+            constraint.as_bytes(),
+        )
     }
 
     #[test]

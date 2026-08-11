@@ -1,22 +1,30 @@
 use std::fmt;
-use crate::der_parser::Oid;
-use crate::Certificate;
+
 use crate::certificate::format_certificate;
-use crate::PolicyFailureReason;
+use crate::der_parser::Oid;
+use crate::{Certificate, PolicyFailureReason};
 
 pub struct VerificationDiagnostic<'a> {
     storage: Storage<'a>,
 }
 
 enum Storage<'a> {
-    LeafCertificateHasUnhandledCriticalExtension(Box<LeafCertificateHasUnhandledCriticalExtensions<'a>>),
-    LeafCertificateIsInTheRootStoreButDoesNotMeetPolicy(Box<LeafCertificateIsInTheRootStoreButDoesNotMeetPolicy<'a>>),
+    LeafCertificateHasUnhandledCriticalExtension(
+        Box<LeafCertificateHasUnhandledCriticalExtensions<'a>>,
+    ),
+    LeafCertificateIsInTheRootStoreButDoesNotMeetPolicy(
+        Box<LeafCertificateIsInTheRootStoreButDoesNotMeetPolicy<'a>>,
+    ),
     ChainFailsToMeetPolicy(Box<ChainFailsToMeetPolicy<'a>>),
     IssuerHasUnhandledCriticalExtension(Box<IssuerHasUnhandledCriticalExtension<'a>>),
     IssuerHasNotSignedCertificate(Box<IssuerHasNotSignedCertificate<'a>>),
     SearchingForIssuerOfPartialChain(Box<SearchingForIssuerOfPartialChain<'a>>),
-    FoundCandidateIssuersOfPartialChainInRootStore(Box<FoundCandidateIssuersOfPartialChainInRootStore<'a>>),
-    FoundCandidateIssuersOfPartialChainInIntermediateStore(Box<FoundCandidateIssuersOfPartialChainInIntermediateStore<'a>>),
+    FoundCandidateIssuersOfPartialChainInRootStore(
+        Box<FoundCandidateIssuersOfPartialChainInRootStore<'a>>,
+    ),
+    FoundCandidateIssuersOfPartialChainInIntermediateStore(
+        Box<FoundCandidateIssuersOfPartialChainInIntermediateStore<'a>>,
+    ),
     FoundValidCertificateChain(Box<FoundValidCertificateChain<'a>>),
     CouldNotValidateLeafCertificate(Box<CouldNotValidateLeafCertificate<'a>>),
     IssuerIsAlreadyInTheChain(Box<IssuerIsAlreadyInTheChain<'a>>),
@@ -106,9 +114,15 @@ impl<'a> VerificationDiagnostic<'a> {
         }
     }
 
-    pub fn chain_fails_to_meet_policy(chain: Vec<Certificate<'a>>, failure_reason: PolicyFailureReason) -> Self {
+    pub fn chain_fails_to_meet_policy(
+        chain: Vec<Certificate<'a>>,
+        failure_reason: PolicyFailureReason,
+    ) -> Self {
         Self {
-            storage: Storage::ChainFailsToMeetPolicy(Box::new(ChainFailsToMeetPolicy { chain, failure_reason })),
+            storage: Storage::ChainFailsToMeetPolicy(Box::new(ChainFailsToMeetPolicy {
+                chain,
+                failure_reason,
+            })),
         }
     }
 
@@ -118,28 +132,35 @@ impl<'a> VerificationDiagnostic<'a> {
         handled_critical_extensions: Vec<Oid<'static>>,
     ) -> Self {
         Self {
-            storage: Storage::IssuerHasUnhandledCriticalExtension(Box::new(IssuerHasUnhandledCriticalExtension {
-                issuer,
-                partial_chain,
-                handled_critical_extensions,
-            })),
+            storage: Storage::IssuerHasUnhandledCriticalExtension(Box::new(
+                IssuerHasUnhandledCriticalExtension {
+                    issuer,
+                    partial_chain,
+                    handled_critical_extensions,
+                },
+            )),
         }
     }
 
-    pub fn issuer_has_not_signed_certificate(issuer: Certificate<'a>, partial_chain: Vec<Certificate<'a>>) -> Self {
+    pub fn issuer_has_not_signed_certificate(
+        issuer: Certificate<'a>,
+        partial_chain: Vec<Certificate<'a>>,
+    ) -> Self {
         Self {
-            storage: Storage::IssuerHasNotSignedCertificate(Box::new(IssuerHasNotSignedCertificate {
-                issuer,
-                partial_chain,
-            })),
+            storage: Storage::IssuerHasNotSignedCertificate(Box::new(
+                IssuerHasNotSignedCertificate {
+                    issuer,
+                    partial_chain,
+                },
+            )),
         }
     }
 
     pub fn searching_for_issuer_of_partial_chain(partial_chain: Vec<Certificate<'a>>) -> Self {
         Self {
-            storage: Storage::SearchingForIssuerOfPartialChain(Box::new(SearchingForIssuerOfPartialChain {
-                partial_chain,
-            })),
+            storage: Storage::SearchingForIssuerOfPartialChain(Box::new(
+                SearchingForIssuerOfPartialChain { partial_chain },
+            )),
         }
     }
 
@@ -181,11 +202,16 @@ impl<'a> VerificationDiagnostic<'a> {
 
     pub fn could_not_validate_leaf_certificate(leaf: Certificate<'a>) -> Self {
         Self {
-            storage: Storage::CouldNotValidateLeafCertificate(Box::new(CouldNotValidateLeafCertificate { leaf })),
+            storage: Storage::CouldNotValidateLeafCertificate(Box::new(
+                CouldNotValidateLeafCertificate { leaf },
+            )),
         }
     }
 
-    pub fn issuer_is_already_in_the_chain(partial_chain: Vec<Certificate<'a>>, issuer: Certificate<'a>) -> Self {
+    pub fn issuer_is_already_in_the_chain(
+        partial_chain: Vec<Certificate<'a>>,
+        issuer: Certificate<'a>,
+    ) -> Self {
         Self {
             storage: Storage::IssuerIsAlreadyInTheChain(Box::new(IssuerIsAlreadyInTheChain {
                 partial_chain,
@@ -197,7 +223,10 @@ impl<'a> VerificationDiagnostic<'a> {
 
 // MARK: Rendering helpers
 
-fn unhandled_critical_extensions(cert: &Certificate<'_>, handled_critical_extensions: &[Oid<'static>]) -> Vec<String> {
+fn unhandled_critical_extensions(
+    cert: &Certificate<'_>,
+    handled_critical_extensions: &[Oid<'static>],
+) -> Vec<String> {
     cert.tbs_certificate
         .iter_extensions()
         .filter(|ext| ext.critical && !handled_critical_extensions.contains(&ext.oid))
@@ -206,7 +235,11 @@ fn unhandled_critical_extensions(cert: &Certificate<'_>, handled_critical_extens
 }
 
 fn join_certificates(certificates: &[Certificate<'_>], separator: &str) -> String {
-    certificates.iter().map(format_certificate).collect::<Vec<_>>().join(separator)
+    certificates
+        .iter()
+        .map(format_certificate)
+        .collect::<Vec<_>>()
+        .join(separator)
 }
 
 // MARK: Single-line description
@@ -219,7 +252,8 @@ impl fmt::Display for VerificationDiagnostic<'_> {
                 f,
                 "The leaf certificate has critical extensions that the policy does not understand and therefore \
                  can't enforce. Unhandled extensions: [{}] Leaf certificate: {}",
-                unhandled_critical_extensions(&d.leaf_certificate, &d.handled_critical_extensions).join(", "),
+                unhandled_critical_extensions(&d.leaf_certificate, &d.handled_critical_extensions)
+                    .join(", "),
                 format_certificate(&d.leaf_certificate),
             ),
             Storage::LeafCertificateIsInTheRootStoreButDoesNotMeetPolicy(d) => write!(
@@ -282,7 +316,11 @@ impl fmt::Display for VerificationDiagnostic<'_> {
                 join_certificates(&d.valid_certificate_chain, ", "),
             ),
             Storage::CouldNotValidateLeafCertificate(d) => {
-                write!(f, "Could not validate leaf certificate: {}", format_certificate(&d.leaf))
+                write!(
+                    f,
+                    "Could not validate leaf certificate: {}",
+                    format_certificate(&d.leaf)
+                )
             }
             Storage::IssuerIsAlreadyInTheChain(d) => write!(
                 f,
@@ -313,7 +351,8 @@ impl VerificationDiagnostic<'_> {
             Storage::LeafCertificateHasUnhandledCriticalExtension(d) => format!(
                 "The leaf certificate has critical extensions that the policy does not understand and therefore \
                  can't enforce.\n\nUnhandled extensions:\n{}\n\nLeaf certificate:\n{}",
-                unhandled_critical_extensions(&d.leaf_certificate, &d.handled_critical_extensions).join("\n"),
+                unhandled_critical_extensions(&d.leaf_certificate, &d.handled_critical_extensions)
+                    .join("\n"),
                 format_certificate(&d.leaf_certificate),
             ),
             Storage::LeafCertificateIsInTheRootStoreButDoesNotMeetPolicy(d) => format!(
@@ -368,7 +407,10 @@ impl VerificationDiagnostic<'_> {
                 join_certificates(&d.valid_certificate_chain, "\n"),
             ),
             Storage::CouldNotValidateLeafCertificate(d) => {
-                format!("Could not validate leaf certificate:\n{}", format_certificate(&d.leaf))
+                format!(
+                    "Could not validate leaf certificate:\n{}",
+                    format_certificate(&d.leaf)
+                )
             }
             Storage::IssuerIsAlreadyInTheChain(d) => format!(
                 "Candidate issuer is already in partial chain and is therefore skipped because it would always \
@@ -380,4 +422,3 @@ impl VerificationDiagnostic<'_> {
         }
     }
 }
-

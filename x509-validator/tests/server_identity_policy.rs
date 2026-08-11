@@ -1,8 +1,8 @@
 //! Server identity matching: DNS names, IP addresses, and common-name
 //! fallback.
 
-use x509_validator::{ServerIdentityPolicy, ValidationPolicy};
 use x509_validator::oid_registry::OID_X509_EXT_SUBJECT_ALT_NAME;
+use x509_validator::{ServerIdentityPolicy, ValidationPolicy};
 use x509_validator_testkit::rcgen::string::Ia5String;
 use x509_validator_testkit::rcgen::{DistinguishedName, DnType, SanType};
 use x509_validator_testkit::{
@@ -15,7 +15,7 @@ fn cert_with_sans(sans: &[&str]) -> Vec<u8> {
     issue_leaf("leaf", sans, &root)
 }
 
-fn cert_with_ip_sans(ips: Vec<std::net::IpAddr>) -> Vec<u8> {
+fn cert_with_ip_sans(ips: Vec<core::net::IpAddr>) -> Vec<u8> {
     let root = self_signed_ca_with("root", |_| {});
     issue_leaf_with_ip_sans("leaf", ips, &root)
 }
@@ -43,7 +43,11 @@ fn dns_name_match_is_case_insensitive() {
 fn non_matching_dns_name_is_rejected() {
     let chain = chain_of(vec![cert_with_sans(&["www.example.com"])]);
     let policy = ServerIdentityPolicy::new(Some("evil.com"), None);
-    assert!(policy.chain_meets_policy_requirements(&chain).is_err());
+    assert!(
+        policy
+            .chain_meets_policy_requirements(&chain)
+            .is_err()
+    );
 }
 
 #[test]
@@ -57,14 +61,22 @@ fn wildcard_matches_single_label() {
 fn wildcard_does_not_match_multiple_labels() {
     let chain = chain_of(vec![cert_with_sans(&["*.example.com"])]);
     let policy = ServerIdentityPolicy::new(Some("foo.bar.example.com"), None);
-    assert!(policy.chain_meets_policy_requirements(&chain).is_err());
+    assert!(
+        policy
+            .chain_meets_policy_requirements(&chain)
+            .is_err()
+    );
 }
 
 #[test]
 fn wildcard_must_match_at_least_one_character() {
     let chain = chain_of(vec![cert_with_sans(&["*.example.com"])]);
     let policy = ServerIdentityPolicy::new(Some(".example.com"), None);
-    assert!(policy.chain_meets_policy_requirements(&chain).is_err());
+    assert!(
+        policy
+            .chain_meets_policy_requirements(&chain)
+            .is_err()
+    );
 }
 
 #[test]
@@ -76,7 +88,9 @@ fn hostname_of_only_periods_does_not_match_a_wildcard() {
         let chain = chain_of(vec![cert_with_sans(&["*.example.com"])]);
         let policy = ServerIdentityPolicy::new(Some(hostname), None);
         assert!(
-            policy.chain_meets_policy_requirements(&chain).is_err(),
+            policy
+                .chain_meets_policy_requirements(&chain)
+                .is_err(),
             "hostname {hostname:?} must not match"
         );
     }
@@ -94,7 +108,11 @@ fn wildcard_after_first_label_is_rejected() {
     // "www.*.com" has the asterisk after the first period — invalid.
     let chain = chain_of(vec![cert_with_sans(&["www.*.com"])]);
     let policy = ServerIdentityPolicy::new(Some("www.anything.com"), None);
-    assert!(policy.chain_meets_policy_requirements(&chain).is_err());
+    assert!(
+        policy
+            .chain_meets_policy_requirements(&chain)
+            .is_err()
+    );
 }
 
 #[test]
@@ -108,12 +126,18 @@ fn ipv4_san_matches_server_ip() {
 fn ipv4_san_does_not_match_different_server_ip() {
     let chain = chain_of(vec![cert_with_ip_sans(vec!["127.0.0.1".parse().unwrap()])]);
     let policy = ServerIdentityPolicy::new(None, Some("127.0.0.2"));
-    assert!(policy.chain_meets_policy_requirements(&chain).is_err());
+    assert!(
+        policy
+            .chain_meets_policy_requirements(&chain)
+            .is_err()
+    );
 }
 
 #[test]
 fn ipv6_san_matches_server_ip() {
-    let chain = chain_of(vec![cert_with_ip_sans(vec!["2001:db8::1".parse().unwrap()])]);
+    let chain = chain_of(vec![cert_with_ip_sans(vec![
+        "2001:db8::1".parse().unwrap(),
+    ])]);
     let policy = ServerIdentityPolicy::new(None, Some("2001:db8::1"));
     assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
 }
@@ -125,7 +149,11 @@ fn common_name_is_never_matched_against_an_ip_address() {
     // No hostname supplied, only an IP — the CN path only ever compares
     // against a hostname, never an IP, so this must fail even though
     // the CN textually equals the target IP.
-    assert!(policy.chain_meets_policy_requirements(&chain).is_err());
+    assert!(
+        policy
+            .chain_meets_policy_requirements(&chain)
+            .is_err()
+    );
 }
 
 #[test]
@@ -134,7 +162,11 @@ fn no_san_and_no_common_name_is_rejected() {
     let der = issue_leaf_with_ip_sans("", vec![], &root);
     let chain = chain_of(vec![der]);
     let policy = ServerIdentityPolicy::new(Some("www.example.com"), None);
-    assert!(policy.chain_meets_policy_requirements(&chain).is_err());
+    assert!(
+        policy
+            .chain_meets_policy_requirements(&chain)
+            .is_err()
+    );
 }
 
 #[test]
@@ -145,7 +177,11 @@ fn san_present_but_no_match_never_falls_back_to_common_name() {
     let der = issue_leaf("www.example.com", &["other.example.com"], &root);
     let chain = chain_of(vec![der]);
     let policy = ServerIdentityPolicy::new(Some("www.example.com"), None);
-    assert!(policy.chain_meets_policy_requirements(&chain).is_err());
+    assert!(
+        policy
+            .chain_meets_policy_requirements(&chain)
+            .is_err()
+    );
 }
 
 #[test]
@@ -158,7 +194,11 @@ fn non_matchable_san_entry_still_suppresses_common_name_fallback() {
     let der = issue_leaf_with_email_sans("www.example.com", &["admin@example.com"], &root);
     let chain = chain_of(vec![der]);
     let policy = ServerIdentityPolicy::new(Some("www.example.com"), None);
-    assert!(policy.chain_meets_policy_requirements(&chain).is_err());
+    assert!(
+        policy
+            .chain_meets_policy_requirements(&chain)
+            .is_err()
+    );
 }
 
 #[test]
@@ -169,7 +209,9 @@ fn non_matchable_san_entry_alongside_matching_dns_name_still_matches() {
     let der = issue_leaf_with("leaf", &["www.example.com"], &root, |params| {
         params
             .subject_alt_names
-            .push(SanType::Rfc822Name(Ia5String::try_from("admin@example.com").unwrap()));
+            .push(SanType::Rfc822Name(
+                Ia5String::try_from("admin@example.com").unwrap(),
+            ));
     });
     let chain = chain_of(vec![der]);
     let policy = ServerIdentityPolicy::new(Some("www.example.com"), None);
@@ -190,14 +232,22 @@ fn wildcard_combined_with_idna_a_label_is_rejected() {
     // attack the IDNA check exists to prevent.
     let chain = chain_of(vec![cert_with_sans(&["xn--*.example.com"])]);
     let policy = ServerIdentityPolicy::new(Some("xn--anything.example.com"), None);
-    assert!(policy.chain_meets_policy_requirements(&chain).is_err());
+    assert!(
+        policy
+            .chain_meets_policy_requirements(&chain)
+            .is_err()
+    );
 }
 
 #[test]
 fn no_server_hostname_never_matches_dns_san() {
     let chain = chain_of(vec![cert_with_sans(&["www.example.com"])]);
     let policy = ServerIdentityPolicy::new(None, None);
-    assert!(policy.chain_meets_policy_requirements(&chain).is_err());
+    assert!(
+        policy
+            .chain_meets_policy_requirements(&chain)
+            .is_err()
+    );
 }
 
 #[test]
@@ -261,13 +311,24 @@ fn weirdo_san_cert() -> Vec<u8> {
 /// rfc822Name, and both an IPv4 and an IPv6 iPAddress.
 fn multi_san_cert() -> Vec<u8> {
     let root = self_signed_ca_with("root", |_| {});
-    issue_leaf_with("localhost", &["localhost", "example.com"], &root, |params| {
-        params
-            .subject_alt_names
-            .push(SanType::Rfc822Name(Ia5String::try_from("user@example.com").unwrap()));
-        params.subject_alt_names.push(SanType::IpAddress("192.168.0.1".parse().unwrap()));
-        params.subject_alt_names.push(SanType::IpAddress("2001:db8::1".parse().unwrap()));
-    })
+    issue_leaf_with(
+        "localhost",
+        &["localhost", "example.com"],
+        &root,
+        |params| {
+            params
+                .subject_alt_names
+                .push(SanType::Rfc822Name(
+                    Ia5String::try_from("user@example.com").unwrap(),
+                ));
+            params
+                .subject_alt_names
+                .push(SanType::IpAddress("192.168.0.1".parse().unwrap()));
+            params
+                .subject_alt_names
+                .push(SanType::IpAddress("2001:db8::1".parse().unwrap()));
+        },
+    )
 }
 
 /// A certificate with no SAN extension whose subject holds two
@@ -309,7 +370,11 @@ fn assert_matches(der: Vec<u8>, hostname: Option<&str>, ip: Option<&str>) {
 fn assert_does_not_match(der: Vec<u8>, hostname: Option<&str>, ip: Option<&str>) {
     let chain = chain_of(vec![der]);
     let policy = ServerIdentityPolicy::new(hostname, ip);
-    assert!(policy.chain_meets_policy_requirements(&chain).is_err());
+    assert!(
+        policy
+            .chain_meets_policy_requirements(&chain)
+            .is_err()
+    );
 }
 
 #[test]
@@ -391,18 +456,30 @@ fn rejects_encoded_idna_label() {
 
 #[test]
 fn matches_unencoded_idna_label() {
-    assert_matches(weirdo_san_cert(), Some("xn--strae-oqa.unicode.example.com"), None);
+    assert_matches(
+        weirdo_san_cert(),
+        Some("xn--strae-oqa.unicode.example.com"),
+        None,
+    );
 }
 
 #[test]
 fn does_not_match_idna_label_with_wildcard() {
     // RFC 6125 §6.4.3: a wildcard must not be combined with an A-label.
-    assert_does_not_match(weirdo_san_cert(), Some("xn--xx-gia.unicode.example.com"), None);
+    assert_does_not_match(
+        weirdo_san_cert(),
+        Some("xn--xx-gia.unicode.example.com"),
+        None,
+    );
 }
 
 #[test]
 fn does_not_match_non_leftmost_wildcards() {
-    assert_does_not_match(weirdo_san_cert(), Some("weirdwildcard.nomatch.example.com"), None);
+    assert_does_not_match(
+        weirdo_san_cert(),
+        Some("weirdwildcard.nomatch.example.com"),
+        None,
+    );
 }
 
 #[test]
@@ -419,7 +496,11 @@ fn rejects_wildcard_before_unencoded_idna_label() {
 fn matches_wildcard_before_encoded_idna_label() {
     // The A-label restriction applies only to the wildcard label itself,
     // so an A-label in a later position is perfectly matchable.
-    assert_matches(weirdo_san_cert(), Some("foo.xn--strae-oqa.example.com"), None);
+    assert_matches(
+        weirdo_san_cert(),
+        Some("foo.xn--strae-oqa.example.com"),
+        None,
+    );
 }
 
 #[test]

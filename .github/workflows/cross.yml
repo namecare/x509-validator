@@ -1,0 +1,60 @@
+name: cross
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "15 19 * * *"
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  cross:
+    name: ${{ matrix.backend }} (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          # Android, 32-bit
+          - armv7-linux-androideabi
+          - i686-linux-android
+          - thumbv7neon-linux-androideabi
+          # Linux, 32-bit
+          - i586-unknown-linux-gnu
+          - i686-unknown-linux-gnu
+          # Linux, exotic. s390x is big-endian, which is the only place a
+          # byte-order mistake in DER handling shows up.
+          - riscv64gc-unknown-linux-gnu
+          - s390x-unknown-linux-gnu
+          # Android, 64-bit
+          - aarch64-linux-android
+        # aws_lc is absent on purpose: aws-lc-sys builds vendored C and
+        # assembly, which does not cross-compile to these targets without
+        # per-target toolchain work that this workflow is not the place for.
+        # ring and rust_crypto are the two backends portable enough to say
+        # something meaningful here.
+        backend: [ring, rust_crypto]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Install rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cross
+        uses: taiki-e/cache-cargo-install-action@v2
+        with:
+          tool: cross
+          git: https://github.com/cross-rs/cross
+          rev: c7dee4d
+
+      - name: Test x509-validator
+        run: >-
+          cross test --locked --package x509-validator
+          --features ${{ matrix.backend }} --target ${{ matrix.target }}

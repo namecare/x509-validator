@@ -8,3 +8,8 @@
 *.pdb
 debug
 target
+
+# Fuzzing
+/fuzz/target
+/fuzz/artifacts
+/fuzz/coverage

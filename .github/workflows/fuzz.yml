@@ -1,0 +1,89 @@
+name: Fuzz
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  schedule:
+    - cron: "0 3 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fuzz:
+    name: ${{ matrix.fuzzer }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        fuzzer:
+          - parse_certificate
+          - validate_chain
+          - server_identity
+          - name_constraints
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install rust nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: fuzz
+          key: ${{ matrix.fuzzer }}
+
+      - uses: taiki-e/cache-cargo-install-action@v2
+        with:
+          tool: cargo-fuzz
+
+      - name: Restore corpus
+        uses: actions/cache/restore@v4
+        with:
+          path: fuzz/corpus/${{ matrix.fuzzer }}
+          key: fuzz-corpus-${{ matrix.fuzzer }}-${{ github.run_id }}
+          restore-keys: fuzz-corpus-${{ matrix.fuzzer }}-
+
+      - name: Fuzz
+        working-directory: fuzz
+        run: |
+          # Only parse_certificate takes raw DER. The other targets wrap their
+          # input in length-prefixed frames, where spliced tokens desynchronize
+          # the framing instead of reaching the parser.
+          dict=""
+          if [ -f "${{ matrix.fuzzer }}.dict" ]; then
+            dict="-dict=${{ matrix.fuzzer }}.dict"
+          fi
+
+          cargo fuzz run ${{ matrix.fuzzer }} -- \
+            -max_total_time=${{ github.event_name == 'schedule' && 900 || 60 }} \
+            -max_len=8192 \
+            -print_final_stats=1 \
+            $dict
+
+      - name: Minimize corpus
+        if: github.event_name == 'schedule'
+        working-directory: fuzz
+        run: cargo fuzz cmin ${{ matrix.fuzzer }}
+
+      - name: Save corpus
+        if: github.event_name == 'schedule' && success()
+        uses: actions/cache/save@v4
+        with:
+          path: fuzz/corpus/${{ matrix.fuzzer }}
+          key: fuzz-corpus-${{ matrix.fuzzer }}-${{ github.run_id }}
+
+      - name: Upload crash
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: artifacts-${{ matrix.fuzzer }}
+          path: fuzz/artifacts/${{ matrix.fuzzer }}
+          if-no-files-found: ignore

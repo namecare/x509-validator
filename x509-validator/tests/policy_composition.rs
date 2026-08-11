@@ -3,11 +3,14 @@
 use x509_validator::oid_registry::{
     OID_X509_EXT_BASIC_CONSTRAINTS, OID_X509_EXT_KEY_USAGE, OID_X509_EXT_NAME_CONSTRAINTS,
 };
+use x509_validator::policy_builder::{
+    Either, OneOfTuple2, OneOfWrappedOptional, Tuple2, WrappedOptional,
+};
 use x509_validator::unverified_chain::UnverifiedCertificateChain;
-use x509_validator::{Oid, PolicyEvaluationResult, ValidationPolicy, PolicyFailureReason};
+use x509_validator::{
+    Oid, PolicyEvaluationResult, PolicyFailureReason, ValidationPolicy, one_of, policy,
+};
 use x509_validator_testkit::{chain_of, self_signed_ca};
-use x509_validator::policy_builder::{Tuple2, Either, WrappedOptional, OneOfTuple2, OneOfWrappedOptional};
-use x509_validator::{policy, one_of};
 
 struct AlwaysMeetsPolicy;
 
@@ -15,7 +18,10 @@ impl ValidationPolicy for AlwaysMeetsPolicy {
     fn verifying_critical_extensions(&self) -> Vec<Oid<'static>> {
         vec![]
     }
-    fn chain_meets_policy_requirements(&self, _chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
+    fn chain_meets_policy_requirements(
+        &self,
+        _chain: &UnverifiedCertificateChain<'_>,
+    ) -> PolicyEvaluationResult {
         Ok(())
     }
 }
@@ -26,7 +32,10 @@ impl ValidationPolicy for AlwaysFailsPolicy {
     fn verifying_critical_extensions(&self) -> Vec<Oid<'static>> {
         vec![]
     }
-    fn chain_meets_policy_requirements(&self, _chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
+    fn chain_meets_policy_requirements(
+        &self,
+        _chain: &UnverifiedCertificateChain<'_>,
+    ) -> PolicyEvaluationResult {
         Err(PolicyFailureReason::new("always fails"))
     }
 }
@@ -38,11 +47,17 @@ struct PolicyWithExtensions {
 
 impl PolicyWithExtensions {
     fn meets(extensions: Vec<Oid<'static>>) -> Self {
-        Self { extensions, meets_policy: true }
+        Self {
+            extensions,
+            meets_policy: true,
+        }
     }
     #[allow(dead_code)]
     fn fails(extensions: Vec<Oid<'static>>) -> Self {
-        Self { extensions, meets_policy: false }
+        Self {
+            extensions,
+            meets_policy: false,
+        }
     }
 }
 
@@ -50,11 +65,16 @@ impl ValidationPolicy for PolicyWithExtensions {
     fn verifying_critical_extensions(&self) -> Vec<Oid<'static>> {
         self.extensions.clone()
     }
-    fn chain_meets_policy_requirements(&self, _chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
+    fn chain_meets_policy_requirements(
+        &self,
+        _chain: &UnverifiedCertificateChain<'_>,
+    ) -> PolicyEvaluationResult {
         if self.meets_policy {
             Ok(())
         } else {
-            Err(PolicyFailureReason::new("PolicyWithExtensions configured to fail"))
+            Err(PolicyFailureReason::new(
+                "PolicyWithExtensions configured to fail",
+            ))
         }
     }
 }
@@ -82,14 +102,22 @@ fn tuple2_passes_when_both_policies_pass() {
 fn tuple2_fails_when_first_policy_fails() {
     let chain = chain_of(vec![self_signed_ca("root")]);
     let policy = Tuple2::new(AlwaysFailsPolicy, AlwaysMeetsPolicy);
-    assert!(policy.chain_meets_policy_requirements(&chain).is_err());
+    assert!(
+        policy
+            .chain_meets_policy_requirements(&chain)
+            .is_err()
+    );
 }
 
 #[test]
 fn tuple2_fails_when_second_policy_fails() {
     let chain = chain_of(vec![self_signed_ca("root")]);
     let policy = Tuple2::new(AlwaysMeetsPolicy, AlwaysFailsPolicy);
-    assert!(policy.chain_meets_policy_requirements(&chain).is_err());
+    assert!(
+        policy
+            .chain_meets_policy_requirements(&chain)
+            .is_err()
+    );
 }
 
 #[test]
@@ -125,7 +153,11 @@ fn wrapped_optional_none_auto_passes() {
 fn wrapped_optional_some_delegates_to_inner_policy() {
     let chain = chain_of(vec![self_signed_ca("root")]);
     let policy = WrappedOptional::new(Some(AlwaysFailsPolicy));
-    assert!(policy.chain_meets_policy_requirements(&chain).is_err());
+    assert!(
+        policy
+            .chain_meets_policy_requirements(&chain)
+            .is_err()
+    );
 }
 
 #[test]
@@ -141,7 +173,11 @@ fn all_of_policies_wraps_a_tuple2_chain() {
     use x509_validator::AllOfPolicies;
     let chain = chain_of(vec![self_signed_ca("root")]);
     let policy = AllOfPolicies::new(Tuple2::new(AlwaysMeetsPolicy, AlwaysFailsPolicy));
-    assert!(policy.chain_meets_policy_requirements(&chain).is_err());
+    assert!(
+        policy
+            .chain_meets_policy_requirements(&chain)
+            .is_err()
+    );
 }
 
 #[test]
@@ -167,7 +203,11 @@ fn one_of_policies_fails_when_the_active_either_arm_fails() {
     let chain = chain_of(vec![self_signed_ca("root")]);
     let policy: OneOfPolicies<Either<AlwaysFailsPolicy, AlwaysMeetsPolicy>> =
         OneOfPolicies::new(Either::First(AlwaysFailsPolicy));
-    assert!(policy.chain_meets_policy_requirements(&chain).is_err());
+    assert!(
+        policy
+            .chain_meets_policy_requirements(&chain)
+            .is_err()
+    );
 }
 
 #[test]
@@ -196,7 +236,11 @@ fn policy_macro_flat_sequence_fails_if_any_member_fails() {
         AlwaysFailsPolicy;
         AlwaysMeetsPolicy
     };
-    assert!(built.chain_meets_policy_requirements(&chain).is_err());
+    assert!(
+        built
+            .chain_meets_policy_requirements(&chain)
+            .is_err()
+    );
 }
 
 #[test]
@@ -236,7 +280,11 @@ fn policy_macro_bare_if_true_evaluates_inner_policy() {
             AlwaysFailsPolicy
         }
     };
-    assert!(built.chain_meets_policy_requirements(&chain).is_err());
+    assert!(
+        built
+            .chain_meets_policy_requirements(&chain)
+            .is_err()
+    );
 }
 
 #[test]
@@ -300,22 +348,36 @@ fn one_of_tuple2_fails_with_joined_reason_when_both_fail() {
     let policy = OneOfTuple2::new(AlwaysFailsPolicy, AlwaysFailsPolicy);
     let result = policy.chain_meets_policy_requirements(&chain);
     let err = result.expect_err("both alternatives fail");
-    assert!(err.to_string().contains("and"), "expected joined failure reason, got: {err}");
+    assert!(
+        err.to_string().contains("and"),
+        "expected joined failure reason, got: {err}"
+    );
 }
 
 #[test]
 fn one_of_tuple2_extensions_are_intersection_not_union() {
-    let first = PolicyWithExtensions::meets(vec![OID_X509_EXT_KEY_USAGE, OID_X509_EXT_BASIC_CONSTRAINTS]);
-    let second = PolicyWithExtensions::meets(vec![OID_X509_EXT_BASIC_CONSTRAINTS, OID_X509_EXT_NAME_CONSTRAINTS]);
+    let first =
+        PolicyWithExtensions::meets(vec![OID_X509_EXT_KEY_USAGE, OID_X509_EXT_BASIC_CONSTRAINTS]);
+    let second = PolicyWithExtensions::meets(vec![
+        OID_X509_EXT_BASIC_CONSTRAINTS,
+        OID_X509_EXT_NAME_CONSTRAINTS,
+    ]);
     let policy = OneOfTuple2::new(first, second);
-    assert_eq!(policy.verifying_critical_extensions(), vec![OID_X509_EXT_BASIC_CONSTRAINTS]);
+    assert_eq!(
+        policy.verifying_critical_extensions(),
+        vec![OID_X509_EXT_BASIC_CONSTRAINTS]
+    );
 }
 
 #[test]
 fn one_of_wrapped_optional_none_fails() {
     let chain = chain_of(vec![self_signed_ca("root")]);
     let policy: OneOfWrappedOptional<AlwaysMeetsPolicy> = OneOfWrappedOptional::new(None);
-    assert!(policy.chain_meets_policy_requirements(&chain).is_err());
+    assert!(
+        policy
+            .chain_meets_policy_requirements(&chain)
+            .is_err()
+    );
 }
 
 #[test]
@@ -351,5 +413,9 @@ fn one_of_macro_bare_if_false_fails_not_auto_passes() {
             AlwaysMeetsPolicy
         }
     };
-    assert!(built.chain_meets_policy_requirements(&chain).is_err());
+    assert!(
+        built
+            .chain_meets_policy_requirements(&chain)
+            .is_err()
+    );
 }

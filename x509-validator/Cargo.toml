@@ -2,7 +2,7 @@
 name = "x509-validator"
 version = "0.1.0"
 edition.workspace = true
-rust-version = "1.85"
+rust-version = "1.88"
 description = "X.509 certificate chain validation with RFC 5280 and server-identity policies."
 repository = "https://github.com/namecare/x509-validator"
 homepage = "https://github.com/namecare/x509-validator"
@@ -15,8 +15,11 @@ keywords = ["crypto", "x509"]
 autobenches = false
 exclude = ["tests/**"]
 
+[lints]
+workspace = true
+
 [dependencies]
-x509-parser = "0.18.1"
+x509-parser.workspace = true
 thiserror = "2.0.20"
 
 # Cryptography - AWS-LC backend (optional)
@@ -27,7 +30,7 @@ aws-lc-sys = { version = "0.44.0", optional = true }
 ring = { version = "0.17.14", optional = true }
 
 # Cryptography - RustCrypto backend (optional)
-rsa = { version = "0.10.0-rc.18", optional = true }
+rsa = { workspace = true, optional = true }
 p256 = { version = "0.14.0", features = ["ecdsa"], optional = true }
 p384 = { version = "0.14.0", features = ["ecdsa"], optional = true }
 ed25519-dalek = { version = "3.0.0", optional = true }
@@ -36,28 +39,22 @@ sha2 = { version = "0.11.0", features = ["oid"], optional = true }
 signature = { version = "3.0.0", optional = true }
 
 [dev-dependencies]
-x509-validator-testkit = { path = "../x509-validator-testkit" }
-rand = { version = "0.10.2", features = ["thread_rng"] }
-# `hazmat` exposes the unchecked key generator, which tests need to build the undersized keys
-# that the RSA modulus bound is supposed to reject.
-rsa = { version = "0.10.0-rc.18", features = ["hazmat"] }
+x509-validator-testkit.workspace = true
+rand.workspace = true
+rsa = { workspace = true, features = ["hazmat"] }
 
 [features]
 aws_lc = ["dep:aws-lc-rs", "dep:aws-lc-sys"]
 ring = ["dep:ring"]
 rust_crypto = [
-    "dep:rsa",
-    "dep:p256",
-    "dep:p384",
-    "dep:ed25519-dalek",
-    "dep:sha1",
-    "dep:sha2",
-    "dep:signature",
+  "dep:rsa",
+  "dep:p256",
+  "dep:p384",
+  "dep:ed25519-dalek",
+  "dep:sha1",
+  "dep:sha2",
+  "dep:signature",
 ]
 
 [package.metadata.cargo_check_external_types]
-allowed_external_types = [
-    "x509_parser::*",
-    "asn1_rs::*",
-    "oid_registry::*",
-]
+allowed_external_types = ["x509_parser::*", "asn1_rs", "asn1_rs::*", "oid_registry", "der_parser"]

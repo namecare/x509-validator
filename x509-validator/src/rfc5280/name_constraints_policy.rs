@@ -1,8 +1,8 @@
-use crate::{ValidationPolicy, PolicyEvaluationResult, PolicyFailureReason};
 use crate::der_parser::Oid;
 use crate::extensions::{GeneralName, GeneralSubtree};
 use crate::oid_registry::OID_X509_EXT_NAME_CONSTRAINTS;
 use crate::unverified_chain::UnverifiedCertificateChain;
+use crate::{PolicyEvaluationResult, PolicyFailureReason, ValidationPolicy};
 
 /// id-ce-nameConstraints, RFC 5280 §4.2.1.10: 2.5.29.30.
 fn name_constraints_oid() -> Oid<'static> {
@@ -19,7 +19,10 @@ impl ValidationPolicy for NameConstraintsPolicy {
         vec![name_constraints_oid()]
     }
 
-    fn chain_meets_policy_requirements(&self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
+    fn chain_meets_policy_requirements(
+        &self,
+        chain: &UnverifiedCertificateChain<'_>,
+    ) -> PolicyEvaluationResult {
         // The rules for name constraints come from https://www.rfc-editor.org/rfc/rfc5280#section-4.2.1.10.
         //
         // Some notes:
@@ -51,15 +54,20 @@ impl ValidationPolicy for NameConstraintsPolicy {
 
 impl NameConstraintsPolicy {
     fn validate_name_constraints(
-        chain: &UnverifiedCertificateChain,
-        issuer: &crate::Certificate,
+        chain: &UnverifiedCertificateChain<'_>,
+        issuer: &crate::Certificate<'_>,
         subject_indices: &[usize],
     ) -> PolicyEvaluationResult {
         // If we couldn't decode these, fail validation.
         let constraints = issuer
             .tbs_certificate
             .name_constraints()
-            .map_err(|error| PolicyFailureReason::new(format!("unable to decode name constraints from {:?}: {}", issuer, error)))?;
+            .map_err(|error| {
+                PolicyFailureReason::new(format!(
+                    "unable to decode name constraints from {:?}: {}",
+                    issuer, error
+                ))
+            })?;
 
         let Some(constraints) = constraints else {
             // No name constraints to enforce, we're done.
@@ -83,13 +91,20 @@ impl NameConstraintsPolicy {
         Ok(())
     }
 
-    fn names<'a>(cert: &'a crate::Certificate<'a>) -> Result<Vec<GeneralName<'a>>, PolicyFailureReason> {
+    fn names<'a>(
+        cert: &'a crate::Certificate<'a>,
+    ) -> Result<Vec<GeneralName<'a>>, PolicyFailureReason> {
         let mut names = vec![GeneralName::DirectoryName(cert.subject().clone())];
 
         let san = cert
             .tbs_certificate
             .subject_alternative_name()
-            .map_err(|error| PolicyFailureReason::new(format!("unable to decode subject alternative name from {:?}: {}", cert, error)))?;
+            .map_err(|error| {
+                PolicyFailureReason::new(format!(
+                    "unable to decode subject alternative name from {:?}: {}",
+                    cert, error
+                ))
+            })?;
 
         if let Some(san) = san {
             for name in &san.value.general_names {
@@ -115,22 +130,32 @@ impl NameConstraintsPolicy {
     /// RFC 5280 requires rejecting a chain constrained by something we cannot evaluate, so this
     /// is decided by the constraint alone: whether the certificate happens to carry a name of the
     /// same form has no bearing on it.
-    fn constraint_kind_is_unsupported(constraint: &GeneralName) -> bool {
+    fn constraint_kind_is_unsupported(constraint: &GeneralName<'_>) -> bool {
         !matches!(
             constraint,
-            GeneralName::DNSName(_) | GeneralName::IPAddress(_) | GeneralName::URI(_) | GeneralName::DirectoryName(_)
+            GeneralName::DNSName(_)
+                | GeneralName::IPAddress(_)
+                | GeneralName::URI(_)
+                | GeneralName::DirectoryName(_)
         )
     }
 
-    fn validate_excluded_subtrees(excluded_subtrees: &[GeneralSubtree], name: &GeneralName) -> PolicyEvaluationResult {
+    fn validate_excluded_subtrees(
+        excluded_subtrees: &[GeneralSubtree<'_>],
+        name: &GeneralName<'_>,
+    ) -> PolicyEvaluationResult {
         // For excluded trees, if _any_ match then the name is forbidden.
         for subtree in excluded_subtrees {
             let constraint = &subtree.base;
 
-            if matches!(constraint, GeneralName::DirectoryName(_)) && matches!(name, GeneralName::DirectoryName(_)) {
+            if matches!(constraint, GeneralName::DirectoryName(_))
+                && matches!(name, GeneralName::DirectoryName(_))
+            {
                 // We immediately reject the chain if there is a directoryName name constraint involved: correct
                 // validation requires the full RFC 5280 comparison algorithm which we currently do not implement.
-                return Err(PolicyFailureReason::new("directoryName name constraints are not supported"));
+                return Err(PolicyFailureReason::new(
+                    "directoryName name constraints are not supported",
+                ));
             }
 
             if Self::constraint_kind_is_unsupported(constraint) {
@@ -139,20 +164,30 @@ impl NameConstraintsPolicy {
                 // Of the set that's currently unsupported, we should probably support rfc822Name (a.k.a. email address).
                 // For now we're omitting it, but at some point someone is going to run into this limitation and we'll want to come
                 // back and fix it.
-                return Err(PolicyFailureReason::new("unable to validate excluded subtree, unsupported constraint kind"));
+                return Err(PolicyFailureReason::new(
+                    "unable to validate excluded subtree, unsupported constraint kind",
+                ));
             }
 
             let matched = match (name, constraint) {
                 (GeneralName::DNSName(name_value), GeneralName::DNSName(constraint_value)) => {
-                    Self::dns_name_matches_constraint(name_value.as_bytes(), constraint_value.as_bytes())
+                    Self::dns_name_matches_constraint(
+                        name_value.as_bytes(),
+                        constraint_value.as_bytes(),
+                    )
                 }
                 (GeneralName::IPAddress(name_value), GeneralName::IPAddress(constraint_value)) => {
                     Self::ip_address_matches_constraint(name_value, constraint_value)
                 }
                 (GeneralName::URI(name_value), GeneralName::URI(constraint_value)) => {
-                    Self::uri_name_matches_constraint(name_value.as_bytes(), constraint_value.as_bytes())
+                    Self::uri_name_matches_constraint(
+                        name_value.as_bytes(),
+                        constraint_value.as_bytes(),
+                    )
                 }
-                (GeneralName::DirectoryName(_), GeneralName::DirectoryName(_)) => unreachable!("handled above"),
+                (GeneralName::DirectoryName(_), GeneralName::DirectoryName(_)) => {
+                    unreachable!("handled above")
+                }
                 // We support this constraint's kind, but the current name isn't of that type.
                 _ => continue,
             };
@@ -166,16 +201,23 @@ impl NameConstraintsPolicy {
         Ok(())
     }
 
-    fn validate_permitted_subtrees(permitted_subtrees: &[GeneralSubtree], name: &GeneralName) -> PolicyEvaluationResult {
+    fn validate_permitted_subtrees(
+        permitted_subtrees: &[GeneralSubtree<'_>],
+        name: &GeneralName<'_>,
+    ) -> PolicyEvaluationResult {
         let mut evaluated_at_least_one_constraint = false;
 
         for subtree in permitted_subtrees {
             let constraint = &subtree.base;
 
-            if matches!(constraint, GeneralName::DirectoryName(_)) && matches!(name, GeneralName::DirectoryName(_)) {
+            if matches!(constraint, GeneralName::DirectoryName(_))
+                && matches!(name, GeneralName::DirectoryName(_))
+            {
                 // We immediately reject the chain if there is a directoryName name constraint involved: correct
                 // validation requires the full RFC 5280 comparison algorithm which we currently do not implement.
-                return Err(PolicyFailureReason::new("directoryName name constraints are not supported"));
+                return Err(PolicyFailureReason::new(
+                    "directoryName name constraints are not supported",
+                ));
             }
 
             if Self::constraint_kind_is_unsupported(constraint) {
@@ -184,14 +226,19 @@ impl NameConstraintsPolicy {
                 // Of the set that's currently unsupported, we should probably support rfc822Name (a.k.a. email address).
                 // For now we're omitting it, but at some point someone is going to run into this limitation and we'll want to come
                 // back and fix it.
-                return Err(PolicyFailureReason::new("unable to validate permitted subtree, unsupported constraint kind"));
+                return Err(PolicyFailureReason::new(
+                    "unable to validate permitted subtree, unsupported constraint kind",
+                ));
             }
 
             // A match on any of these means we're good.
             let matched = match (name, constraint) {
                 (GeneralName::DNSName(name_value), GeneralName::DNSName(constraint_value)) => {
                     evaluated_at_least_one_constraint = true;
-                    Self::dns_name_matches_constraint(name_value.as_bytes(), constraint_value.as_bytes())
+                    Self::dns_name_matches_constraint(
+                        name_value.as_bytes(),
+                        constraint_value.as_bytes(),
+                    )
                 }
                 (GeneralName::IPAddress(name_value), GeneralName::IPAddress(constraint_value)) => {
                     evaluated_at_least_one_constraint = true;
@@ -199,9 +246,14 @@ impl NameConstraintsPolicy {
                 }
                 (GeneralName::URI(name_value), GeneralName::URI(constraint_value)) => {
                     evaluated_at_least_one_constraint = true;
-                    Self::uri_name_matches_constraint(name_value.as_bytes(), constraint_value.as_bytes())
+                    Self::uri_name_matches_constraint(
+                        name_value.as_bytes(),
+                        constraint_value.as_bytes(),
+                    )
                 }
-                (GeneralName::DirectoryName(_), GeneralName::DirectoryName(_)) => unreachable!("handled above"),
+                (GeneralName::DirectoryName(_), GeneralName::DirectoryName(_)) => {
+                    unreachable!("handled above")
+                }
                 // We support this constraint's kind, but the current name isn't of that type. This means we
                 // didn't evaluate this constraint.
                 _ => continue,
@@ -217,6 +269,8 @@ impl NameConstraintsPolicy {
             return Ok(());
         }
 
-        Err(PolicyFailureReason::new("unable to validate permitted subtree, no matches"))
+        Err(PolicyFailureReason::new(
+            "unable to validate permitted subtree, no matches",
+        ))
     }
 }

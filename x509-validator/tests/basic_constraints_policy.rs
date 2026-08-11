@@ -1,7 +1,6 @@
-use x509_validator::{BasicConstraintsPolicy, ValidationPolicy};
 use x509_validator::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS;
 use x509_validator::unverified_chain::UnverifiedCertificateChain;
-use x509_validator::{Certificate, CertificateExt};
+use x509_validator::{BasicConstraintsPolicy, Certificate, CertificateExt, ValidationPolicy};
 use x509_validator_testkit::rcgen::CertificateParams;
 use x509_validator_testkit::{chain_of, issue_ca, issue_leaf, self_signed_ca_with};
 
@@ -31,7 +30,11 @@ fn self_signed_leaf_without_ca_bit_is_rejected() {
     });
     let chain = chain_of(vec![this.der]);
     let policy = BasicConstraintsPolicy;
-    assert!(policy.chain_meets_policy_requirements(&chain).is_err());
+    assert!(
+        policy
+            .chain_meets_policy_requirements(&chain)
+            .is_err()
+    );
 }
 
 #[test]
@@ -40,7 +43,7 @@ fn non_ca_intermediate_is_rejected() {
     // "intermediate" is issued as a non-CA leaf, then used to sign
     // another cert anyway — its basicConstraints has no CA bit set.
     let intermediate = issue_leaf("intermediate", &[], &root);
-    let intermediate_der: &'static [u8] = Box::leak(intermediate.clone().into_boxed_slice());
+    let intermediate_der: &'static [u8] = Box::leak(intermediate.into_boxed_slice());
     let intermediate_cert = Certificate::parse(intermediate_der).unwrap();
     let leaf = issue_leaf("leaf", &["www.example.com"], &root);
 
@@ -56,7 +59,11 @@ fn non_ca_intermediate_is_rejected() {
         },
     ]);
     let policy = BasicConstraintsPolicy;
-    assert!(policy.chain_meets_policy_requirements(&chain).is_err());
+    assert!(
+        policy
+            .chain_meets_policy_requirements(&chain)
+            .is_err()
+    );
 }
 
 #[test]
@@ -77,7 +84,11 @@ fn path_length_constraint_violated_is_rejected() {
     let leaf = issue_leaf("leaf", &["www.example.com"], &intermediate2);
     let chain = chain_of(vec![leaf, intermediate2.der, intermediate1.der, root.der]);
     let policy = BasicConstraintsPolicy;
-    assert!(policy.chain_meets_policy_requirements(&chain).is_err());
+    assert!(
+        policy
+            .chain_meets_policy_requirements(&chain)
+            .is_err()
+    );
 }
 
 #[test]

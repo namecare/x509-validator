@@ -1,0 +1,5 @@
+[default.extend-words]
+FO = "FO"
+
+[files]
+extend-exclude = ["*.der", "x509-validator-bench/compare/data/", "fuzz/corpus/"]

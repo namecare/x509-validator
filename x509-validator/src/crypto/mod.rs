@@ -1,3 +1,4 @@
+#[cfg(any(feature = "aws_lc", feature = "ring", feature = "rust_crypto"))]
 #[macro_use]
 mod backend;
 
@@ -8,9 +9,10 @@ pub mod ring;
 #[cfg(feature = "rust_crypto")]
 pub mod rust_crypto;
 
-use std::fmt::Debug;
-use crate::{oid_registry, Any, RsaSsaPssParams};
+use core::fmt::Debug;
+
 use crate::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
+use crate::{Any, RsaSsaPssParams, oid_registry};
 
 #[derive(thiserror::Error, Debug)]
 pub enum CryptoError {
@@ -32,8 +34,8 @@ pub enum CryptoError {
 pub trait SignatureVerifier: Send + Sync + Debug {
     fn verify_signature(
         &self,
-        algorithm: &AlgorithmIdentifier,
-        public_key: &SubjectPublicKeyInfo,
+        algorithm: &AlgorithmIdentifier<'_>,
+        public_key: &SubjectPublicKeyInfo<'_>,
         message: &[u8],
         signature: &[u8],
     ) -> Result<(), CryptoError>;
@@ -53,8 +55,8 @@ provider explicitly to Validator::with_policy_and_backend instead of Validator::
 impl SignatureVerifier for UndeterminedCryptoBackend {
     fn verify_signature(
         &self,
-        _algorithm: &AlgorithmIdentifier,
-        _public_key: &SubjectPublicKeyInfo,
+        _algorithm: &AlgorithmIdentifier<'_>,
+        _public_key: &SubjectPublicKeyInfo<'_>,
         _message: &[u8],
         _signature: &[u8],
     ) -> Result<(), CryptoError> {
@@ -64,17 +66,29 @@ impl SignatureVerifier for UndeterminedCryptoBackend {
 
 /// The crypto backend determined by this crate's feature flags.
 pub fn default_provider() -> &'static dyn SignatureVerifier {
-    #[cfg(all(feature = "aws_lc", not(feature = "ring"), not(feature = "rust_crypto")))]
+    #[cfg(all(
+        feature = "aws_lc",
+        not(feature = "ring"),
+        not(feature = "rust_crypto")
+    ))]
     {
         return &aws_lc::DEFAULT_PROVIDER;
     }
 
-    #[cfg(all(feature = "ring", not(feature = "aws_lc"), not(feature = "rust_crypto")))]
+    #[cfg(all(
+        feature = "ring",
+        not(feature = "aws_lc"),
+        not(feature = "rust_crypto")
+    ))]
     {
         return &ring::DEFAULT_PROVIDER;
     }
 
-    #[cfg(all(feature = "rust_crypto", not(feature = "aws_lc"), not(feature = "ring")))]
+    #[cfg(all(
+        feature = "rust_crypto",
+        not(feature = "aws_lc"),
+        not(feature = "ring")
+    ))]
     {
         return &rust_crypto::DEFAULT_PROVIDER;
     }
@@ -88,7 +102,7 @@ pub fn default_provider() -> &'static dyn SignatureVerifier {
     }
 }
 
-pub fn rsa_pss_digest_bits(params: Option<&Any>) -> Option<usize> {
+pub fn rsa_pss_digest_bits(params: Option<&Any<'_>>) -> Option<usize> {
     let params = params?;
     let params = RsaSsaPssParams::try_from(params).ok()?;
     let hash_algorithm = params.hash_algorithm_oid();
@@ -106,18 +120,21 @@ pub fn rsa_pss_digest_bits(params: Option<&Any>) -> Option<usize> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use x509_validator_testkit::rcgen::{CertificateParams, KeyPair};
-    use crate::CertificateExt;
-    use crate::Certificate;
-    use crate::FromDer;
+
+    use super::*;
+    use crate::{Certificate, CertificateExt, FromDer};
 
     /// A real self-signed certificate's `AlgorithmIdentifier` and
     /// `SubjectPublicKeyInfo`, for tests that only need *some* valid values
     /// of these types rather than to exercise a specific algorithm.
     fn algorithm_and_spki() -> (AlgorithmIdentifier<'static>, SubjectPublicKeyInfo<'static>) {
         let key_pair = KeyPair::generate().expect("generate key pair");
-        let der = CertificateParams::default().self_signed(&key_pair).expect("self-sign").der().to_vec();
+        let der = CertificateParams::default()
+            .self_signed(&key_pair)
+            .expect("self-sign")
+            .der()
+            .to_vec();
         let der: &'static [u8] = Box::leak(der.into_boxed_slice());
         let cert = Certificate::parse(der).expect("parse certificate");
         (cert.signature_algorithm, cert.tbs_certificate.subject_pki)
@@ -131,12 +148,15 @@ mod tests {
     impl SignatureVerifier for TaggedVerifier {
         fn verify_signature(
             &self,
-            algorithm: &AlgorithmIdentifier,
-            _public_key: &SubjectPublicKeyInfo,
+            algorithm: &AlgorithmIdentifier<'_>,
+            _public_key: &SubjectPublicKeyInfo<'_>,
             _message: &[u8],
             _signature: &[u8],
         ) -> Result<(), CryptoError> {
-            Err(CryptoError::InvalidKey(format!("{}-was-called", algorithm.algorithm)))
+            Err(CryptoError::InvalidKey(format!(
+                "{}-was-called",
+                algorithm.algorithm
+            )))
         }
     }
 
@@ -147,8 +167,8 @@ mod tests {
     impl SignatureVerifier for FailureVerifier {
         fn verify_signature(
             &self,
-            _algorithm: &AlgorithmIdentifier,
-            _public_key: &SubjectPublicKeyInfo,
+            _algorithm: &AlgorithmIdentifier<'_>,
+            _public_key: &SubjectPublicKeyInfo<'_>,
             _message: &[u8],
             _signature: &[u8],
         ) -> Result<(), CryptoError> {
@@ -187,7 +207,9 @@ mod tests {
     #[test]
     fn undecodable_parameters_yield_no_digest() {
         // A NULL where `RSASSA-PSS-params` (a SEQUENCE) is expected.
-        let params = Any::from_der(&[0x05, 0x00]).expect("parse NULL").1;
+        let params = Any::from_der(&[0x05, 0x00])
+            .expect("parse NULL")
+            .1;
 
         assert_eq!(rsa_pss_digest_bits(Some(&params)), None);
     }
@@ -216,7 +238,9 @@ mod tests {
                 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, last_octet,
             ];
             let der = pss_params_der(&oid_der);
-            let params = Any::from_der(&der).expect("parse PSS params").1;
+            let params = Any::from_der(&der)
+                .expect("parse PSS params")
+                .1;
 
             assert_eq!(rsa_pss_digest_bits(Some(&params)), Some(expected));
         }
@@ -227,7 +251,9 @@ mod tests {
         // OID 1.3.14.3.2.26 = SHA-1, which no backend supports for RSA-PSS.
         let oid_der = [0x06, 0x05, 0x2b, 0x0e, 0x03, 0x02, 0x1a];
         let der = pss_params_der(&oid_der);
-        let params = Any::from_der(&der).expect("parse PSS params").1;
+        let params = Any::from_der(&der)
+            .expect("parse PSS params")
+            .1;
 
         assert_eq!(rsa_pss_digest_bits(Some(&params)), None);
     }

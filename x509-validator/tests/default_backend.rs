@@ -16,7 +16,11 @@ use x509_validator_testkit::rcgen::{CertificateParams, KeyPair};
 /// ECDSA P-256 / SHA-256, which every backend supports.
 fn self_signed_certificate() -> Certificate<'static> {
     let key_pair = KeyPair::generate().expect("generate key pair");
-    let der = CertificateParams::default().self_signed(&key_pair).expect("self-sign").der().to_vec();
+    let der = CertificateParams::default()
+        .self_signed(&key_pair)
+        .expect("self-sign")
+        .der()
+        .to_vec();
     let der: &'static [u8] = Box::leak(der.into_boxed_slice());
     Certificate::parse(der).expect("parse certificate")
 }
@@ -24,9 +28,21 @@ fn self_signed_certificate() -> Certificate<'static> {
 /// With exactly one backend enabled, the default provider is that backend and
 /// really verifies, rather than being a placeholder that defers a panic.
 #[cfg(any(
-    all(feature = "aws_lc", not(feature = "ring"), not(feature = "rust_crypto")),
-    all(feature = "ring", not(feature = "aws_lc"), not(feature = "rust_crypto")),
-    all(feature = "rust_crypto", not(feature = "aws_lc"), not(feature = "ring")),
+    all(
+        feature = "aws_lc",
+        not(feature = "ring"),
+        not(feature = "rust_crypto")
+    ),
+    all(
+        feature = "ring",
+        not(feature = "aws_lc"),
+        not(feature = "rust_crypto")
+    ),
+    all(
+        feature = "rust_crypto",
+        not(feature = "aws_lc"),
+        not(feature = "ring")
+    ),
 ))]
 #[test]
 fn single_backend_feature_determines_a_working_provider() {
@@ -39,16 +55,31 @@ fn single_backend_feature_determines_a_working_provider() {
         cert.signature_value.as_ref(),
     );
 
-    assert!(result.is_ok(), "expected the self-signature to verify, got {result:?}");
+    assert!(
+        result.is_ok(),
+        "expected the self-signature to verify, got {result:?}"
+    );
 }
 
 /// With no backend enabled, or several, the default provider panics on use.
 /// The message names the features to choose from, so the panic diagnoses the
 /// build misconfiguration that caused it.
 #[cfg(not(any(
-    all(feature = "aws_lc", not(feature = "ring"), not(feature = "rust_crypto")),
-    all(feature = "ring", not(feature = "aws_lc"), not(feature = "rust_crypto")),
-    all(feature = "rust_crypto", not(feature = "aws_lc"), not(feature = "ring")),
+    all(
+        feature = "aws_lc",
+        not(feature = "ring"),
+        not(feature = "rust_crypto")
+    ),
+    all(
+        feature = "ring",
+        not(feature = "aws_lc"),
+        not(feature = "rust_crypto")
+    ),
+    all(
+        feature = "rust_crypto",
+        not(feature = "aws_lc"),
+        not(feature = "ring")
+    ),
 )))]
 #[test]
 fn undetermined_backend_panics_naming_the_features() {
@@ -56,7 +87,7 @@ fn undetermined_backend_panics_naming_the_features() {
 
     // `AssertUnwindSafe`: the certificate is only read, and the test ends
     // with the catch, so no witnessed broken invariant can escape.
-    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+    let panic = std::panic::catch_unwind(core::panic::AssertUnwindSafe(|| {
         default_provider().verify_signature(
             &cert.signature_algorithm,
             cert.public_key(),
@@ -73,6 +104,9 @@ fn undetermined_backend_panics_naming_the_features() {
         .expect("panic payload should be a string");
 
     for feature in ["aws_lc", "ring", "rust_crypto"] {
-        assert!(message.contains(feature), "panic message should name the `{feature}` feature, got: {message}");
+        assert!(
+            message.contains(feature),
+            "panic message should name the `{feature}` feature, got: {message}"
+        );
     }
 }

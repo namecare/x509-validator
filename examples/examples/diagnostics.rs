@@ -23,12 +23,14 @@ fn main() {
     let roots = CertificateStore::from_iter([unrelated.root.clone()]);
     let intermediates = CertificateStore::from_iter([chain.intermediate.clone()]);
 
-    let validator = Validator::with_policy_and_backend(roots, RFC5280Policy::new(validation_time()), BACKEND);
+    let validator =
+        Validator::with_policy_and_backend(roots, RFC5280Policy::new(validation_time()), BACKEND);
 
     let mut trace = Vec::new();
-    let result = validator.validate_with_diagnostics(&chain.leaf, &intermediates, &mut |diagnostic| {
-        trace.push(diagnostic.to_string());
-    });
+    let result =
+        validator.validate_with_diagnostics(&chain.leaf, &intermediates, &mut |diagnostic| {
+            trace.push(diagnostic.to_string());
+        });
 
     println!("chain building trace ({} events):", trace.len());
     for (step, event) in trace.iter().enumerate() {
@@ -51,7 +53,8 @@ fn main() {
     }
 
     let roots = CertificateStore::from_iter([unrelated.root.clone()]);
-    let validator = Validator::with_policy_and_backend(roots, RFC5280Policy::new(validation_time()), BACKEND);
+    let validator =
+        Validator::with_policy_and_backend(roots, RFC5280Policy::new(validation_time()), BACKEND);
 
     let mut last = None;
     let _ = validator.validate_with_diagnostics(&chain.leaf, &intermediates, &mut |diagnostic| {

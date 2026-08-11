@@ -1,13 +1,15 @@
 pub use x509_parser::certificate::*;
-
 use x509_parser::error::X509Error;
 use x509_parser::nom;
-use x509_parser::objects::{oid2sn, oid_registry};
+use x509_parser::objects::{oid_registry, oid2sn};
 use x509_parser::prelude::FromDer;
+
+use crate::GeneralName;
 use crate::asn1_rs::Oid;
 use crate::extensions::ParsedExtension;
-use crate::oid_registry::{OID_X509_EXT_AUTHORITY_KEY_IDENTIFIER, OID_X509_EXT_SUBJECT_KEY_IDENTIFIER};
-use crate::GeneralName;
+use crate::oid_registry::{
+    OID_X509_EXT_AUTHORITY_KEY_IDENTIFIER, OID_X509_EXT_SUBJECT_KEY_IDENTIFIER,
+};
 
 pub type Certificate<'a> = X509Certificate<'a>;
 
@@ -63,7 +65,10 @@ impl<'a> CertificateExt<'a> for Certificate<'a> {
             .get_extension_unique(&OID_X509_EXT_AUTHORITY_KEY_IDENTIFIER)
             .ok()??;
         match ext.parsed_extension() {
-            ParsedExtension::AuthorityKeyIdentifier(aki) => aki.key_identifier.as_ref().map(|id| id.0),
+            ParsedExtension::AuthorityKeyIdentifier(aki) => aki
+                .key_identifier
+                .as_ref()
+                .map(|id| id.0),
             _ => None,
         }
     }
@@ -143,27 +148,38 @@ fn format_extensions(cert: &Certificate<'_>) -> String {
 #[cfg(test)]
 mod tests {
     use x509_validator_testkit::{cert, issue_ca, issue_leaf, self_signed_ca_with};
+
     use crate::certificate::format_certificate;
 
     fn assert_no_byte_dump(rendered: &str) {
         assert!(!rendered.contains('\n'), "summary must be a single line");
-        assert!(rendered.len() < 1024, "summary is suspiciously long: {} bytes", rendered.len());
+        assert!(
+            rendered.len() < 1024,
+            "summary is suspiciously long: {} bytes",
+            rendered.len()
+        );
 
         let digit_runs = rendered
             .split(|c: char| !c.is_ascii_digit() && c != ',' && c != ' ')
             .filter(|run| run.matches(',').count() >= 3)
             .count();
-        assert_eq!(digit_runs, 0, "summary appears to contain a byte-array dump: {rendered}");
+        assert_eq!(
+            digit_runs, 0,
+            "summary appears to contain a byte-array dump: {rendered}"
+        );
     }
 
     #[test]
     fn formats_self_signed_ca() {
         let ca = self_signed_ca_with("Test Root CA", |_| {});
-        let cert = cert(ca.der.clone());
+        let cert = cert(ca.der);
 
         let rendered = format_certificate(&cert);
 
-        assert!(rendered.starts_with("Certificate(version: v3, serialNumber: "), "{rendered}");
+        assert!(
+            rendered.starts_with("Certificate(version: v3, serialNumber: "),
+            "{rendered}"
+        );
         assert!(rendered.ends_with(')'), "{rendered}");
         // Self-signed: issuer and subject are the same name.
         assert!(rendered.contains("issuer: CN=Test Root CA"), "{rendered}");
@@ -173,14 +189,17 @@ mod tests {
         assert!(rendered.contains("publicKey: "), "{rendered}");
         assert!(rendered.contains("signature: "), "{rendered}");
         // A CA must carry basic constraints, and rcgen marks them critical.
-        assert!(rendered.contains("basicConstraints (critical)"), "{rendered}");
+        assert!(
+            rendered.contains("basicConstraints (critical)"),
+            "{rendered}"
+        );
         assert_no_byte_dump(&rendered);
     }
 
     #[test]
     fn serial_number_is_hex_not_decimal_bytes() {
         let ca = self_signed_ca_with("Serial Root", |_| {});
-        let cert = cert(ca.der.clone());
+        let cert = cert(ca.der);
 
         let rendered = format_certificate(&cert);
         let serial = rendered
@@ -191,7 +210,9 @@ mod tests {
 
         assert!(!serial.is_empty());
         assert!(
-            serial.chars().all(|c| c.is_ascii_hexdigit() || c == ':'),
+            serial
+                .chars()
+                .all(|c| c.is_ascii_hexdigit() || c == ':'),
             "serial should be hex: {serial}"
         );
         assert_eq!(serial, cert.raw_serial_as_string());
@@ -227,7 +248,7 @@ mod tests {
                 vec![],
             ));
         });
-        let cert = cert(intermediate.der.clone());
+        let cert = cert(intermediate.der);
 
         let rendered = format_certificate(&cert);
 

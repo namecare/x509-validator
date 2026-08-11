@@ -1,24 +1,50 @@
 [workspace]
 resolver = "2"
 members = [
-    "x509-validator",
-    "x509-validator-testkit",
-    "examples",
-    "x509-validator-bench/compare",
-    "x509-validator-bench/measure",
+  "x509-validator",
+  "x509-validator-testkit",
+  "examples",
+  "x509-validator-bench/compare",
+  "x509-validator-bench/measure",
 ]
 
 [workspace.package]
 edition = "2024"
 
+[workspace.dependencies]
+x509-parser = "0.18.1"
+rsa = "0.10.0-rc.18"
+rand = { version = "0.10.2", features = ["thread_rng"] }
+time = "0.3.55"
+x509-validator = { path = "x509-validator" }
+x509-validator-testkit = { path = "x509-validator-testkit" }
+
+[workspace.lints.clippy]
+alloc_instead_of_core = "warn"
+cloned_instead_of_copied = "warn"
+manual_let_else = "warn"
+needless_bitwise_bool = "warn"
+needless_collect = "warn"
+needless_pass_by_ref_mut = "warn"
+or_fun_call = "warn"
+redundant_clone = "warn"
+std_instead_of_core = "warn"
+upper_case_acronyms = "warn"
+use_self = "warn"
+
+# Relax these clippy lints:
+# - too_many_arguments: some things just need a lot of state, wrapping it
+#   doesn't necessarily make it easier to follow what's going on
+too_many_arguments = "allow"
+
+# - new_without_default: for internal constructors, the indirection is not
+#   helpful
+new_without_default = "allow"
+
 [workspace.lints.rust]
 elided_lifetimes_in_paths = "warn"
 trivial_numeric_casts = "warn"
-unexpected_cfgs = { level = "warn", check-cfg = [
-    "cfg(bench)",
-    "cfg(coverage_nightly)",
-    "cfg(rustls_docsrs)",
-] }
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(bench)", "cfg(coverage_nightly)"] }
 unnameable_types = "warn"
 unreachable_pub = "warn"
 unused_extern_crates = "warn"

@@ -1,0 +1,130 @@
+# libFuzzer dictionary for the parse_certificate target.
+#
+# Tokens are DER structure bytes and the OIDs an X.509 certificate is built
+# from. Splicing these into a mutated input lets the fuzzer reach deep
+# structure (extensions, algorithm identifiers) instead of stalling on the
+# outer SEQUENCE.
+#
+# Format: libFuzzer/AFL dictionary. Escapes are \xNN; entries are quoted.
+
+# --- Universal tags -------------------------------------------------------
+tag_boolean="\x01\x01"
+tag_integer="\x02"
+tag_bitstring="\x03"
+tag_octetstring="\x04"
+tag_null="\x05\x00"
+tag_oid="\x06"
+tag_utf8string="\x0c"
+tag_printablestring="\x13"
+tag_teletexstring="\x14"
+tag_ia5string="\x16"
+tag_utctime="\x17\x0d"
+tag_generalizedtime="\x18\x0f"
+tag_sequence="\x30"
+tag_set="\x31"
+
+# --- Long-form and indefinite lengths -------------------------------------
+len_indefinite="\x80"
+len_1byte="\x81"
+len_2byte="\x82"
+len_3byte="\x83"
+len_4byte="\x84"
+len_zero="\x00"
+
+# --- Context-specific tags used in Certificate/TBSCertificate -------------
+ctx_0_version="\xa0\x03\x02\x01\x02"
+ctx_1_issuer_uid="\xa1"
+ctx_2_subject_uid="\xa2"
+ctx_3_extensions="\xa3"
+
+# --- GeneralName choices (SAN / name constraints) -------------------------
+gn_othername="\xa0"
+gn_rfc822="\x81"
+gn_dnsname="\x82"
+gn_x400="\xa3"
+gn_dirname="\xa4"
+gn_ediparty="\xa5"
+gn_uri="\x86"
+gn_ipaddress="\x87"
+gn_registeredid="\x88"
+
+# --- Signature / public key algorithm OIDs --------------------------------
+oid_rsa_encryption="\x06\x09\x2a\x86\x48\x86\xf7\x0d\x01\x01\x01"
+oid_sha256_rsa="\x06\x09\x2a\x86\x48\x86\xf7\x0d\x01\x01\x0b"
+oid_sha384_rsa="\x06\x09\x2a\x86\x48\x86\xf7\x0d\x01\x01\x0c"
+oid_sha512_rsa="\x06\x09\x2a\x86\x48\x86\xf7\x0d\x01\x01\x0d"
+oid_sha1_rsa="\x06\x09\x2a\x86\x48\x86\xf7\x0d\x01\x01\x05"
+oid_rsassa_pss="\x06\x09\x2a\x86\x48\x86\xf7\x0d\x01\x01\x0a"
+oid_ec_public_key="\x06\x07\x2a\x86\x48\xce\x3d\x02\x01"
+oid_ecdsa_sha256="\x06\x08\x2a\x86\x48\xce\x3d\x04\x03\x02"
+oid_ecdsa_sha384="\x06\x08\x2a\x86\x48\xce\x3d\x04\x03\x03"
+oid_ecdsa_sha512="\x06\x08\x2a\x86\x48\xce\x3d\x04\x03\x04"
+oid_ed25519="\x06\x03\x2b\x65\x70"
+oid_ed448="\x06\x03\x2b\x65\x71"
+
+# --- Named curves ---------------------------------------------------------
+oid_prime256v1="\x06\x08\x2a\x86\x48\xce\x3d\x03\x01\x07"
+oid_secp384r1="\x06\x05\x2b\x81\x04\x00\x22"
+oid_secp521r1="\x06\x05\x2b\x81\x04\x00\x23"
+
+# --- Digest OIDs (PSS parameters) -----------------------------------------
+oid_sha256="\x06\x09\x60\x86\x48\x01\x65\x03\x04\x02\x01"
+oid_sha384="\x06\x09\x60\x86\x48\x01\x65\x03\x04\x02\x02"
+oid_sha512="\x06\x09\x60\x86\x48\x01\x65\x03\x04\x02\x03"
+oid_mgf1="\x06\x09\x2a\x86\x48\x86\xf7\x0d\x01\x01\x08"
+
+# --- Relative distinguished name attribute types --------------------------
+oid_at_common_name="\x06\x03\x55\x04\x03"
+oid_at_surname="\x06\x03\x55\x04\x04"
+oid_at_serial_number="\x06\x03\x55\x04\x05"
+oid_at_country="\x06\x03\x55\x04\x06"
+oid_at_locality="\x06\x03\x55\x04\x07"
+oid_at_state="\x06\x03\x55\x04\x08"
+oid_at_street="\x06\x03\x55\x04\x09"
+oid_at_organization="\x06\x03\x55\x04\x0a"
+oid_at_org_unit="\x06\x03\x55\x04\x0b"
+oid_at_title="\x06\x03\x55\x04\x0c"
+oid_at_given_name="\x06\x03\x55\x04\x2a"
+oid_domain_component="\x06\x0a\x09\x92\x26\x89\x93\xf2\x2c\x64\x01\x19"
+oid_email_address="\x06\x09\x2a\x86\x48\x86\xf7\x0d\x01\x09\x01"
+
+# --- Standard v3 extension OIDs -------------------------------------------
+oid_ext_subject_key_id="\x06\x03\x55\x1d\x0e"
+oid_ext_key_usage="\x06\x03\x55\x1d\x0f"
+oid_ext_subject_alt_name="\x06\x03\x55\x1d\x11"
+oid_ext_issuer_alt_name="\x06\x03\x55\x1d\x12"
+oid_ext_basic_constraints="\x06\x03\x55\x1d\x13"
+oid_ext_name_constraints="\x06\x03\x55\x1d\x1e"
+oid_ext_crl_dist_points="\x06\x03\x55\x1d\x1f"
+oid_ext_cert_policies="\x06\x03\x55\x1d\x20"
+oid_ext_policy_mappings="\x06\x03\x55\x1d\x21"
+oid_ext_authority_key_id="\x06\x03\x55\x1d\x23"
+oid_ext_policy_constraints="\x06\x03\x55\x1d\x24"
+oid_ext_ext_key_usage="\x06\x03\x55\x1d\x25"
+oid_ext_inhibit_any_policy="\x06\x03\x55\x1d\x36"
+oid_ext_authority_info_access="\x06\x08\x2b\x06\x01\x05\x05\x07\x01\x01"
+oid_ext_ct_scts="\x06\x0a\x2b\x06\x01\x04\x01\xd6\x79\x02\x04\x02"
+
+# --- Extended key usage purposes ------------------------------------------
+oid_kp_server_auth="\x06\x08\x2b\x06\x01\x05\x05\x07\x03\x01"
+oid_kp_client_auth="\x06\x08\x2b\x06\x01\x05\x05\x07\x03\x02"
+oid_kp_code_signing="\x06\x08\x2b\x06\x01\x05\x05\x07\x03\x03"
+oid_kp_email_protection="\x06\x08\x2b\x06\x01\x05\x05\x07\x03\x04"
+oid_kp_time_stamping="\x06\x08\x2b\x06\x01\x05\x05\x07\x03\x08"
+oid_kp_ocsp_signing="\x06\x08\x2b\x06\x01\x05\x05\x07\x03\x09"
+oid_any_policy="\x06\x04\x55\x1d\x25\x00"
+
+# --- Access descriptors ---------------------------------------------------
+oid_ad_ocsp="\x06\x08\x2b\x06\x01\x05\x05\x07\x30\x01"
+oid_ad_ca_issuers="\x06\x08\x2b\x06\x01\x05\x05\x07\x30\x02"
+
+# --- Whole small structures the parser branches on ------------------------
+basic_constraints_ca="\x30\x03\x01\x01\xff"
+basic_constraints_empty="\x30\x00"
+ext_critical_true="\x01\x01\xff"
+key_usage_digital_sig="\x03\x02\x07\x80"
+key_usage_keycertsign="\x03\x02\x01\x06"
+bitstring_unused_7="\x03\x02\x07"
+null_params="\x05\x00"
+version_v3="\x02\x01\x02"
+version_v1="\x02\x01\x00"

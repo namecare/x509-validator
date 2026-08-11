@@ -1,7 +1,7 @@
-use crate::{ValidationPolicy, PolicyEvaluationResult, PolicyFailureReason};
 use crate::der_parser::Oid;
 use crate::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS;
 use crate::unverified_chain::UnverifiedCertificateChain;
+use crate::{PolicyEvaluationResult, PolicyFailureReason, ValidationPolicy};
 
 /// id-ce-basicConstraints, RFC 5280 §4.2.1.9: 2.5.29.19.
 fn basic_constraints_oid() -> Oid<'static> {
@@ -18,7 +18,10 @@ impl ValidationPolicy for BasicConstraintsPolicy {
         vec![basic_constraints_oid()]
     }
 
-    fn chain_meets_policy_requirements(&self, chain: &UnverifiedCertificateChain) -> PolicyEvaluationResult {
+    fn chain_meets_policy_requirements(
+        &self,
+        chain: &UnverifiedCertificateChain<'_>,
+    ) -> PolicyEvaluationResult {
         // The rules for BasicConstraints come from https://www.rfc-editor.org/rfc/rfc5280#section-4.2.1.9,
         // but roughly can be summarised as:
         //
@@ -45,11 +48,19 @@ impl ValidationPolicy for BasicConstraintsPolicy {
             let basic_constraints = leaf
                 .tbs_certificate
                 .basic_constraints()
-                .map_err(|error| PolicyFailureReason::new(format!("error processing basic constraints for {:?}: {}", leaf, error)))?;
+                .map_err(|error| {
+                    PolicyFailureReason::new(format!(
+                        "error processing basic constraints for {:?}: {}",
+                        leaf, error
+                    ))
+                })?;
 
             return match basic_constraints {
                 Some(bc) if bc.value.ca => Ok(()),
-                _ => Err(PolicyFailureReason::new(format!("self-signed cert {:?} is not marked as a CA", leaf))),
+                _ => Err(PolicyFailureReason::new(format!(
+                    "self-signed cert {:?} is not marked as a CA",
+                    leaf
+                ))),
             };
         }
 
@@ -64,7 +75,12 @@ impl ValidationPolicy for BasicConstraintsPolicy {
                 let basic_constraints = cert
                     .tbs_certificate
                     .basic_constraints()
-                    .map_err(|error| PolicyFailureReason::new(format!("error processing basic constraints for {:?}: {}", cert, error)))?;
+                    .map_err(|error| {
+                        PolicyFailureReason::new(format!(
+                            "error processing basic constraints for {:?}: {}",
+                            cert, error
+                        ))
+                    })?;
 
                 match basic_constraints {
                     Some(bc) if bc.value.ca => {
@@ -81,7 +97,10 @@ impl ValidationPolicy for BasicConstraintsPolicy {
                         }
                     }
                     _ => {
-                        return Err(PolicyFailureReason::new(format!("certificate {:?} is not marked as a CA", cert)));
+                        return Err(PolicyFailureReason::new(format!(
+                            "certificate {:?} is not marked as a CA",
+                            cert
+                        )));
                     }
                 }
             }

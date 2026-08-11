@@ -40,10 +40,12 @@ impl NameConstraintsPolicy {
 
 /// Extracts the host from a URI's authority component, if present.
 fn extract_host(uri: &[u8]) -> Option<String> {
-    let uri = std::str::from_utf8(uri).ok()?;
+    let uri = core::str::from_utf8(uri).ok()?;
 
     // Find the scheme separator "://".
-    let after_scheme = uri.split_once("://").map(|(_, rest)| rest)?;
+    let after_scheme = uri
+        .split_once("://")
+        .map(|(_, rest)| rest)?;
 
     // The authority component runs up to the next '/', '?', or '#'.
     let authority_end = after_scheme
@@ -88,7 +90,11 @@ fn extract_host(uri: &[u8]) -> Option<String> {
 }
 
 fn is_ip_address(host: &str) -> bool {
-    host.parse::<std::net::Ipv4Addr>().is_ok() || host.parse::<std::net::Ipv6Addr>().is_ok()
+    host.parse::<core::net::Ipv4Addr>()
+        .is_ok()
+        || host
+            .parse::<core::net::Ipv6Addr>()
+            .is_ok()
 }
 
 #[cfg(test)]
@@ -206,7 +212,10 @@ mod tests {
 
     #[test]
     fn userinfo_and_port_are_both_stripped() {
-        assert!(matches("https://user:pass@example.com:8443/", "example.com"));
+        assert!(matches(
+            "https://user:pass@example.com:8443/",
+            "example.com"
+        ));
     }
 
     #[test]
