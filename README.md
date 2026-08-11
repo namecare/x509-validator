@@ -6,21 +6,21 @@
 </picture>
 </p>
 
-# X509Validator 
+# X509Validator
 
 [![Build+test](https://github.com/namecare/x509-validator/actions/workflows/build_test.yml/badge.svg?branch=master)](https://github.com/namecare/x509-validator/actions/workflows/build_test.yml?query=branch%3Amaster)
 [![Documentation](https://docs.rs/x509-validator/badge.svg)](https://docs.rs/x509-validator/)
 [![Crates.io](https://img.shields.io/crates/v/x509-validator.svg)](https://crates.io/crates/x509-validator)
 [![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fnamecare%2Fx509-validator%2Fmaster%2F.local%2Fcoverage.json)](https://github.com/namecare/x509-validator/actions/workflows/build_test.yml?query=branch%3Amaster)
 
-X.509 certificate chain validator.   
+X.509 certificate chain validator.
 
 ## Overview
 
 This library validates an X.509 certificate chain against a set of root certificates and a policy. This is an essential building block for a wide range
 of PKI applications. It ships with a default verifier and a number of built-in verifier policies.
 
-> This library is heavily inspired by, and follows the design of, the [verifier from the swift-certificates library][ref]. Some pragmatic ideas and project structure has been taking from [rustls](https://github.com/rustls/rustls/tree/main).
+> This library is heavily inspired by, and follows the design of, the [verifier from the swift-certificates library][ref]. Some pragmatic ideas and project structure have been taken from [rustls](https://github.com/rustls/rustls/tree/main).
 
 ## Requirements
 
@@ -31,16 +31,16 @@ of PKI applications. It ships with a default verifier and a number of built-in v
 Add the dependency and pick a crypto backend:
 
 ```toml
-x509-validator = { version = "0.1.0", features = ["aws_lc"] }
+x509-validator = { version = "0.2.0", features = ["aws_lc"] }
 ```
 
 | Feature | Backend | Notes                   |
 |---|---|-------------------------|
 | `aws_lc` | [aws-lc-rs](https://github.com/aws/aws-lc-rs) | Fastest.                |
 | `ring` | [ring](https://github.com/briansmith/ring) | Close to aws_lc.        |
-| `rust_crypto` | [RustCrypto](https://github.com/RustCrypto) | Pure Rust. The slowest. |
+| `rust_crypto` | [RustCrypto](https://github.com/RustCrypto) | Pure Rust. Slowest.     |
 
-There is no default backend: without one of these features the crate compiles
+There is no default backend: without one of these features enabled, the crate compiles
 but verifies nothing. You can also provide your own by implementing
 `SignatureVerifier` — see the [`custom_crypto_backend`][custom-backend] example.
 
@@ -83,9 +83,9 @@ fn example(root_der: &[u8], intermediate_der: &[u8], leaf_der: &[u8], now: Times
 }
 ```
 
-The closure is the diagnostic channel: chain building reports every issuer it
-considers and every candidate it discards through it. Pass `&mut |_| {}` to
-ignore it.
+>The closure is the diagnostic channel: chain building reports every issuer it
+> considers and every candidate it discards through it. If you don't need any of
+> that, call `validate(&leaf, &intermediates)` instead.
 
 Runnable versions of this and more are in [examples]:
 
