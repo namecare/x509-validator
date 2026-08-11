@@ -109,10 +109,9 @@ fn has_valid_identity_for_service(
             GeneralName::IPAddress(value) => {
                 if let (Some(server_ip), Some(certificate_ip)) =
                     (server_ip, IpAddress::from_san_bytes(value))
+                    && match_ip_address(server_ip, &certificate_ip)
                 {
-                    if match_ip_address(server_ip, &certificate_ip) {
-                        return Ok(());
-                    }
+                    return Ok(());
                 }
             }
             _ => continue,

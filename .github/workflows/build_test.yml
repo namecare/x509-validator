@@ -218,10 +218,6 @@ jobs:
 
       - name: Install cargo-hack
         uses: taiki-e/install-action@cargo-hack
-
-      # Proves the lower bound of every direct dependency is real: `"0.18.1"`
-      # has to actually build, not just happen to resolve to a newer release.
-      # RUSTC_BOOTSTRAP, because -Zminimal-versions is nightly-only.
       - name: Check direct-minimal-versions
         working-directory: x509-validator/
         run: cargo minimal-versions --direct --ignore-private check --each-feature
@@ -231,11 +227,6 @@ jobs:
   semver:
     name: Check semver compatibility
     runs-on: ubuntu-latest
-    # cargo-semver-checks diffs against the last release on crates.io. Until
-    # 0.1.0 is published there is no baseline, so the job has nothing to
-    # compare against and fails for a reason unrelated to the commit. It runs
-    # anyway to prove the wiring works; drop `continue-on-error` once the
-    # first release lands and the comparison becomes real.
     continue-on-error: true
     steps:
       - uses: actions/checkout@v5
