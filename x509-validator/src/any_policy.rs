@@ -35,3 +35,99 @@ impl ValidationPolicy for AnyPolicy {
             .chain_meets_policy_requirements(chain)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use x509_validator_testkit::{cert, self_signed_ca};
+
+    use super::*;
+    use crate::oid_registry::{
+        OID_X509_EXT_BASIC_CONSTRAINTS, OID_X509_EXT_KEY_USAGE, OID_X509_EXT_NAME_CONSTRAINTS,
+    };
+    use crate::policy::PolicyFailureReason;
+
+    struct StubPolicy {
+        extensions: Vec<Oid<'static>>,
+        result: PolicyEvaluationResult,
+    }
+
+    impl StubPolicy {
+        fn meets() -> Self {
+            Self {
+                extensions: vec![],
+                result: Ok(()),
+            }
+        }
+
+        fn fails(reason: &str) -> Self {
+            Self {
+                extensions: vec![],
+                result: Err(PolicyFailureReason::new(reason)),
+            }
+        }
+
+        fn verifying(extensions: Vec<Oid<'static>>) -> Self {
+            Self {
+                extensions,
+                result: Ok(()),
+            }
+        }
+    }
+
+    impl ValidationPolicy for StubPolicy {
+        fn verifying_critical_extensions(&self) -> Vec<Oid<'static>> {
+            self.extensions.clone()
+        }
+
+        fn chain_meets_policy_requirements(
+            &self,
+            _chain: &UnverifiedCertificateChain<'_>,
+        ) -> PolicyEvaluationResult {
+            self.result.clone()
+        }
+    }
+
+    #[test]
+    fn erasure_preserves_the_failure_reason_verbatim() {
+        let chain = UnverifiedCertificateChain::new(vec![cert(self_signed_ca("root"))]);
+
+        let policy = AnyPolicy::new(StubPolicy::fails("leaf is not a server certificate"));
+
+        assert_eq!(
+            policy.chain_meets_policy_requirements(&chain),
+            Err(PolicyFailureReason::new("leaf is not a server certificate"))
+        );
+    }
+
+    #[test]
+    fn erasure_preserves_the_extension_list_and_its_order() {
+        let extensions = vec![
+            OID_X509_EXT_BASIC_CONSTRAINTS,
+            OID_X509_EXT_KEY_USAGE,
+            OID_X509_EXT_NAME_CONSTRAINTS,
+        ];
+
+        let policy = AnyPolicy::new(StubPolicy::verifying(extensions.clone()));
+
+        assert_eq!(policy.verifying_critical_extensions(), extensions);
+    }
+
+    #[test]
+    fn erased_policies_of_different_concrete_types_share_one_type() {
+        let chain = UnverifiedCertificateChain::new(vec![cert(self_signed_ca("root"))]);
+
+        // The point of erasure: unrelated policy types become one type, so they can be
+        // collected together and chosen between at runtime. Nesting must stay transparent.
+        let policies = [
+            AnyPolicy::new(StubPolicy::meets()),
+            AnyPolicy::new(AnyPolicy::new(StubPolicy::fails("no"))),
+        ];
+
+        let results: Vec<_> = policies
+            .iter()
+            .map(|p| p.chain_meets_policy_requirements(&chain))
+            .collect();
+
+        assert_eq!(results, [Ok(()), Err(PolicyFailureReason::new("no"))]);
+    }
+}
