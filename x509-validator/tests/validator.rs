@@ -87,6 +87,21 @@ impl ValidationPolicy for AlwaysMeetsPolicy {
     }
 }
 
+/// A policy that rejects every chain, so that the search exhausts the whole
+/// certificate tree and returns the failures it collected on the way.
+struct NeverMeetsPolicy;
+impl ValidationPolicy for NeverMeetsPolicy {
+    fn verifying_critical_extensions(&self) -> Vec<x509_validator::der_parser::Oid<'static>> {
+        vec![OID_X509_EXT_BASIC_CONSTRAINTS]
+    }
+    fn chain_meets_policy_requirements(
+        &self,
+        _chain: &UnverifiedCertificateChain<'_>,
+    ) -> PolicyEvaluationResult {
+        Err(PolicyFailureReason::new("policy rejects every chain"))
+    }
+}
+
 #[test]
 fn trivial_chain_succeeds_leaf_intermediate_root() {
     let root = self_signed_ca_with("root", |_| {});
@@ -1323,4 +1338,153 @@ fn verification_diagnostic_description_does_not_include_new_lines() {
             "diagnostic description contains a new line: {description}"
         );
     }
+}
+
+#[test]
+fn validate_agrees_with_validate_with_diagnostics_on_a_valid_chain() {
+    // `validate` skips building diagnostics entirely. That must be an
+    // observability difference only: the chain it returns has to be the
+    // same one the diagnostic-emitting path returns, link for link.
+    let root = self_signed_ca_with("root", |_| {});
+    let intermediate = issue_ca("intermediate", &root, None, |_| {});
+    let leaf_der = leak(issue_leaf("leaf", &["www.example.com"], &intermediate));
+    let intermediate_der = leak(intermediate.der);
+    let root_der = leak(root.der);
+
+    let leaf = parse(leaf_der);
+    let roots = CertificateStore::from_iter(vec![parse(root_der)]);
+    let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
+    let validator = Validator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
+
+    let expected = [&leaf, &parse(intermediate_der), &parse(root_der)];
+    assert_chain_is(validator.validate(&leaf, &intermediates), &expected);
+    assert_chain_is(
+        validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {}),
+        &expected,
+    );
+}
+
+#[test]
+fn validate_agrees_with_validate_with_diagnostics_on_a_rejected_chain() {
+    // The failure path accumulates `PolicyFailure`s independently of the
+    // diagnostic callback, so suppressing diagnostics must not change which
+    // rejected chains are reported back to the caller.
+    let root = self_signed_ca_with("root", |_| {});
+    let intermediate = issue_ca("intermediate", &root, None, |_| {});
+    let leaf_der = leak(issue_leaf("leaf", &["www.example.com"], &intermediate));
+    let intermediate_der = leak(intermediate.der);
+    let root_der = leak(root.der);
+
+    let leaf = parse(leaf_der);
+    let roots = CertificateStore::from_iter(vec![parse(root_der)]);
+    let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
+    // A policy that rejects every chain forces the search to exhaust the
+    // whole tree and return the failures it collected along the way.
+    let validator = Validator::with_policy_and_backend(roots, NeverMeetsPolicy, &DEFAULT_PROVIDER);
+
+    let quiet = validator.validate(&leaf, &intermediates);
+    let loud = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
+
+    let describe = |result: ChainValidationResult<'_>| match result {
+        Err(failures) => failures
+            .iter()
+            .map(|failure| format!("{failure:?}"))
+            .collect::<Vec<_>>(),
+        Ok(_) => panic!("expected every chain to be rejected by policy"),
+    };
+    assert_eq!(
+        describe(quiet),
+        describe(loud),
+        "suppressing diagnostics changed which chains were rejected, or their order"
+    );
+}
+
+#[test]
+fn suppressing_diagnostics_does_not_change_the_diagnostic_sequence() {
+    // `diagnose!` guards each call site rather than deferring it, so a
+    // diagnostic accidentally built outside the macro argument would still
+    // fire. Pinning the emitted sequence keeps the callback path honest
+    // while the construction is conditional.
+    let root = self_signed_ca_with("root", |_| {});
+    let intermediate = issue_ca("intermediate", &root, None, |_| {});
+    let leaf_der = leak(issue_leaf("leaf", &["www.example.com"], &intermediate));
+    let intermediate_der = leak(intermediate.der);
+    let root_der = leak(root.der);
+
+    let leaf = parse(leaf_der);
+    let roots = CertificateStore::from_iter(vec![parse(root_der)]);
+    let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
+    let validator = Validator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
+
+    fn collect<'a, P: ValidationPolicy>(
+        validator: &Validator<'a, P>,
+        leaf: &Certificate<'a>,
+        intermediates: &CertificateStore<'a>,
+    ) -> Vec<String> {
+        let mut descriptions = Vec::new();
+        let _ = validator.validate_with_diagnostics(leaf, intermediates, &mut |diagnostic| {
+            descriptions.push(diagnostic.to_string());
+        });
+        descriptions
+    }
+
+    // Classifying by the leading text keeps the expectation readable: the
+    // full `Display` form embeds whole certificates.
+    fn kinds(descriptions: &[String]) -> Vec<&'static str> {
+        descriptions
+            .iter()
+            .map(|d| match d {
+                d if d.starts_with("Searching for issuers") => "searching",
+                d if d.starts_with("Found candidate issuers in the intermediate store") => {
+                    "candidates:intermediate"
+                }
+                d if d.starts_with("Found candidate issuers in the root store") => {
+                    "candidates:root"
+                }
+                d if d.starts_with("Validation completed successfully") => "success",
+                d if d.starts_with("A certificate chain to a certificate in the root store") => {
+                    "policy-failure"
+                }
+                d if d.starts_with("Could not validate leaf certificate") => "exhausted",
+                other => panic!("unclassified diagnostic: {other}"),
+            })
+            .collect()
+    }
+
+    // A successful validation over leaf -> intermediate -> root: one search
+    // step per link, each finding candidates, then the terminating success.
+    let succeeding = collect(&validator, &leaf, &intermediates);
+    assert_eq!(
+        kinds(&succeeding),
+        [
+            "searching",
+            "candidates:intermediate",
+            "searching",
+            "candidates:root",
+            "success",
+        ],
+        "the diagnostic sequence for a successful validation changed"
+    );
+
+    // A rejected validation reaches the exhausted-search diagnostic at the
+    // end of the function, which the success path returns before ever
+    // reaching. Pinning it means deleting that call site fails this test.
+    let rejecting = Validator::with_policy_and_backend(
+        CertificateStore::from_iter(vec![parse(root_der)]),
+        NeverMeetsPolicy,
+        &DEFAULT_PROVIDER,
+    );
+    let failing = collect(&rejecting, &leaf, &intermediates);
+    assert_eq!(
+        kinds(&failing),
+        [
+            "searching",
+            "candidates:intermediate",
+            "searching",
+            "candidates:root",
+            "policy-failure",
+            "exhausted",
+        ],
+        "the diagnostic sequence for a rejected validation changed"
+    );
 }

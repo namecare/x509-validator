@@ -7,6 +7,16 @@ use crate::unverified_chain::UnverifiedCertificateChain;
 use crate::validated_chain::ValidatedCertificateChain;
 use crate::{Certificate, CertificateExt, PolicyFailureReason, ValidationPolicy};
 
+/// Reports a diagnostic to an optional callback, building it only if a callback
+/// is present.
+macro_rules! diagnose {
+    ($diagnostics:expr, $diagnostic:expr) => {
+        if let Some(callback) = $diagnostics.as_deref_mut() {
+            callback($diagnostic);
+        }
+    };
+}
+
 /// Validates an X.509 certificate chain against a set of root certificates and
 /// a [`ValidationPolicy`], using the crypto backend selected by this crate's
 /// feature flags.
@@ -64,23 +74,48 @@ where
     /// - Parameters:
     ///   - leaf: The leaf certificate to validate.
     ///   - intermediates: A store of intermediate certificates that may form part of the chain.
+    /// - Returns: A [`ChainValidationResult`] indicating whether the certificate is valid.
+    pub fn validate(
+        &self,
+        leaf: &Certificate<'a>,
+        intermediates: &CertificateStore<'a>,
+    ) -> ChainValidationResult<'a> {
+        self.validate_inner(leaf, intermediates, None)
+    }
+
+    /// Validates a leaf certificate by building chains through intermediate certificates to the root store,
+    /// reporting each step to a callback.
+    ///
+    /// - Parameters:
+    ///   - leaf: The leaf certificate to validate.
+    ///   - intermediates: A store of intermediate certificates that may form part of the chain.
     ///   - diagnostic_callback: A closure invoked with diagnostic events during validation.
     /// - Returns: A [`ChainValidationResult`] indicating whether the certificate is valid.
     pub fn validate_with_diagnostics(
         &self,
         leaf: &Certificate<'a>,
         intermediates: &CertificateStore<'a>,
-        diagnostic_callback: &mut dyn FnMut(VerificationDiagnostic<'_>),
+        diagnostic_callback: &mut dyn FnMut(VerificationDiagnostic<'a>),
+    ) -> ChainValidationResult<'a> {
+        self.validate_inner(leaf, intermediates, Some(diagnostic_callback))
+    }
+
+    fn validate_inner(
+        &self,
+        leaf: &Certificate<'a>,
+        intermediates: &CertificateStore<'a>,
+        mut diagnostics: Option<&mut dyn FnMut(VerificationDiagnostic<'a>)>,
     ) -> ChainValidationResult<'a> {
         // First check: does this leaf certificate contain critical extensions that are not satisfied by the policy?
         // If so, reject the chain.
         if has_unhandled_critical_extensions(leaf, &self.policy) {
-            diagnostic_callback(
+            diagnose!(
+                diagnostics,
                 VerificationDiagnostic::leaf_certificate_has_unhandled_critical_extension(
                     leaf.clone(),
                     self.policy
                         .verifying_critical_extensions(),
-                ),
+                )
             );
             return Err(vec![PolicyFailure::new(
                 UnverifiedCertificateChain::new(vec![leaf.clone()]),
@@ -110,14 +145,16 @@ where
             {
                 Ok(()) => {
                     // We're good!
-                    diagnostic_callback(VerificationDiagnostic::found_valid_certificate_chain(
-                        vec![leaf.clone()],
-                    ));
+                    diagnose!(
+                        diagnostics,
+                        VerificationDiagnostic::found_valid_certificate_chain(vec![leaf.clone()])
+                    );
                     return Ok(ValidatedCertificateChain::new_unchecked(vec![leaf.clone()]));
                 }
                 Err(reason) => {
-                    diagnostic_callback(
-                        VerificationDiagnostic::leaf_certificate_is_in_the_root_store_but_does_not_meet_policy(leaf.clone(), reason.clone()),
+                    diagnose!(
+                        diagnostics,
+                        VerificationDiagnostic::leaf_certificate_is_in_the_root_store_but_does_not_meet_policy(leaf.clone(), reason.clone())
                     );
                     policy_failures.push(PolicyFailure::new(chain, reason));
                 }
@@ -128,10 +165,11 @@ where
 
         // This is essentially a DFS of the certificate tree. We attempt to iteratively build up possible chains.
         while let Some(partial_chain) = stack.pop() {
-            diagnostic_callback(
+            diagnose!(
+                diagnostics,
                 VerificationDiagnostic::searching_for_issuer_of_partial_chain(
                     partial_chain.clone(),
-                ),
+                )
             );
 
             let tip = partial_chain.last().unwrap();
@@ -146,11 +184,12 @@ where
             // We then want to sort by suitability.
             sort_by_suitability_for_issuing(&mut root_candidates, tip);
             if !root_candidates.is_empty() {
-                diagnostic_callback(
+                diagnose!(
+                    diagnostics,
                     VerificationDiagnostic::found_candidate_issuers_of_partial_chain_in_root_store(
                         partial_chain.clone(),
                         root_candidates.clone(),
-                    ),
+                    )
                 );
             }
             // Each of these is now potentially a valid unverified chain.
@@ -160,7 +199,7 @@ where
                     &partial_chain,
                     self.crypto,
                     &self.policy,
-                    diagnostic_callback,
+                    &mut diagnostics,
                 ) {
                     continue;
                 }
@@ -173,16 +212,22 @@ where
                 {
                     Ok(()) => {
                         // We're good!
-                        diagnostic_callback(VerificationDiagnostic::found_valid_certificate_chain(
-                            chain_certs.clone(),
-                        ));
+                        diagnose!(
+                            diagnostics,
+                            VerificationDiagnostic::found_valid_certificate_chain(
+                                chain_certs.clone(),
+                            )
+                        );
                         return Ok(ValidatedCertificateChain::new_unchecked(chain_certs));
                     }
                     Err(reason) => {
-                        diagnostic_callback(VerificationDiagnostic::chain_fails_to_meet_policy(
-                            chain_certs,
-                            reason.clone(),
-                        ));
+                        diagnose!(
+                            diagnostics,
+                            VerificationDiagnostic::chain_fails_to_meet_policy(
+                                chain_certs,
+                                reason.clone(),
+                            )
+                        );
                         policy_failures.push(PolicyFailure::new(chain, reason));
                     }
                 }
@@ -194,11 +239,12 @@ where
             // We then want to sort by suitability.
             sort_by_suitability_for_issuing(&mut intermediate_candidates, tip);
             if !intermediate_candidates.is_empty() {
-                diagnostic_callback(
+                diagnose!(
+                    diagnostics,
                     VerificationDiagnostic::found_candidate_issuers_of_partial_chain_in_intermediate_store(
                         partial_chain.clone(),
                         intermediate_candidates.clone(),
-                    ),
+                    )
                 );
             }
             // we need to reverse the order of the already sorted intermediates because
@@ -213,7 +259,7 @@ where
                     &partial_chain,
                     self.crypto,
                     &self.policy,
-                    diagnostic_callback,
+                    &mut diagnostics,
                 ) {
                     continue;
                 }
@@ -223,9 +269,10 @@ where
             }
         }
 
-        diagnostic_callback(VerificationDiagnostic::could_not_validate_leaf_certificate(
-            leaf.clone(),
-        ));
+        diagnose!(
+            diagnostics,
+            VerificationDiagnostic::could_not_validate_leaf_certificate(leaf.clone())
+        );
         Err(policy_failures)
     }
 }
@@ -267,16 +314,17 @@ fn should_skip_adding_certificate<'a>(
     partial_chain: &[Certificate<'a>],
     crypto: &dyn SignatureVerifier,
     policy: &impl ValidationPolicy,
-    diagnostic_callback: &mut dyn FnMut(VerificationDiagnostic<'a>),
+    diagnostics: &mut Option<&mut dyn FnMut(VerificationDiagnostic<'a>)>,
 ) -> bool {
     // We want to confirm that the certificate has no unhandled critical extensions. If it does, we can't build the chain.
     if has_unhandled_critical_extensions(candidate, policy) {
-        diagnostic_callback(
+        diagnose!(
+            diagnostics,
             VerificationDiagnostic::issuer_has_unhandled_critical_extension(
                 candidate.clone(),
                 partial_chain.to_vec(),
                 policy.verifying_critical_extensions(),
-            ),
+            )
         );
         return true;
     }
@@ -287,10 +335,13 @@ fn should_skip_adding_certificate<'a>(
         .iter()
         .any(|existing| existing.has_same_identity_as(candidate))
     {
-        diagnostic_callback(VerificationDiagnostic::issuer_is_already_in_the_chain(
-            partial_chain.to_vec(),
-            candidate.clone(),
-        ));
+        diagnose!(
+            diagnostics,
+            VerificationDiagnostic::issuer_is_already_in_the_chain(
+                partial_chain.to_vec(),
+                candidate.clone(),
+            )
+        );
         return true;
     }
 
@@ -306,10 +357,13 @@ fn should_skip_adding_certificate<'a>(
         .is_ok();
 
     if !signature_verifies {
-        diagnostic_callback(VerificationDiagnostic::issuer_has_not_signed_certificate(
-            candidate.clone(),
-            partial_chain.to_vec(),
-        ));
+        diagnose!(
+            diagnostics,
+            VerificationDiagnostic::issuer_has_not_signed_certificate(
+                candidate.clone(),
+                partial_chain.to_vec(),
+            )
+        );
     }
 
     !signature_verifies
