@@ -1,3 +1,5 @@
+#![doc = include_str!("../README.md")]
+
 pub mod crypto;
 pub use crypto::*;
 pub mod validator;
@@ -72,7 +74,3 @@ pub use policy::*;
 pub use policy_builder::{Either, OneOfTuple2, OneOfWrappedOptional, Tuple2, WrappedOptional};
 pub use rfc5280::*;
 pub use server_identity_policy::ServerIdentityPolicy;
-
-#[doc = include_str!("../../README.md")]
-#[cfg(doctest)]
-pub struct ReadmeDoctests;

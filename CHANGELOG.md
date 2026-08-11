@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.1.0] - 2026-08-12
+## [0.1.0] - 2026-08-11
 
 ### Added
 - RFC 5280 chain validation: signature, validity, key usage, basic
