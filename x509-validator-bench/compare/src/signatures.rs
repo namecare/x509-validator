@@ -1,9 +1,4 @@
 //! Pre-signed material for the atomic crypto benchmarks.
-//!
-//! Each entry pairs a signature with the algorithm and public key needed to
-//! check it, so the benchmark measures verification alone — key generation
-//! and signing happen once, here.
-
 use std::sync::OnceLock;
 
 use x509_validator::x509::{AlgorithmIdentifier, SubjectPublicKeyInfo};
@@ -20,6 +15,14 @@ pub struct SignedSample {
     pub spki: SubjectPublicKeyInfo<'static>,
     pub message: &'static [u8],
     pub signature: &'static [u8],
+}
+
+/// divan labels an `args` row with its `Debug` output, so this prints just
+/// the algorithm name — which is what the row should read as.
+impl core::fmt::Debug for SignedSample {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(self.label)
+    }
 }
 
 static CORPUS: OnceLock<Vec<SignedSample>> = OnceLock::new();
@@ -77,6 +80,25 @@ fn build() -> Vec<SignedSample> {
     }
 
     corpus
+}
+
+/// Re-encodes an `AlgorithmIdentifier` to DER.
+///
+/// Unlike `SubjectPublicKeyInfo`, x509-parser's `AlgorithmIdentifier` keeps
+/// no `.raw` field, so there is no unparsed DER to hand to x509-verify
+/// directly. Its `algorithm` OID and optional `parameters` are each
+/// DER-encodable on their own, so the SEQUENCE is rebuilt from those parts.
+#[cfg(feature = "verify_peer")]
+pub fn algorithm_der(algorithm: &AlgorithmIdentifier<'_>) -> Option<Vec<u8>> {
+    use x509_validator::asn1_rs::{Sequence, ToDer};
+
+    let mut content = algorithm.algorithm.to_der_vec().ok()?;
+    if let Some(parameters) = &algorithm.parameters {
+        content.extend_from_slice(&parameters.to_der_vec().ok()?);
+    }
+    Sequence::new(content.into())
+        .to_der_vec()
+        .ok()
 }
 
 /// An RSA key pair of `bits`

@@ -1,13 +1,3 @@
-//! Confirms every scenario in the parity benchmark actually produces the
-//! outcome its name claims.
-//!
-//! `benches/validator.rs` has `harness = false`, so a `#[test]` fn placed
-//! there would silently never run. This file is the deliverable that makes
-//! the parity benchmark trustworthy: a scenario that quietly produces the
-//! wrong `ChainValidationResult` variant still benchmarks something,
-//! but it stops being the scenario it is named after, and the comparison to
-//! the reference implementation becomes meaningless.
-
 use x509_validator::der_parser::Oid;
 use x509_validator::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS;
 use x509_validator::policy::{PolicyEvaluationResult, PolicyFailureReason, ValidationPolicy};

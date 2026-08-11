@@ -13,3 +13,5 @@ target
 /fuzz/target
 /fuzz/artifacts
 /fuzz/coverage
+
+docs

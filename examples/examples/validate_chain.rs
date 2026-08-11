@@ -1,11 +1,6 @@
 //! Check that a leaf certificate chains to a trusted root, under RFC 5280's rules.
 //!
 //!     cargo run -p x509-validator-examples --example validate_chain
-//!
-//! The three moving parts are a trust store of roots, a store of untrusted
-//! intermediates the validator may build through, and a policy that decides
-//! whether a candidate chain is acceptable. `RFC5280Policy` is the baseline:
-//! validity windows, basic constraints, name constraints, version.
 
 use x509_validator::rfc5280::RFC5280Policy;
 use x509_validator::store::CertificateStore;

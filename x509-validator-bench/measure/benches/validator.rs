@@ -1,20 +1,5 @@
 //! The parity benchmark: every validation scenario from the reference
 //! implementation's validator benchmark, case for case.
-//!
-//! The reference runs its whole scenario set as a single measured blob. That
-//! is a fine canary but a poor gate — sixteen scenarios summed into one
-//! number tell you something moved without telling you what. So each
-//! scenario is its own benchmark here, and the blob is kept as one extra
-//! rollup (`validator/all_scenarios`) so the reference number stays
-//! comparable.
-//!
-//! Benchmark ids are the tracked metric names. **Renaming one starts a new
-//! metric with no history**, so treat the strings below as fixed.
-//!
-//! Scenario outcomes are asserted in `tests/validator_scenarios.rs`, not here:
-//! this file has `harness = false`, so an in-file `#[test]` fn would never
-//! run. A scenario that quietly produces the wrong result still benchmarks
-//! something — just not the thing it is named after.
 
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use x509_validator::der_parser::Oid;
