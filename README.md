@@ -11,6 +11,7 @@
 [![Build+test](https://github.com/namecare/x509-validator/actions/workflows/build_test.yml/badge.svg?branch=master)](https://github.com/namecare/x509-validator/actions/workflows/build_test.yml?query=branch%3Amaster)
 [![Documentation](https://docs.rs/x509-validator/badge.svg)](https://docs.rs/x509-validator/)
 [![Crates.io](https://img.shields.io/crates/v/x509-validator.svg)](https://crates.io/crates/x509-validator)
+[![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fnamecare%2Fx509-validator%2Fmaster%2F.local%2Fcoverage.json)](https://github.com/namecare/x509-validator/actions/workflows/build_test.yml?query=branch%3Amaster)
 
 X.509 certificate chain validator.   
 

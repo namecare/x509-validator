@@ -1,9 +1,11 @@
 [default.extend-words]
+# Part of a wildcard-matching fixture ("FO*.EXAMPLE.com"), not a word.
 FO = "FO"
 
 [files]
-extend-exclude = [
-    "*.der",
-    "x509-validator-bench/compare/data/",
-    "fuzz/corpus/",
-]
+# Mozilla's root CA bundle, named after the CAs themselves. The spellings are
+# theirs, and renaming the files would break the benchmark fixtures.
+#
+# Fuzzing corpus entries are raw DER blobs. Byte sequences that happen to
+# decode as near-miss English words are not typos.
+extend-exclude = ["*.der", "x509-validator-bench/compare/data/", "fuzz/corpus/"]

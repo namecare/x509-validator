@@ -9,11 +9,23 @@
 #   admin/coverage --lcov --output-path out.info
 #   admin/coverage --html && open target/llvm-cov/html/index.html
 #
+# With REPORT_ONLY set, skips straight to the report and reuses the profile
+# data already on disk. That is how CI renders a second view of one
+# measurement; re-running this script plain would recompile and re-execute
+# every backend to arrive at the same numbers.
+#
+#   admin/coverage --json --output-path cov.json
+#   REPORT_ONLY=1 admin/coverage --summary-only
+#
 # Needs a nightly toolchain and the llvm-tools component:
 #
 #   rustup toolchain install nightly --component llvm-tools
 
 set -euo pipefail
+
+if [ -n "${REPORT_ONLY:-}" ]; then
+  exec cargo llvm-cov report "$@"
+fi
 
 # One run per backend, accumulated into a single report. A combined
 # `--all-features` run would compile every backend at once and never produce

@@ -170,13 +170,12 @@ jobs:
   coverage:
     name: Measure coverage
     runs-on: ubuntu-latest
-    # Coverage informs review; by merge_group the review is over, and the
-    # number cannot change the outcome.
     if: github.event_name != 'merge_group'
+    permissions:
+      contents: write 
+      pull-requests: write 
     steps:
       - uses: actions/checkout@v5
-        with:
-          persist-credentials: false
 
       - name: Install rust toolchain
         uses: dtolnay/rust-toolchain@nightly
@@ -191,16 +190,65 @@ jobs:
           tool: cargo-llvm-cov
 
       - name: Measure coverage
-        run: ./admin/coverage --lcov --output-path final.info
+        run: ./admin/coverage --json --summary-only --output-path coverage.json
 
-      - name: Report to codecov.io
-        uses: codecov/codecov-action@v5
+      - name: Extract line coverage
+        id: cov
+        run: |
+          pct=$(jq -r '.data[0].totals.lines.percent' coverage.json)
+          printf 'pct=%.0f\n' "$pct" >> "$GITHUB_OUTPUT"
+
+      # A table in the run summary, so the number is reachable from the
+      # Actions tab on every event, including the pushes that get no comment.
+      - name: Write job summary
+        run: |
+          {
+            echo '### Coverage'
+            echo
+            echo '```'
+            REPORT_ONLY=1 ./admin/coverage --summary-only
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Edits one comment in place rather than adding one per push, so a
+      # long-running PR does not accumulate a wall of stale numbers.
+      - name: Comment on the pull request
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
         with:
-          files: final.info
-          token: ${{ secrets.CODECOV_TOKEN }}
-          # Codecov's uploader fails for reasons that have nothing to do with
-          # the commit under test. That is not a reason to fail the build.
-          fail_ci_if_error: false
+          header: coverage
+          message: |
+            **Coverage: ${{ steps.cov.outputs.pct }}%** of lines
+
+      # master only. A pull request measures the branch, not the project, and
+      # without this guard whichever PR ran last would decide what the README
+      # badge claims.
+      - name: Update the coverage badge
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        run: |
+          pct=${{ steps.cov.outputs.pct }}
+          if   [ "$pct" -ge 90 ]; then color=brightgreen
+          elif [ "$pct" -ge 80 ]; then color=green
+          elif [ "$pct" -ge 70 ]; then color=yellowgreen
+          elif [ "$pct" -ge 60 ]; then color=yellow
+          else                         color=red
+          fi
+          jq -n --arg m "$pct%" --arg c "$color" \
+            '{schemaVersion: 1, label: "coverage", message: $m, color: $c}' \
+            > .local/coverage.json
+          # No change on a commit that did not move the number, and nothing to
+          # push; `git commit` would otherwise exit non-zero and fail the job.
+          if git diff --quiet .local/coverage.json; then
+            echo "Coverage unchanged at $pct%."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .local/coverage.json
+          # [skip ci] because this push would otherwise start another run of
+          # this same workflow, which would push again.
+          git commit -m "chore: Update coverage badge to $pct% [skip ci]"
+          git push
 
   minver:
     name: Check minimum versions of direct dependencies
