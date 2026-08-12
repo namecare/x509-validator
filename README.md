@@ -87,7 +87,7 @@ fn example(root_der: &[u8], intermediate_der: &[u8], leaf_der: &[u8], now: Times
 > considers and every candidate it discards through it. If you don't need any of
 > that, call `validate(&leaf, &intermediates)` instead.
 
-Runnable versions of this and more are in [examples]:
+More are in [examples]:
 
 | Example | Shows |
 |---|---|
@@ -102,8 +102,7 @@ cargo run -p x509-validator-examples --example validate_chain
 
 ## Approach
 
-Parsing is done by [x509-parser]. `x509_validator::Certificate` is a re-export
-of its `X509Certificate`.
+Parsing is done by [x509-parser]. 
 
 Crypto is swappable via the feature flags above, or you can supply your own
 `SignatureVerifier`.
