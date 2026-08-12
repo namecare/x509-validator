@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.2.0] - 2026-08-12
+
+### Added
+- `Validator::validate(leaf, intermediates)`, a diagnostic-free entry point
+  for callers that do not need to observe chain building. 
+
+### Changed
+- **Breaking:** the callback taken by `validate_with_diagnostics` is now
+  `&mut dyn FnMut(VerificationDiagnostic<'a>)` instead of
+  `&mut dyn FnMut(VerificationDiagnostic<'_>)`.
+
+### Internal
+- Reorganized the `x509-validator-bench` comparison suite into four groups
+  (`internals`, `parsers`, `verifiers`, `rust_vs_swift`) with a `run.sh`
+  driver. The bench crates are unpublished and do not affect the public API.
+
 ## [0.1.0] - 2026-08-11
 
 ### Added

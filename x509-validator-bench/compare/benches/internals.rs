@@ -205,3 +205,55 @@ mod crypto_atomics {
         );
     }
 }
+
+#[cfg(feature = "aws_lc")]
+mod validate {
+    use core::hint::black_box;
+
+    use x509_validator::store::CertificateStore;
+    use x509_validator::{RFC5280Policy, Validator};
+    use x509_validator_testkit::real_chain::apple;
+
+    #[divan::bench]
+    fn validate(bencher: divan::Bencher<'_, '_>) {
+        let chain = apple::chain();
+        let roots = vec![chain.root.clone()];
+        let intermediates = vec![chain.intermediate.clone()];
+
+        let validate = || {
+            let validator = Validator::with_policy_and_backend(
+                CertificateStore::from_iter(roots.clone()),
+                RFC5280Policy::new(apple::SIGNED_DATE),
+                &x509_validator::crypto::aws_lc::DEFAULT_PROVIDER,
+            );
+            validator.validate(
+                &chain.leaf,
+                &CertificateStore::from_iter(intermediates.clone()),
+            )
+        };
+
+        bencher.bench(|| black_box(validate()));
+    }
+
+    #[divan::bench]
+    fn validate_with_diagnostics(bencher: divan::Bencher<'_, '_>) {
+        let chain = apple::chain();
+        let roots = vec![chain.root.clone()];
+        let intermediates = vec![chain.intermediate.clone()];
+
+        let validate = || {
+            let validator = Validator::with_policy_and_backend(
+                CertificateStore::from_iter(roots.clone()),
+                RFC5280Policy::new(apple::SIGNED_DATE),
+                &x509_validator::crypto::aws_lc::DEFAULT_PROVIDER,
+            );
+            validator.validate_with_diagnostics(
+                &chain.leaf,
+                &CertificateStore::from_iter(intermediates.clone()),
+                &mut |_| {},
+            )
+        };
+
+        bencher.bench(|| black_box(validate()));
+    }
+}

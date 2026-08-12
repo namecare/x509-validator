@@ -1,6 +1,6 @@
 [package]
 name = "x509-validator"
-version = "0.1.0"
+version = "0.2.0"
 edition.workspace = true
 rust-version = "1.88"
 description = "X.509 certificate chain validation with RFC 5280 and server-identity policies."
