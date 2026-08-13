@@ -1,6 +1,3 @@
-//! The parity benchmark: every validation scenario from the reference
-//! implementation's validator benchmark, case for case.
-
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use x509_validator::der_parser::Oid;
 use x509_validator::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS;
@@ -66,10 +63,6 @@ struct Scenario {
 
 /// Validates `leaf` against freshly built stores, returning the chain length
 /// (or failure count) so nothing can be optimised away as dead code.
-///
-/// The stores are passed in rather than built here: `CertificateStore::from_iter`
-/// allocates a `HashMap` and a subject key per certificate, which is setup
-/// cost, not validation cost, and does not belong in the timed region.
 fn validate(
     roots: CertificateStore<'static>,
     intermediates: &CertificateStore<'static>,

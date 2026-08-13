@@ -12,7 +12,9 @@ use x509_validator::unverified_chain::UnverifiedCertificateChain;
 /// bundle roots all live in `x509-validator-testkit`, which is where their
 /// provenance is recorded; both benchmark crates and the fuzz corpus draw
 /// from that one copy.
-pub use x509_validator_testkit::bench_fixtures::{parity, Parity, REFERENCE_TIME};
+pub use x509_validator_testkit::bench_fixtures::{
+    p256_chain, parity, CurveChain, Parity, REFERENCE_TIME,
+};
 pub use x509_validator_testkit::real_chain::apple;
 pub use x509_validator_testkit::roots::ROOTS;
 
