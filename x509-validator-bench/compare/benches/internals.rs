@@ -13,7 +13,7 @@ mod backend {
     use x509_validator::rfc5280::RFC5280Policy;
     use x509_validator::store::CertificateStore;
     use x509_validator::{Certificate, Validator};
-    use x509_validator_bench_compare::{apple, parity, REFERENCE_TIME};
+    use x509_validator_bench_compare::{apple, p256_chain, REFERENCE_TIME};
 
     /// One chain to validate: a trust store, an intermediate store, a leaf,
     /// and the time to evaluate validity at.
@@ -32,42 +32,39 @@ mod backend {
     }
 
     /// The chains every backend below is measured against.
+    ///
+    /// Two chains of the same shape — leaf → intermediate → root, two
+    /// signature verifications each — differing only in the curve of the
+    /// issuer keys doing the verifying. That isolation is the point: a
+    /// backend's two rows differ by curve alone, so the pair shows both what
+    /// it costs where the curve is well optimized and where it is not.
+    ///
+    /// Which curve verifies is set by the ISSUER's key, not the subject's. In
+    /// the Apple chain the leaf is itself P-256, but it is verified with the
+    /// intermediate's P-384 key, so every verification in that chain is P-384.
     fn chains() -> &'static [Chain] {
         static CHAINS: std::sync::OnceLock<Vec<Chain>> = std::sync::OnceLock::new();
         CHAINS.get_or_init(|| {
-            let parity = parity();
+            let p256 = p256_chain();
             let apple = apple::chain();
             vec![
-                // leaf → intermediate → root, the common case.
+                // The fast curve. Both verifications use P-256 issuer keys,
+                // which every backend has a dedicated implementation for.
                 Chain {
-                    name: "three_cert",
-                    roots: vec![parity.ca1.clone()],
-                    intermediates: vec![parity.intermediate1.clone()],
-                    leaf: parity.localhost_leaf.clone(),
+                    name: "p256_chain",
+                    roots: vec![p256.root.clone()],
+                    intermediates: vec![p256.intermediate.clone()],
+                    leaf: p256.leaf.clone(),
                     at: REFERENCE_TIME,
                 },
-                // The same chain where the intermediate store also holds
-                // cross-signed decoys that must be rejected — the cost of
-                // issuer search rather than the happy path alone.
+                // The real, publicly-issued counterpart: Apple's
+                // receipt-signing leaf → WWDR G6 → Apple Root CA - G3,
+                // validated at the `signedDate` of a payload these
+                // certificates actually signed. Both the intermediate and the
+                // root hold P-384 keys, so both verifications are P-384 —
+                // the curve where backends diverge most.
                 Chain {
-                    name: "cross_signed_candidates",
-                    roots: vec![parity.ca1.clone(), parity.ca2.clone()],
-                    intermediates: vec![
-                        parity.intermediate1.clone(),
-                        parity.ca1_cross_signed_by_ca2.clone(),
-                        parity.ca2_cross_signed_by_ca1.clone(),
-                    ],
-                    leaf: parity.localhost_leaf.clone(),
-                    at: REFERENCE_TIME,
-                },
-                // A real, publicly-issued chain: Apple's receipt-signing leaf
-                // → WWDR G6 → Apple Root CA - G3, validated at the
-                // `signedDate` of a payload these certificates actually
-                // signed. Both verifications are ECDSA-P384, where the spread
-                // between backends is widest, so this is the pessimistic
-                // real-world case rather than the average one.
-                Chain {
-                    name: "apple_receipt",
+                    name: "apple_receipt_p384",
                     roots: vec![apple.root.clone()],
                     intermediates: vec![apple.intermediate.clone()],
                     leaf: apple.leaf.clone(),
