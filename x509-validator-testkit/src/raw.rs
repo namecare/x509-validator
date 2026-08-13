@@ -1,14 +1,3 @@
-// ---------------------------------------------------------------------------
-// Hand-encoded nameConstraints extensions.
-//
-// The certificate generator's `GeneralSubtree` type only models a subset of
-// the GeneralName choices in RFC 5280 §4.2.1.6 — notably it cannot express
-// `uniformResourceIdentifier`, nor any of the choices this crate treats as
-// unsupported (otherName, x400Address, ediPartyName, registeredID). Those
-// subtree kinds are built here as raw DER instead, and attached with a
-// custom extension carrying the nameConstraints OID.
-// ---------------------------------------------------------------------------
-
 /// id-ce-nameConstraints, RFC 5280 §4.2.1.10: 2.5.29.30.
 const NAME_CONSTRAINTS_OID: &[u64] = &[2, 5, 29, 30];
 

@@ -1,15 +1,4 @@
 //! The certificate set the parity benchmarks validate against.
-//!
-//! The reference implementation this mirrors generates its certificates at
-//! runtime from fresh randomness on every launch, so there is no fixed data
-//! to reproduce. What is fixed there is the *specification* — key
-//! algorithms, validity windows, and extension shapes — so that is what is
-//! matched here.
-//!
-//! This lives in the testkit rather than in a bench crate because both
-//! benchmark crates need the same certificates: `compare` measures backends
-//! against them and `measure` runs the parity scenarios over them. Two
-//! copies would be two specifications, and they would drift.
 
 use std::sync::OnceLock;
 

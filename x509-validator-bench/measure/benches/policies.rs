@@ -19,10 +19,6 @@ fn chain() -> UnverifiedCertificateChain<'static> {
     ])
 }
 
-/// Registers one policy benchmark. The policy is rebuilt per iteration
-/// because `chain_meets_policy_requirements` takes `&mut self` and some
-/// policies carry state across calls; construction happens in the setup
-/// phase so it is not timed.
 fn bench_policy<P: ValidationPolicy>(c: &mut Criterion, id: &str, make: impl Fn() -> P) {
     let chain = chain();
     c.bench_function(id, |b| {
@@ -60,11 +56,6 @@ fn policies(c: &mut Criterion) {
 }
 
 /// `ServerIdentityPolicy`'s three matching paths, benched separately.
-///
-/// The exact-DNS path is the cheap common case. Wildcard matching is the one
-/// the implementation itself calls expensive, and IP matching is a different
-/// code path again — both were unmeasured before, which made them the most
-/// likely places for a regression to go unnoticed.
 fn server_identity(c: &mut Criterion) {
     bench_policy(c, "policy/server_identity_dns", || {
         ServerIdentityPolicy::new(Some("localhost"), None)
