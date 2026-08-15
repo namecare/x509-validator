@@ -40,7 +40,7 @@ jobs:
           workspaces: fuzz
           key: ${{ matrix.fuzzer }}
 
-      - uses: taiki-e/cache-cargo-install-action@v2
+      - uses: taiki-e/cache-cargo-install-action@v3
         with:
           tool: cargo-fuzz
 
