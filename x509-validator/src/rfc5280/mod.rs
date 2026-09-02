@@ -1,5 +1,6 @@
 pub mod basic_constraints_policy;
 pub mod dns_names;
+pub mod eku_policy;
 pub mod expiry_policy;
 pub mod ip_constraints;
 pub mod name_constraints_policy;
@@ -7,6 +8,7 @@ pub mod uri_constraints;
 pub mod version_policy;
 
 pub use basic_constraints_policy::BasicConstraintsPolicy;
+pub use eku_policy::{CertificateRole, EkuPolicy, eku_oids};
 pub use expiry_policy::{ExpiryPolicy, Timestamp};
 pub use name_constraints_policy::NameConstraintsPolicy;
 pub use version_policy::VersionPolicy;

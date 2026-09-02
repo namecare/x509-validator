@@ -1,5 +1,5 @@
 use rcgen::string::Ia5String;
-use rcgen::{CertificateParams, DistinguishedName, KeyPair, SanType};
+use rcgen::{CertificateParams, DistinguishedName, ExtendedKeyUsagePurpose, KeyPair, SanType};
 
 use crate::ca::{Ca, base_params};
 
@@ -114,6 +114,7 @@ pub struct LeafSpec {
     dns_sans: Vec<String>,
     include_aki: bool,
     critical_extension: Option<(Vec<u64>, Vec<u8>)>,
+    extended_key_usages: Vec<ExtendedKeyUsagePurpose>,
 }
 
 impl LeafSpec {
@@ -126,6 +127,7 @@ impl LeafSpec {
             dns_sans: Vec::new(),
             include_aki: false,
             critical_extension: None,
+            extended_key_usages: Vec::new(),
         }
     }
 
@@ -150,6 +152,12 @@ impl LeafSpec {
 
     pub fn include_aki(mut self, include_aki: bool) -> Self {
         self.include_aki = include_aki;
+        self
+    }
+
+    /// Attaches an `extendedKeyUsage` naming the given key purposes.
+    pub fn extended_key_usages(mut self, purposes: &[ExtendedKeyUsagePurpose]) -> Self {
+        self.extended_key_usages = purposes.to_vec();
         self
     }
 
@@ -179,6 +187,7 @@ impl LeafSpec {
         if is_ca {
             params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
         }
+        params.extended_key_usages = self.extended_key_usages;
         if let Some((oid, value)) = self.critical_extension {
             let mut ext = rcgen::CustomExtension::from_oid_content(&oid, value);
             ext.set_criticality(true);
