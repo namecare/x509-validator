@@ -91,13 +91,15 @@ More are in [examples]:
 
 | Example | Shows |
 |---|---|
-| `validate_chain` | The above, end to end |
-| `server_identity` | Hostname validation, and combining two policies |
+| `webpki` | What a TLS client checks: platform trust store, serverAuth, hostname |
+| `apple_x5c` | Validating the `x5c` chain from an App Store JWS |
+| `client_certificate` | The mutual-TLS server side |
+| `pinned_root` | Trusting one private CA instead of the public web PKI |
 | `diagnostics` | Reading the diagnostic callback to find out *why* a chain failed |
 | `custom_crypto_backend` | Implementing `SignatureVerifier` over OpenSSL |
 
 ```sh
-cargo run -p x509-validator-examples --example validate_chain
+cargo run -p x509-validator-examples --example webpki
 ```
 
 ## Approach
@@ -134,8 +136,8 @@ You may use this software under the terms of any of these licenses, at your opti
 
 [ref]: https://github.com/apple/swift-certificates/tree/main/Sources/X509/Verifier
 [x509-parser]: https://github.com/rusticata/x509-parser
-[examples]: https://github.com/namecare/x509-validator/tree/master/examples/examples
-[custom-backend]: https://github.com/namecare/x509-validator/blob/master/examples/examples/custom_crypto_backend.rs
+[examples]: https://github.com/namecare/x509-validator/tree/master/examples
+[custom-backend]: https://github.com/namecare/x509-validator/blob/master/examples/custom_crypto_backend.rs
 [x509-validator-bench]: https://github.com/namecare/x509-validator/tree/master/x509-validator-bench
 [bench-measure]: https://github.com/namecare/x509-validator/blob/master/x509-validator-bench/measure/README.md
 [bench-compare]: https://github.com/namecare/x509-validator/blob/master/x509-validator-bench/compare/README.md
