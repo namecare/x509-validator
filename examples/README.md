@@ -12,36 +12,62 @@ Examples for the [x509-validator][crate] crate.
 
 ## Overview
 
-This directory contains a number of examples showcasing various capabilities of the x509-validator(todo: add link to crate) crate.
+Each example is a single self-contained file that starts where a real
+application starts: with DER bytes.
 
-todo: list of all examples with small desc
-
-| Example | Notes |
+| Example | Shows |
 |---|---|
-| [`validate_chain`][validate-chain] | The core flow: a store of trusted roots, a store of intermediates to build through, and `RFC5280Policy`. Also shows what rejection looks like when no chain reaches a root. |
-| [`server_identity`][server-identity] | Hostname validation with `ServerIdentityPolicy`, and combining it with `RFC5280Policy` by implementing `ValidationPolicy` over both. |
-| [`diagnostics`][diagnostics] | Using the diagnostic callback to find out *why* a chain was rejected — every issuer considered and every candidate discarded. |
-| [`custom_crypto_backend`][custom-backend] | Implementing `SignatureVerifier` over a crypto library the crate knows nothing about — OpenSSL here. |
+| [`apple_x5c`][apple-x5c] | Validating the `x5c` chain carried by an App Store signed transaction, against a pinned root. |
+| [`webpki`][webpki] | What a TLS client checks: the platform trust store, serverAuth, and the hostname. |
+| [`client_certificate`][client-certificate] | The mutual-TLS server side — clientAuth, and identity taken from the subject. |
+| [`pinned_root`][pinned-root] | Trusting one private CA instead of the public web PKI. |
+| [`diagnostics`][diagnostics] | Reading the diagnostic callback to find out *why* a chain was rejected. |
+| [`custom_crypto_backend`][custom-backend] | Implementing `SignatureVerifier` over OpenSSL. |
+
+A good starting point is `webpki`, then `apple_x5c`.
+
+## Certificates
+
+Real certificates live in [`mocks/`](mocks): a TLS chain captured from a
+handshake with example.com, and a signed transaction from Apple's own test
+suite, whose `x5c` header carries a real chain.
+The examples that need a chain shaped a particular way — a private CA, a
+client credential, a deliberately broken chain — generate one with
+[rcgen][rcgen] instead, so the shape being demonstrated is visible in the
+example itself.
+
+Public roots come from the operating system's own trust store, via
+[rustls-native-certs][native-certs]. Every crate these examples use is
+published, so an example can be copied into your own project as it stands.
+
+Because the vendored certificates are real, they expire. `webpki` validates
+against the current time and will start failing once the example.com chain
+expires; re-capture it with:
+
+```sh
+openssl s_client -connect example.com:443 -servername example.com -showcerts </dev/null
+```
+
+`apple_x5c` checks expiry against its transaction's `signedDate`, so it keeps
+working regardless of the wall clock.
 
 ## Requirements
 
-- Rust 1.88 or newer, edition 2024.
+- Rust 1.88 or newer.
+- OpenSSL, for the `custom_crypto_backend` example.
+- A platform trust store, for `webpki` and `pinned_root`.
 
 ## Usage
 
-All examples can be executed with:
-
-```
+```sh
 cargo run -p x509-validator-examples --example $name
 ```
 
 For instance:
 
+```sh
+cargo run -p x509-validator-examples --example webpki
 ```
-cargo run -p x509-validator-examples --example validate_chain
-```
-
-A good starting point would be `validate_chain` and `custom_crypto_backend`.
 
 ## Contributing
 
@@ -58,9 +84,11 @@ These are included as LICENSE-APACHE and LICENSE-MIT respectively.
 You may use this software under the terms of any of these licenses, at your option.
 
 [crate]: https://crates.io/crates/x509-validator
-[lib]: src/lib.rs
-[manifest]: Cargo.toml
-[validate-chain]: examples/validate_chain.rs
-[server-identity]: examples/server_identity.rs
-[diagnostics]: examples/diagnostics.rs
-[custom-backend]: examples/custom_crypto_backend.rs
+[rcgen]: https://github.com/rustls/rcgen
+[native-certs]: https://github.com/rustls/rustls-native-certs
+[apple-x5c]: apple_x5c.rs
+[webpki]: webpki.rs
+[client-certificate]: client_certificate.rs
+[pinned-root]: pinned_root.rs
+[diagnostics]: diagnostics.rs
+[custom-backend]: custom_crypto_backend.rs

@@ -11,20 +11,42 @@ workspace = true
 [dependencies]
 x509-validator = { workspace = true, features = ["aws_lc"] }
 
-# The examples validate certificates, so they need certificates to validate.
-# Generating them here keeps every example self-contained: `cargo run
-# --example <name>` works from a clean checkout with no fixture files to
-# fetch and no expiry dates to go stale.
-x509-validator-testkit = { path = "../x509-validator-testkit" }
-time = "0.3"
+# Certificates to validate. The examples that need a chain shaped a particular
+# way generate one; the rest read real DER from `mocks/`.
+rcgen = "0.14.8"
 
-# Backs the `custom_crypto_backend` example, and generates the RSA keys the
-# certificate generator cannot. Not a dependency of x509-validator itself —
-# the point of that example is that a backend is something a caller supplies,
-# from whichever crypto library they already link against.
+# The platform trust store, for the examples that validate against the public
+# web PKI. This is where a real application gets its roots.
+rustls-native-certs = "0.8"
+
+# `x5c` chains arrive base64-encoded inside a JWS header.
+base64 = "0.22"
+
+# Backs the `custom_crypto_backend` example. Not a dependency of
+# x509-validator itself — the point of that example is that a backend is
+# something a caller supplies, from whichever library they already link.
 openssl = "0.10"
 
-# Examples live in `examples/` and are the whole point of this crate; there
-# is no library to build.
-[lib]
-path = "src/lib.rs"
+[[example]]
+name = "apple_x5c"
+path = "apple_x5c.rs"
+
+[[example]]
+name = "webpki"
+path = "webpki.rs"
+
+[[example]]
+name = "client_certificate"
+path = "client_certificate.rs"
+
+[[example]]
+name = "pinned_root"
+path = "pinned_root.rs"
+
+[[example]]
+name = "diagnostics"
+path = "diagnostics.rs"
+
+[[example]]
+name = "custom_crypto_backend"
+path = "custom_crypto_backend.rs"
