@@ -61,9 +61,9 @@ fn trivial_chain_building(bencher: Bencher<'_, '_>) {
     let p = parity();
     scenario(
         bencher,
-        vec![p.ca1.clone()],
-        vec![p.intermediate1.clone()],
-        &p.localhost_leaf,
+        vec![p.ca1().clone()],
+        vec![p.intermediate1().clone()],
+        &p.localhost_leaf(),
         rfc5280,
         true,
     );
@@ -74,9 +74,9 @@ fn extra_roots_are_ignored(bencher: Bencher<'_, '_>) {
     let p = parity();
     scenario(
         bencher,
-        vec![p.ca1.clone(), p.ca2.clone()],
-        vec![p.intermediate1.clone()],
-        &p.localhost_leaf,
+        vec![p.ca1().clone(), p.ca2().clone()],
+        vec![p.intermediate1().clone()],
+        &p.localhost_leaf(),
         rfc5280,
         true,
     );
@@ -87,9 +87,9 @@ fn roots_in_the_intermediate_store_are_not_a_problem(bencher: Bencher<'_, '_>) {
     let p = parity();
     scenario(
         bencher,
-        vec![p.ca1.clone(), p.ca2.clone()],
-        vec![p.intermediate1.clone(), p.ca1.clone(), p.ca2.clone()],
-        &p.localhost_leaf,
+        vec![p.ca1().clone(), p.ca2().clone()],
+        vec![p.intermediate1().clone(), p.ca1().clone(), p.ca2().clone()],
+        &p.localhost_leaf(),
         rfc5280,
         true,
     );
@@ -100,9 +100,12 @@ fn cross_signed_root(bencher: Bencher<'_, '_>) {
     let p = parity();
     scenario(
         bencher,
-        vec![p.ca2.clone()],
-        vec![p.intermediate1.clone(), p.ca1_cross_signed_by_ca2.clone()],
-        &p.localhost_leaf,
+        vec![p.ca2().clone()],
+        vec![
+            p.intermediate1().clone(),
+            p.ca1_cross_signed_by_ca2().clone(),
+        ],
+        &p.localhost_leaf(),
         rfc5280,
         true,
     );
@@ -113,13 +116,13 @@ fn builds_the_shorter_path_when_both_cross_signed_roots_are_present(bencher: Ben
     let p = parity();
     scenario(
         bencher,
-        vec![p.ca1.clone(), p.ca2.clone()],
+        vec![p.ca1().clone(), p.ca2().clone()],
         vec![
-            p.intermediate1.clone(),
-            p.ca2_cross_signed_by_ca1.clone(),
-            p.ca1_cross_signed_by_ca2.clone(),
+            p.intermediate1().clone(),
+            p.ca2_cross_signed_by_ca1().clone(),
+            p.ca1_cross_signed_by_ca2().clone(),
         ],
-        &p.localhost_leaf,
+        &p.localhost_leaf(),
         rfc5280,
         true,
     );
@@ -130,12 +133,13 @@ fn prefers_an_intermediate_whose_ski_matches(bencher: Bencher<'_, '_>) {
     let p = parity();
     scenario(
         bencher,
-        vec![p.ca1.clone()],
+        vec![p.ca1().clone()],
         vec![
-            p.intermediate1.clone(),
-            p.intermediate1_without_ski_aki.clone(),
+            p.intermediate1().clone(),
+            p.intermediate1_without_ski_aki()
+                .clone(),
         ],
-        &p.localhost_leaf,
+        &p.localhost_leaf(),
         rfc5280,
         true,
     );
@@ -146,13 +150,14 @@ fn prefers_no_ski_over_a_non_matching_one(bencher: Bencher<'_, '_>) {
     let p = parity();
     scenario(
         bencher,
-        vec![p.ca1.clone()],
+        vec![p.ca1().clone()],
         vec![
-            p.intermediate1_with_incorrect_ski_aki
+            p.intermediate1_with_incorrect_ski_aki()
                 .clone(),
-            p.intermediate1_without_ski_aki.clone(),
+            p.intermediate1_without_ski_aki()
+                .clone(),
         ],
-        &p.localhost_leaf,
+        &p.localhost_leaf(),
         rfc5280,
         true,
     );
@@ -164,16 +169,16 @@ fn rejects_a_root_that_did_not_sign_the_certificate_below_it(bencher: Bencher<'_
     scenario(
         bencher,
         vec![
-            p.ca1_with_alternative_private_key
+            p.ca1_with_alternative_private_key()
                 .clone(),
-            p.ca2.clone(),
+            p.ca2().clone(),
         ],
         vec![
-            p.ca1_cross_signed_by_ca2.clone(),
-            p.ca2_cross_signed_by_ca1.clone(),
-            p.intermediate1.clone(),
+            p.ca1_cross_signed_by_ca2().clone(),
+            p.ca2_cross_signed_by_ca1().clone(),
+            p.intermediate1().clone(),
         ],
-        &p.localhost_leaf,
+        &p.localhost_leaf(),
         rfc5280,
         true,
     );
@@ -184,16 +189,16 @@ fn rejects_a_root_that_did_not_sign_the_certificate_below_it(bencher: Bencher<'_
 #[divan::bench]
 fn a_policy_failure_sends_the_search_down_a_longer_path(bencher: Bencher<'_, '_>) {
     let p = parity();
-    let forbidden = p.ca1.as_raw().to_vec();
+    let forbidden = p.ca1().as_raw().to_vec();
     scenario(
         bencher,
-        vec![p.ca1.clone(), p.ca2.clone()],
+        vec![p.ca1().clone(), p.ca2().clone()],
         vec![
-            p.intermediate1.clone(),
-            p.ca2_cross_signed_by_ca1.clone(),
-            p.ca1_cross_signed_by_ca2.clone(),
+            p.intermediate1().clone(),
+            p.ca2_cross_signed_by_ca1().clone(),
+            p.ca1_cross_signed_by_ca2().clone(),
         ],
-        &p.localhost_leaf,
+        &p.localhost_leaf(),
         || FailIfCertInChain::new(forbidden.clone(), REFERENCE_TIME),
         true,
     );
@@ -204,9 +209,9 @@ fn a_self_signed_certificate_in_the_trust_store_validates(bencher: Bencher<'_, '
     let p = parity();
     scenario(
         bencher,
-        vec![p.ca1.clone(), p.isolated_self_signed.clone()],
-        vec![p.intermediate1.clone()],
-        &p.isolated_self_signed,
+        vec![p.ca1().clone(), p.isolated_self_signed().clone()],
+        vec![p.intermediate1().clone()],
+        &p.isolated_self_signed(),
         rfc5280,
         true,
     );
@@ -219,9 +224,9 @@ fn a_trust_root_may_be_a_non_self_signed_leaf(bencher: Bencher<'_, '_>) {
     let p = parity();
     scenario(
         bencher,
-        vec![p.localhost_leaf.clone()],
-        vec![p.intermediate1.clone()],
-        &p.localhost_leaf,
+        vec![p.localhost_leaf().clone()],
+        vec![p.intermediate1().clone()],
+        &p.localhost_leaf(),
         || IgnoreBasicConstraints,
         true,
     );
@@ -232,9 +237,9 @@ fn a_trust_root_may_be_a_non_self_signed_intermediate(bencher: Bencher<'_, '_>) 
     let p = parity();
     scenario(
         bencher,
-        vec![p.intermediate1.clone()],
-        vec![p.intermediate1.clone()],
-        &p.localhost_leaf,
+        vec![p.intermediate1().clone()],
+        vec![p.intermediate1().clone()],
+        &p.localhost_leaf(),
         rfc5280,
         true,
     );
@@ -246,12 +251,12 @@ fn an_unhandled_critical_extension_on_the_leaf_is_policed(bencher: Bencher<'_, '
     scenario(
         bencher,
         vec![
-            p.ca1.clone(),
-            p.isolated_self_signed_weird_critical
+            p.ca1().clone(),
+            p.isolated_self_signed_weird_critical()
                 .clone(),
         ],
-        vec![p.intermediate1.clone()],
-        &p.isolated_self_signed_weird_critical,
+        vec![p.intermediate1().clone()],
+        &p.isolated_self_signed_weird_critical(),
         rfc5280,
         false,
     );
@@ -262,9 +267,9 @@ fn a_missing_intermediate_cannot_build(bencher: Bencher<'_, '_>) {
     let p = parity();
     scenario(
         bencher,
-        vec![p.ca1.clone()],
+        vec![p.ca1().clone()],
         vec![],
-        &p.localhost_leaf,
+        &p.localhost_leaf(),
         rfc5280,
         false,
     );
@@ -275,9 +280,9 @@ fn a_self_signed_certificate_outside_the_trust_store_is_rejected(bencher: Benche
     let p = parity();
     scenario(
         bencher,
-        vec![p.ca1.clone()],
-        vec![p.intermediate1.clone()],
-        &p.isolated_self_signed,
+        vec![p.ca1().clone()],
+        vec![p.intermediate1().clone()],
+        &p.isolated_self_signed(),
         rfc5280,
         false,
     );
@@ -289,8 +294,8 @@ fn a_missing_root_cannot_build(bencher: Bencher<'_, '_>) {
     scenario(
         bencher,
         vec![],
-        vec![p.intermediate1.clone()],
-        &p.localhost_leaf,
+        vec![p.intermediate1().clone()],
+        &p.localhost_leaf(),
         rfc5280,
         false,
     );

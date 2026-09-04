@@ -52,9 +52,9 @@ mod backend {
                 // which every backend has a dedicated implementation for.
                 Chain {
                     name: "p256_chain",
-                    roots: vec![p256.root.clone()],
-                    intermediates: vec![p256.intermediate.clone()],
-                    leaf: p256.leaf.clone(),
+                    roots: vec![p256.root().clone()],
+                    intermediates: vec![p256.intermediate().clone()],
+                    leaf: p256.leaf().clone(),
                     at: REFERENCE_TIME,
                 },
                 // The real, publicly-issued counterpart: Apple's
@@ -149,24 +149,26 @@ mod crypto_atomics {
         sample: &SignedSample,
         provider: &'static dyn SignatureVerifier,
     ) {
-        let verify = || {
-            provider.verify_signature(
-                &sample.algorithm,
-                &sample.spki,
-                sample.message,
-                sample.signature,
-            )
-        };
-        if verify().is_err() {
+        // Parsed once, outside the timed region: the sample parses its DER
+        // on each access, and only the verification is being measured.
+        let algorithm = sample.algorithm();
+        let spki = sample.spki();
+        let message = sample.message();
+        let signature = sample.signature();
+
+        if provider
+            .verify_signature(&algorithm, &spki, message, signature)
+            .is_err()
+        {
             return;
         }
 
         bencher.bench(|| {
             black_box(provider.verify_signature(
-                black_box(&sample.algorithm),
-                black_box(&sample.spki),
-                black_box(sample.message),
-                black_box(sample.signature),
+                black_box(&algorithm),
+                black_box(&spki),
+                black_box(message),
+                black_box(signature),
             ))
             .ok()
         });

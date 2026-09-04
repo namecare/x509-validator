@@ -27,27 +27,34 @@ fn ca_key() -> KeyPair {
     KeyPair::generate_for(&PKCS_ECDSA_P384_SHA384).expect("generate P-384 key pair")
 }
 
-/// A three-certificate chain whose keys are all on one curve.
+/// A three-certificate chain whose keys are all on one curve
 ///
-/// The backend comparison validates one of these per curve. Holding the shape
-/// fixed — leaf → intermediate → root, two signature verifications — and
-/// varying only the curve is what makes the two rows a fair test: any
-/// difference between them is the curve, not the amount of work.
+/// Owns the DER it was built from. A `Certificate` borrows the bytes it was
+/// parsed from, so a struct holding both would be self-referential; the
+/// certificates are parsed on access instead.
 pub struct CurveChain {
-    pub root: Certificate<'static>,
-    pub intermediate: Certificate<'static>,
-    pub leaf: Certificate<'static>,
+    root: Vec<u8>,
+    intermediate: Vec<u8>,
+    leaf: Vec<u8>,
+}
+
+impl CurveChain {
+    pub fn root(&self) -> Certificate<'_> {
+        cert(&self.root)
+    }
+
+    pub fn intermediate(&self) -> Certificate<'_> {
+        cert(&self.intermediate)
+    }
+
+    pub fn leaf(&self) -> Certificate<'_> {
+        cert(&self.leaf)
+    }
 }
 
 static P256_CHAIN: OnceLock<CurveChain> = OnceLock::new();
 
 /// An all-P-256 chain, built once on first call.
-///
-/// Every key here is P-256, so both verifications a validation performs take
-/// the curve backends optimize hardest. It is the counterpart to the vendored
-/// Apple chain, which verifies entirely against P-384 issuer keys: together
-/// the two bracket what a backend costs on the fast and slow curve, on chains
-/// of identical shape.
 pub fn p256_chain() -> &'static CurveChain {
     P256_CHAIN.get_or_init(build_p256_chain)
 }
@@ -78,24 +85,61 @@ fn build_p256_chain() -> CurveChain {
         .signed_by(&intermediate);
 
     CurveChain {
-        root: cert(root.der),
-        intermediate: cert(intermediate.der),
-        leaf: cert(leaf),
+        root: root.der,
+        intermediate: intermediate.der,
+        leaf,
     }
 }
 
+/// Owns the DER it was built from; see [`CurveChain`].
 pub struct Parity {
-    pub ca1: Certificate<'static>,
-    pub ca1_cross_signed_by_ca2: Certificate<'static>,
-    pub ca1_with_alternative_private_key: Certificate<'static>,
-    pub ca2: Certificate<'static>,
-    pub ca2_cross_signed_by_ca1: Certificate<'static>,
-    pub intermediate1: Certificate<'static>,
-    pub intermediate1_without_ski_aki: Certificate<'static>,
-    pub intermediate1_with_incorrect_ski_aki: Certificate<'static>,
-    pub localhost_leaf: Certificate<'static>,
-    pub isolated_self_signed: Certificate<'static>,
-    pub isolated_self_signed_weird_critical: Certificate<'static>,
+    ca1: Vec<u8>,
+    ca1_cross_signed_by_ca2: Vec<u8>,
+    ca1_with_alternative_private_key: Vec<u8>,
+    ca2: Vec<u8>,
+    ca2_cross_signed_by_ca1: Vec<u8>,
+    intermediate1: Vec<u8>,
+    intermediate1_without_ski_aki: Vec<u8>,
+    intermediate1_with_incorrect_ski_aki: Vec<u8>,
+    localhost_leaf: Vec<u8>,
+    isolated_self_signed: Vec<u8>,
+    isolated_self_signed_weird_critical: Vec<u8>,
+}
+
+impl Parity {
+    pub fn ca1(&self) -> Certificate<'_> {
+        cert(&self.ca1)
+    }
+    pub fn ca1_cross_signed_by_ca2(&self) -> Certificate<'_> {
+        cert(&self.ca1_cross_signed_by_ca2)
+    }
+    pub fn ca1_with_alternative_private_key(&self) -> Certificate<'_> {
+        cert(&self.ca1_with_alternative_private_key)
+    }
+    pub fn ca2(&self) -> Certificate<'_> {
+        cert(&self.ca2)
+    }
+    pub fn ca2_cross_signed_by_ca1(&self) -> Certificate<'_> {
+        cert(&self.ca2_cross_signed_by_ca1)
+    }
+    pub fn intermediate1(&self) -> Certificate<'_> {
+        cert(&self.intermediate1)
+    }
+    pub fn intermediate1_without_ski_aki(&self) -> Certificate<'_> {
+        cert(&self.intermediate1_without_ski_aki)
+    }
+    pub fn intermediate1_with_incorrect_ski_aki(&self) -> Certificate<'_> {
+        cert(&self.intermediate1_with_incorrect_ski_aki)
+    }
+    pub fn localhost_leaf(&self) -> Certificate<'_> {
+        cert(&self.localhost_leaf)
+    }
+    pub fn isolated_self_signed(&self) -> Certificate<'_> {
+        cert(&self.isolated_self_signed)
+    }
+    pub fn isolated_self_signed_weird_critical(&self) -> Certificate<'_> {
+        cert(&self.isolated_self_signed_weird_critical)
+    }
 }
 
 static PARITY: OnceLock<Parity> = OnceLock::new();
@@ -186,17 +230,17 @@ fn build() -> Parity {
         .self_signed();
 
     Parity {
-        ca1: cert(ca1.der),
-        ca1_cross_signed_by_ca2: cert(ca1_cross.der),
-        ca1_with_alternative_private_key: cert(ca1_alternative.der),
-        ca2: cert(ca2.der),
-        ca2_cross_signed_by_ca1: cert(ca2_cross.der),
-        intermediate1: cert(intermediate1.der),
-        intermediate1_without_ski_aki: cert(intermediate1_without_ski_aki.der),
-        intermediate1_with_incorrect_ski_aki: cert(intermediate1_with_incorrect_ski_aki.der),
-        localhost_leaf: cert(localhost_leaf),
-        isolated_self_signed: cert(isolated_self_signed),
-        isolated_self_signed_weird_critical: cert(isolated_self_signed_weird_critical),
+        ca1: ca1.der,
+        ca1_cross_signed_by_ca2: ca1_cross.der,
+        ca1_with_alternative_private_key: ca1_alternative.der,
+        ca2: ca2.der,
+        ca2_cross_signed_by_ca1: ca2_cross.der,
+        intermediate1: intermediate1.der,
+        intermediate1_without_ski_aki: intermediate1_without_ski_aki.der,
+        intermediate1_with_incorrect_ski_aki: intermediate1_with_incorrect_ski_aki.der,
+        localhost_leaf,
+        isolated_self_signed,
+        isolated_self_signed_weird_critical,
     }
 }
 
@@ -212,10 +256,13 @@ mod tests {
 
         // The leaf chains to intermediate1, which chains to ca1.
         assert_eq!(
-            a.localhost_leaf.issuer().as_raw(),
-            a.intermediate1.subject().as_raw()
+            a.localhost_leaf().issuer().as_raw(),
+            a.intermediate1().subject().as_raw()
         );
-        assert_eq!(a.intermediate1.issuer().as_raw(), a.ca1.subject().as_raw());
+        assert_eq!(
+            a.intermediate1().issuer().as_raw(),
+            a.ca1().subject().as_raw()
+        );
     }
 
     #[test]
@@ -223,8 +270,14 @@ mod tests {
         let c = p256_chain();
         assert!(core::ptr::eq(c, p256_chain()), "built exactly once");
 
-        assert_eq!(c.leaf.issuer().as_raw(), c.intermediate.subject().as_raw());
-        assert_eq!(c.intermediate.issuer().as_raw(), c.root.subject().as_raw());
+        assert_eq!(
+            c.leaf().issuer().as_raw(),
+            c.intermediate().subject().as_raw()
+        );
+        assert_eq!(
+            c.intermediate().issuer().as_raw(),
+            c.root().subject().as_raw()
+        );
 
         // The point of this fixture is the curve, so assert it rather than
         // trusting `KeyPair::generate`'s default to stay P-256. A P-384 key
@@ -236,9 +289,9 @@ mod tests {
         // bytes below.
         const PRIME256V1_OID_DER: &[u8] = &[0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07];
         for (name, cert) in [
-            ("root", &c.root),
-            ("intermediate", &c.intermediate),
-            ("leaf", &c.leaf),
+            ("root", c.root()),
+            ("intermediate", c.intermediate()),
+            ("leaf", c.leaf()),
         ] {
             let spki = cert.public_key().raw;
             assert!(
@@ -253,17 +306,17 @@ mod tests {
     fn reference_time_falls_inside_every_validity_window() {
         let p = parity();
         for cert in [
-            &p.ca1,
-            &p.ca1_cross_signed_by_ca2,
-            &p.ca1_with_alternative_private_key,
-            &p.ca2,
-            &p.ca2_cross_signed_by_ca1,
-            &p.intermediate1,
-            &p.intermediate1_without_ski_aki,
-            &p.intermediate1_with_incorrect_ski_aki,
-            &p.localhost_leaf,
-            &p.isolated_self_signed,
-            &p.isolated_self_signed_weird_critical,
+            p.ca1(),
+            p.ca1_cross_signed_by_ca2(),
+            p.ca1_with_alternative_private_key(),
+            p.ca2(),
+            p.ca2_cross_signed_by_ca1(),
+            p.intermediate1(),
+            p.intermediate1_without_ski_aki(),
+            p.intermediate1_with_incorrect_ski_aki(),
+            p.localhost_leaf(),
+            p.isolated_self_signed(),
+            p.isolated_self_signed_weird_critical(),
         ] {
             let validity = cert.tbs_certificate.validity();
             assert!(

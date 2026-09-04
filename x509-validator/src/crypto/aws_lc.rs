@@ -26,8 +26,8 @@ mod tests {
     #[test]
     fn ecdsa_p256_round_trip_verifies() {
         let key_pair = KeyPair::generate().expect("generate key pair");
-        let der: &'static [u8] = Box::leak(self_signed(&key_pair).into_boxed_slice());
-        let cert = Certificate::parse(der).expect("parse certificate");
+        let der = self_signed(&key_pair);
+        let cert = Certificate::parse(&der).expect("parse certificate");
 
         let result = AwsLc.verify_signature(
             &cert.signature_algorithm,
@@ -44,8 +44,8 @@ mod tests {
     #[test]
     fn ecdsa_p256_tampered_message_fails() {
         let key_pair = KeyPair::generate().expect("generate key pair");
-        let der: &'static [u8] = Box::leak(self_signed(&key_pair).into_boxed_slice());
-        let cert = Certificate::parse(der).expect("parse certificate");
+        let der = self_signed(&key_pair);
+        let cert = Certificate::parse(&der).expect("parse certificate");
 
         let result = AwsLc.verify_signature(
             &cert.signature_algorithm,
@@ -63,8 +63,8 @@ mod tests {
             parameters: None,
         };
         let key_pair = KeyPair::generate().expect("generate key pair");
-        let der: &'static [u8] = Box::leak(self_signed(&key_pair).into_boxed_slice());
-        let cert = Certificate::parse(der).expect("parse certificate");
+        let der = self_signed(&key_pair);
+        let cert = Certificate::parse(&der).expect("parse certificate");
 
         let result =
             AwsLc.verify_signature(&algorithm, cert.public_key(), b"message", b"signature");
