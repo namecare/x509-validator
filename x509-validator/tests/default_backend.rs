@@ -11,18 +11,20 @@ use x509_validator::crypto::default_provider;
 use x509_validator::{Certificate, CertificateExt};
 use x509_validator_testkit::rcgen::{CertificateParams, KeyPair};
 
-/// A real self-signed certificate, giving the tests a genuine
+/// The DER of a real self-signed certificate, giving the tests a genuine
 /// signature to hand the default provider. rcgen's default algorithm is
 /// ECDSA P-256 / SHA-256, which every backend supports.
-fn self_signed_certificate() -> Certificate<'static> {
+///
+/// The DER is returned rather than a parsed `Certificate`, because a
+/// `Certificate` borrows the bytes it was parsed from: the caller owns the
+/// DER for as long as it holds the certificate.
+fn self_signed_der() -> Vec<u8> {
     let key_pair = KeyPair::generate().expect("generate key pair");
-    let der = CertificateParams::default()
+    CertificateParams::default()
         .self_signed(&key_pair)
         .expect("self-sign")
         .der()
-        .to_vec();
-    let der: &'static [u8] = Box::leak(der.into_boxed_slice());
-    Certificate::parse(der).expect("parse certificate")
+        .to_vec()
 }
 
 /// With exactly one backend enabled, the default provider is that backend and
@@ -46,7 +48,8 @@ fn self_signed_certificate() -> Certificate<'static> {
 ))]
 #[test]
 fn single_backend_feature_determines_a_working_provider() {
-    let cert = self_signed_certificate();
+    let der = self_signed_der();
+    let cert = Certificate::parse(&der).expect("parse certificate");
 
     let result = default_provider().verify_signature(
         &cert.signature_algorithm,
@@ -83,7 +86,8 @@ fn single_backend_feature_determines_a_working_provider() {
 )))]
 #[test]
 fn undetermined_backend_panics_naming_the_features() {
-    let cert = self_signed_certificate();
+    let der = self_signed_der();
+    let cert = Certificate::parse(&der).expect("parse certificate");
 
     // `AssertUnwindSafe`: the certificate is only read, and the test ends
     // with the catch, so no witnessed broken invariant can escape.

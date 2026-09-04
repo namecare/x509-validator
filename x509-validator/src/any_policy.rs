@@ -89,7 +89,8 @@ mod tests {
 
     #[test]
     fn erasure_preserves_the_failure_reason_verbatim() {
-        let chain = UnverifiedCertificateChain::new(vec![cert(self_signed_ca("root"))]);
+        let der = self_signed_ca("root");
+        let chain = UnverifiedCertificateChain::new(vec![cert(&der)]);
 
         let policy = AnyPolicy::new(StubPolicy::fails("leaf is not a server certificate"));
 
@@ -114,7 +115,8 @@ mod tests {
 
     #[test]
     fn erased_policies_of_different_concrete_types_share_one_type() {
-        let chain = UnverifiedCertificateChain::new(vec![cert(self_signed_ca("root"))]);
+        let der = self_signed_ca("root");
+        let chain = UnverifiedCertificateChain::new(vec![cert(&der)]);
 
         // The point of erasure: unrelated policy types become one type, so they can be
         // collected together and chosen between at runtime. Nesting must stay transparent.

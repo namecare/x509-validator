@@ -35,11 +35,11 @@ use x509_validator::{Certificate, CertificateExt, Validator};
 use x509_validator_testkit::rcgen::KeyPair;
 use x509_validator_testkit::{
     Ski, cert, issue_ca, issue_ca_with_key, issue_ca_with_key_and_name, issue_ca_with_key_ids,
-    issue_leaf, issue_leaf_with, issue_leaf_with_aki, leak, self_signed_ca_with,
+    issue_leaf, issue_leaf_with, issue_leaf_with_aki, self_signed_ca_with,
     self_signed_ca_with_key_ids, signing_identity, weird_critical_extension,
 };
 
-fn parse(der: &'static [u8]) -> Certificate<'static> {
+fn parse(der: &[u8]) -> Certificate<'_> {
     Certificate::parse(der).unwrap()
 }
 
@@ -106,20 +106,23 @@ impl ValidationPolicy for NeverMeetsPolicy {
 fn trivial_chain_succeeds_leaf_intermediate_root() {
     let root = self_signed_ca_with("root", |_| {});
     let intermediate = issue_ca("intermediate", &root, None, |_| {});
-    let leaf_der = leak(issue_leaf("leaf", &["www.example.com"], &intermediate));
-    let intermediate_der = leak(intermediate.der);
-    let root_der = leak(root.der);
+    let leaf_der = issue_leaf("leaf", &["www.example.com"], &intermediate);
+    let intermediate_der = intermediate.der;
+    let root_der = root.der;
 
-    let leaf = parse(leaf_der);
-    let roots = CertificateStore::from_iter(vec![parse(root_der)]);
-    let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
+    let leaf = parse(&leaf_der);
+    let roots = CertificateStore::from_iter(vec![parse(&root_der)]);
+    let intermediates = CertificateStore::from_iter(vec![parse(&intermediate_der)]);
     let validator = Validator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
     let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
     // The chain is exactly leaf, intermediate, root — leaf-to-root order,
     // as RFC 5280 §6.1 orders a certification path from the subject
     // outward to the trust anchor.
-    assert_chain_is(result, &[&leaf, &parse(intermediate_der), &parse(root_der)]);
+    assert_chain_is(
+        result,
+        &[&leaf, &parse(&intermediate_der), &parse(&root_der)],
+    );
 }
 
 /// The API a library consumer is expected to use: name a backend once in
@@ -152,17 +155,20 @@ fn trivial_chain_succeeds_leaf_intermediate_root() {
 fn with_policy_uses_the_feature_selected_backend() {
     let root = self_signed_ca_with("root", |_| {});
     let intermediate = issue_ca("intermediate", &root, None, |_| {});
-    let leaf_der = leak(issue_leaf("leaf", &["www.example.com"], &intermediate));
-    let intermediate_der = leak(intermediate.der);
-    let root_der = leak(root.der);
+    let leaf_der = issue_leaf("leaf", &["www.example.com"], &intermediate);
+    let intermediate_der = intermediate.der;
+    let root_der = root.der;
 
-    let leaf = parse(leaf_der);
-    let roots = CertificateStore::from_iter(vec![parse(root_der)]);
-    let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
+    let leaf = parse(&leaf_der);
+    let roots = CertificateStore::from_iter(vec![parse(&root_der)]);
+    let intermediates = CertificateStore::from_iter(vec![parse(&intermediate_der)]);
     let validator = Validator::with_policy(roots, AlwaysMeetsPolicy);
 
     let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
-    assert_chain_is(result, &[&leaf, &parse(intermediate_der), &parse(root_der)]);
+    assert_chain_is(
+        result,
+        &[&leaf, &parse(&intermediate_der), &parse(&root_der)],
+    );
 }
 
 /// `with_policy` and `with_policy_and_backend` given the same backend must
@@ -188,22 +194,22 @@ fn with_policy_uses_the_feature_selected_backend() {
 #[test]
 fn with_policy_matches_explicit_default_provider() {
     let root = self_signed_ca_with("root", |_| {});
-    let leaf_der = leak(issue_leaf("leaf", &["www.example.com"], &root));
-    let root_der = leak(root.der);
-    let leaf = parse(leaf_der);
+    let leaf_der = issue_leaf("leaf", &["www.example.com"], &root);
+    let root_der = root.der;
+    let leaf = parse(&leaf_der);
     let intermediates: CertificateStore<'_> = CertificateStore::new();
 
     let implicit = Validator::with_policy(
-        CertificateStore::from_iter(vec![parse(root_der)]),
+        CertificateStore::from_iter(vec![parse(&root_der)]),
         AlwaysMeetsPolicy,
     );
     let explicit = Validator::with_policy_and_backend(
-        CertificateStore::from_iter(vec![parse(root_der)]),
+        CertificateStore::from_iter(vec![parse(&root_der)]),
         AlwaysMeetsPolicy,
         &DEFAULT_PROVIDER,
     );
 
-    let expected: &[&Certificate<'_>] = &[&leaf, &parse(root_der)];
+    let expected: &[&Certificate<'_>] = &[&leaf, &parse(&root_der)];
     assert_chain_is(
         implicit.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {}),
         expected,
@@ -217,10 +223,10 @@ fn with_policy_matches_explicit_default_provider() {
 #[test]
 fn missing_issuer_fails() {
     let orphan = self_signed_ca_with("orphan", |_| {});
-    let leaf_der = leak(issue_leaf("leaf", &["www.example.com"], &orphan));
+    let leaf_der = issue_leaf("leaf", &["www.example.com"], &orphan);
     // Deliberately don't put `orphan` in either store, so the leaf's
     // issuer can never be found.
-    let leaf = parse(leaf_der);
+    let leaf = parse(&leaf_der);
     let roots: CertificateStore<'_> = CertificateStore::new();
     let intermediates: CertificateStore<'_> = CertificateStore::new();
     let validator = Validator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
@@ -232,9 +238,9 @@ fn missing_issuer_fails() {
 #[test]
 fn leaf_directly_in_root_store_is_accepted_immediately() {
     let root = self_signed_ca_with("leaf-is-root", |_| {});
-    let root_der = leak(root.der);
-    let leaf = parse(root_der);
-    let roots = CertificateStore::from_iter(vec![parse(root_der)]);
+    let root_der = root.der;
+    let leaf = parse(&root_der);
+    let roots = CertificateStore::from_iter(vec![parse(&root_der)]);
     let intermediates: CertificateStore<'_> = CertificateStore::new();
     let validator = Validator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
@@ -259,28 +265,28 @@ fn candidate_with_non_verifying_signature_is_skipped() {
     let root = self_signed_ca_with("root", |_| {});
     let impostor_root = self_signed_ca_with("root", |_| {});
     let intermediate = issue_ca("intermediate", &root, None, |_| {});
-    let leaf_der = leak(issue_leaf("leaf", &["www.example.com"], &intermediate));
-    let intermediate_der = leak(intermediate.der);
-    let impostor_der = leak(impostor_root.der);
+    let leaf_der = issue_leaf("leaf", &["www.example.com"], &intermediate);
+    let intermediate_der = intermediate.der;
+    let impostor_der = impostor_root.der;
 
-    let leaf = parse(leaf_der);
-    let impostor_cert = parse(impostor_der);
+    let leaf = parse(&leaf_der);
+    let impostor_cert = parse(&impostor_der);
 
     // Guard against a vacuous test: the impostor must be reachable by the
     // intermediate's issuer-name lookup, and must carry a different key.
     assert_eq!(
         impostor_cert.subject_key(),
-        parse(intermediate_der).issuer_key(),
+        parse(&intermediate_der).issuer_key(),
         "the impostor root must be found by the intermediate's issuer name"
     );
     assert_ne!(
         impostor_cert.public_key().raw,
-        parse(leak(root.der)).public_key().raw,
+        parse(&root.der).public_key().raw,
         "the impostor root must carry a different key than the real root"
     );
 
     let roots = CertificateStore::from_iter(vec![impostor_cert]);
-    let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
+    let intermediates = CertificateStore::from_iter(vec![parse(&intermediate_der)]);
     let validator = Validator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
     let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
@@ -313,11 +319,11 @@ fn candidate_with_unhandled_critical_extension_is_skipped() {
                 .unwrap() = ext;
         },
     );
-    let leaf_der = leak(issue_leaf("leaf", &["www.example.com"], &root));
-    let root_der = leak(root.der);
+    let leaf_der = issue_leaf("leaf", &["www.example.com"], &root);
+    let root_der = root.der;
 
-    let leaf = parse(leaf_der);
-    let roots = CertificateStore::from_iter(vec![parse(root_der)]);
+    let leaf = parse(&leaf_der);
+    let roots = CertificateStore::from_iter(vec![parse(&root_der)]);
     let intermediates: CertificateStore<'_> = CertificateStore::new();
     let validator = Validator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
@@ -357,13 +363,13 @@ fn policy_failure_on_first_root_candidate_continues_search() {
     let right_root = self_signed_ca_with_key_ids("root", Some(shared_key), Ski::Absent);
     let wrong_root =
         self_signed_ca_with_key_ids("root", Some(right_root.copy_of_key_pair()), Ski::Absent);
-    let leaf_der = leak(issue_leaf("leaf", &["www.example.com"], &right_root));
-    let wrong_root_der = leak(wrong_root.der);
-    let right_root_der = leak(right_root.der);
+    let leaf_der = issue_leaf("leaf", &["www.example.com"], &right_root);
+    let wrong_root_der = wrong_root.der;
+    let right_root_der = right_root.der;
 
-    let leaf = parse(leaf_der);
+    let leaf = parse(&leaf_der);
     // Insertion order deliberately puts the policy-rejected root first.
-    let roots = CertificateStore::from_iter(vec![parse(wrong_root_der), parse(right_root_der)]);
+    let roots = CertificateStore::from_iter(vec![parse(&wrong_root_der), parse(&right_root_der)]);
     let intermediates: CertificateStore<'_> = CertificateStore::new();
     let policy = RequireRootPolicy {
         right_root_der: right_root_der.to_vec(),
@@ -371,7 +377,7 @@ fn policy_failure_on_first_root_candidate_continues_search() {
     let validator = Validator::with_policy_and_backend(roots, policy, &DEFAULT_PROVIDER);
 
     let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
-    assert_chain_is(result, &[&leaf, &parse(right_root_der)]);
+    assert_chain_is(result, &[&leaf, &parse(&right_root_der)]);
 }
 
 #[test]
@@ -421,12 +427,7 @@ fn candidate_without_subject_key_identifier_is_preferred_over_one_whose_ski_mism
 
     // The signing identity fixes the AKI that the issued leaf will carry.
     let signer = signing_identity("root", shared_key, Some(unmatched_key_id.clone()));
-    let leaf_der = leak(issue_leaf_with_aki(
-        "leaf",
-        &["www.example.com"],
-        &signer,
-        true,
-    ));
+    let leaf_der = issue_leaf_with_aki("leaf", &["www.example.com"], &signer, true);
 
     let mismatching_ski_root = self_signed_ca_with_key_ids(
         "root",
@@ -436,12 +437,12 @@ fn candidate_without_subject_key_identifier_is_preferred_over_one_whose_ski_mism
     let no_ski_root =
         self_signed_ca_with_key_ids("root", Some(signer.copy_of_key_pair()), Ski::Absent);
 
-    let mismatching_der = leak(mismatching_ski_root.der);
-    let no_ski_der = leak(no_ski_root.der);
+    let mismatching_der = mismatching_ski_root.der;
+    let no_ski_der = no_ski_root.der;
 
-    let leaf = parse(leaf_der);
-    let mismatching_cert = parse(mismatching_der);
-    let no_ski_cert = parse(no_ski_der);
+    let leaf = parse(&leaf_der);
+    let mismatching_cert = parse(&mismatching_der);
+    let no_ski_cert = parse(&no_ski_der);
 
     // Guard against a vacuous test: confirm the fixtures really carry the
     // key identifiers the ranking is supposed to react to.
@@ -500,11 +501,11 @@ fn missing_intermediate_fails_to_build() {
     // supplied nowhere, so no certification path exists.
     let root = self_signed_ca_with("root", |_| {});
     let intermediate = issue_ca("intermediate", &root, None, |_| {});
-    let leaf_der = leak(issue_leaf("leaf", &["www.example.com"], &intermediate));
-    let root_der = leak(root.der);
+    let leaf_der = issue_leaf("leaf", &["www.example.com"], &intermediate);
+    let root_der = root.der;
 
-    let leaf = parse(leaf_der);
-    let roots = CertificateStore::from_iter(vec![parse(root_der)]);
+    let leaf = parse(&leaf_der);
+    let roots = CertificateStore::from_iter(vec![parse(&root_der)]);
     let intermediates: CertificateStore<'_> = CertificateStore::new();
     let validator = Validator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
@@ -528,12 +529,12 @@ fn missing_root_fails_to_build() {
     // but the trust anchor it terminates at is not trusted.
     let root = self_signed_ca_with("root", |_| {});
     let intermediate = issue_ca("intermediate", &root, None, |_| {});
-    let leaf_der = leak(issue_leaf("leaf", &["www.example.com"], &intermediate));
-    let intermediate_der = leak(intermediate.der);
+    let leaf_der = issue_leaf("leaf", &["www.example.com"], &intermediate);
+    let intermediate_der = intermediate.der;
 
-    let leaf = parse(leaf_der);
+    let leaf = parse(&leaf_der);
     let roots: CertificateStore<'_> = CertificateStore::new();
-    let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
+    let intermediates = CertificateStore::from_iter(vec![parse(&intermediate_der)]);
     let validator = Validator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
     let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
@@ -555,18 +556,21 @@ fn extra_roots_are_ignored() {
     let root = self_signed_ca_with("root", |_| {});
     let unrelated_root = self_signed_ca_with("unrelated-root", |_| {});
     let intermediate = issue_ca("intermediate", &root, None, |_| {});
-    let leaf_der = leak(issue_leaf("leaf", &["www.example.com"], &intermediate));
-    let intermediate_der = leak(intermediate.der);
-    let root_der = leak(root.der);
-    let unrelated_root_der = leak(unrelated_root.der);
+    let leaf_der = issue_leaf("leaf", &["www.example.com"], &intermediate);
+    let intermediate_der = intermediate.der;
+    let root_der = root.der;
+    let unrelated_root_der = unrelated_root.der;
 
-    let leaf = parse(leaf_der);
-    let roots = CertificateStore::from_iter(vec![parse(root_der), parse(unrelated_root_der)]);
-    let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
+    let leaf = parse(&leaf_der);
+    let roots = CertificateStore::from_iter(vec![parse(&root_der), parse(&unrelated_root_der)]);
+    let intermediates = CertificateStore::from_iter(vec![parse(&intermediate_der)]);
     let validator = Validator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
     let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
-    assert_chain_is(result, &[&leaf, &parse(intermediate_der), &parse(root_der)]);
+    assert_chain_is(
+        result,
+        &[&leaf, &parse(&intermediate_der), &parse(&root_der)],
+    );
 }
 
 #[test]
@@ -577,22 +581,25 @@ fn roots_also_present_in_the_intermediate_store_are_not_a_problem() {
     let root = self_signed_ca_with("root", |_| {});
     let unrelated_root = self_signed_ca_with("unrelated-root", |_| {});
     let intermediate = issue_ca("intermediate", &root, None, |_| {});
-    let leaf_der = leak(issue_leaf("leaf", &["www.example.com"], &intermediate));
-    let intermediate_der = leak(intermediate.der);
-    let root_der = leak(root.der);
-    let unrelated_root_der = leak(unrelated_root.der);
+    let leaf_der = issue_leaf("leaf", &["www.example.com"], &intermediate);
+    let intermediate_der = intermediate.der;
+    let root_der = root.der;
+    let unrelated_root_der = unrelated_root.der;
 
-    let leaf = parse(leaf_der);
-    let roots = CertificateStore::from_iter(vec![parse(root_der), parse(unrelated_root_der)]);
+    let leaf = parse(&leaf_der);
+    let roots = CertificateStore::from_iter(vec![parse(&root_der), parse(&unrelated_root_der)]);
     let intermediates = CertificateStore::from_iter(vec![
-        parse(intermediate_der),
-        parse(root_der),
-        parse(unrelated_root_der),
+        parse(&intermediate_der),
+        parse(&root_der),
+        parse(&unrelated_root_der),
     ]);
     let validator = Validator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
     let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
-    assert_chain_is(result, &[&leaf, &parse(intermediate_der), &parse(root_der)]);
+    assert_chain_is(
+        result,
+        &[&leaf, &parse(&intermediate_der), &parse(&root_der)],
+    );
 }
 
 #[test]
@@ -604,13 +611,13 @@ fn self_signed_certificate_is_rejected_when_not_in_the_trust_store() {
     let intermediate = issue_ca("intermediate", &trusted_root, None, |_| {});
     let isolated = self_signed_ca_with("isolated-self-signed", |_| {});
 
-    let isolated_der = leak(isolated.der);
-    let intermediate_der = leak(intermediate.der);
-    let trusted_root_der = leak(trusted_root.der);
+    let isolated_der = isolated.der;
+    let intermediate_der = intermediate.der;
+    let trusted_root_der = trusted_root.der;
 
-    let leaf = parse(isolated_der);
-    let roots = CertificateStore::from_iter(vec![parse(trusted_root_der)]);
-    let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
+    let leaf = parse(&isolated_der);
+    let roots = CertificateStore::from_iter(vec![parse(&trusted_root_der)]);
+    let intermediates = CertificateStore::from_iter(vec![parse(&intermediate_der)]);
     let validator = Validator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
     let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
@@ -628,13 +635,13 @@ fn self_signed_certificate_is_trusted_when_in_the_trust_store() {
     let intermediate = issue_ca("intermediate", &trusted_root, None, |_| {});
     let isolated = self_signed_ca_with("isolated-self-signed", |_| {});
 
-    let isolated_der = leak(isolated.der);
-    let intermediate_der = leak(intermediate.der);
-    let trusted_root_der = leak(trusted_root.der);
+    let isolated_der = isolated.der;
+    let intermediate_der = intermediate.der;
+    let trusted_root_der = trusted_root.der;
 
-    let leaf = parse(isolated_der);
-    let roots = CertificateStore::from_iter(vec![parse(trusted_root_der), parse(isolated_der)]);
-    let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
+    let leaf = parse(&isolated_der);
+    let roots = CertificateStore::from_iter(vec![parse(&trusted_root_der), parse(&isolated_der)]);
+    let intermediates = CertificateStore::from_iter(vec![parse(&intermediate_der)]);
     let validator = Validator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
     let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
@@ -648,12 +655,12 @@ fn trust_roots_can_be_non_self_signed_leaves() {
     // path of length one, without any search.
     let root = self_signed_ca_with("root", |_| {});
     let intermediate = issue_ca("intermediate", &root, None, |_| {});
-    let leaf_der = leak(issue_leaf("leaf", &["www.example.com"], &intermediate));
-    let intermediate_der = leak(intermediate.der);
+    let leaf_der = issue_leaf("leaf", &["www.example.com"], &intermediate);
+    let intermediate_der = intermediate.der;
 
-    let leaf = parse(leaf_der);
-    let roots = CertificateStore::from_iter(vec![parse(leaf_der)]);
-    let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
+    let leaf = parse(&leaf_der);
+    let roots = CertificateStore::from_iter(vec![parse(&leaf_der)]);
+    let intermediates = CertificateStore::from_iter(vec![parse(&intermediate_der)]);
     let validator = Validator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
     let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
@@ -667,16 +674,16 @@ fn trust_roots_can_be_non_self_signed_intermediates() {
     // issued it.
     let root = self_signed_ca_with("root", |_| {});
     let intermediate = issue_ca("intermediate", &root, None, |_| {});
-    let leaf_der = leak(issue_leaf("leaf", &["www.example.com"], &intermediate));
-    let intermediate_der = leak(intermediate.der);
+    let leaf_der = issue_leaf("leaf", &["www.example.com"], &intermediate);
+    let intermediate_der = intermediate.der;
 
-    let leaf = parse(leaf_der);
-    let roots = CertificateStore::from_iter(vec![parse(intermediate_der)]);
-    let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
+    let leaf = parse(&leaf_der);
+    let roots = CertificateStore::from_iter(vec![parse(&intermediate_der)]);
+    let intermediates = CertificateStore::from_iter(vec![parse(&intermediate_der)]);
     let validator = Validator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
     let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
-    assert_chain_is(result, &[&leaf, &parse(intermediate_der)]);
+    assert_chain_is(result, &[&leaf, &parse(&intermediate_der)]);
 }
 
 #[test]
@@ -698,11 +705,11 @@ fn critical_extensions_are_policed_on_leaf_certificates() {
         },
     );
 
-    let weird_der = leak(weird.der);
-    let intermediate_der = leak(intermediate.der);
-    let trusted_root_der = leak(trusted_root.der);
+    let weird_der = weird.der;
+    let intermediate_der = intermediate.der;
+    let trusted_root_der = trusted_root.der;
 
-    let leaf = parse(weird_der);
+    let leaf = parse(&weird_der);
     // Guard against a vacuous test: the leaf really must carry a critical
     // extension the policy does not list.
     let handled = AlwaysMeetsPolicy.verifying_critical_extensions();
@@ -713,8 +720,8 @@ fn critical_extensions_are_policed_on_leaf_certificates() {
         "leaf must carry a critical extension outside the policy's handled set"
     );
 
-    let roots = CertificateStore::from_iter(vec![parse(trusted_root_der), parse(weird_der)]);
-    let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
+    let roots = CertificateStore::from_iter(vec![parse(&trusted_root_der), parse(&weird_der)]);
+    let intermediates = CertificateStore::from_iter(vec![parse(&intermediate_der)]);
     let validator = Validator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
     let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
@@ -744,15 +751,15 @@ fn roots_with_a_matching_subject_key_identifier_are_preferred() {
 
     let intermediate =
         issue_ca_with_key_ids("intermediate", &matching_root, None, Ski::Derived, true);
-    let leaf_der = leak(issue_leaf("leaf", &["www.example.com"], &intermediate));
-    let intermediate_der = leak(intermediate.der);
-    let matching_der = leak(matching_root.der);
-    let no_ski_der = leak(no_ski_root.der);
+    let leaf_der = issue_leaf("leaf", &["www.example.com"], &intermediate);
+    let intermediate_der = intermediate.der;
+    let matching_der = matching_root.der;
+    let no_ski_der = no_ski_root.der;
 
-    let leaf = parse(leaf_der);
-    let matching_cert = parse(matching_der);
-    let no_ski_cert = parse(no_ski_der);
-    let intermediate_cert = parse(intermediate_der);
+    let leaf = parse(&leaf_der);
+    let matching_cert = parse(&matching_der);
+    let no_ski_cert = parse(&no_ski_der);
+    let intermediate_cert = parse(&intermediate_der);
 
     // Guard against a vacuous test: the ranking signal must really exist.
     assert_eq!(
@@ -773,13 +780,13 @@ fn roots_with_a_matching_subject_key_identifier_are_preferred() {
 
     // Insertion order deliberately puts the unranked root first.
     let roots = CertificateStore::from_iter(vec![no_ski_cert, matching_cert]);
-    let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
+    let intermediates = CertificateStore::from_iter(vec![parse(&intermediate_der)]);
     let validator = Validator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
     let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
     assert_chain_is(
         result,
-        &[&leaf, &parse(intermediate_der), &parse(matching_der)],
+        &[&leaf, &parse(&intermediate_der), &parse(&matching_der)],
     );
 }
 
@@ -818,19 +825,14 @@ fn intermediates_whose_subject_key_identifier_matches_the_subject_aki_are_prefer
         |_| {},
     );
 
-    let leaf_der = leak(issue_leaf_with_aki(
-        "leaf",
-        &["www.example.com"],
-        &matching_intermediate,
-        true,
-    ));
-    let matching_der = leak(matching_intermediate.der);
-    let no_ski_der = leak(no_ski_intermediate.der);
-    let root_der = leak(root.der);
+    let leaf_der = issue_leaf_with_aki("leaf", &["www.example.com"], &matching_intermediate, true);
+    let matching_der = matching_intermediate.der;
+    let no_ski_der = no_ski_intermediate.der;
+    let root_der = root.der;
 
-    let leaf = parse(leaf_der);
-    let matching_cert = parse(matching_der);
-    let no_ski_cert = parse(no_ski_der);
+    let leaf = parse(&leaf_der);
+    let matching_cert = parse(&matching_der);
+    let no_ski_cert = parse(&no_ski_der);
 
     // Guard against a vacuous test.
     assert_eq!(
@@ -849,13 +851,13 @@ fn intermediates_whose_subject_key_identifier_matches_the_subject_aki_are_prefer
         "both intermediates must share a subject name so both are candidates"
     );
 
-    let roots = CertificateStore::from_iter(vec![parse(root_der)]);
+    let roots = CertificateStore::from_iter(vec![parse(&root_der)]);
     // Insertion order deliberately puts the unranked intermediate first.
     let intermediates = CertificateStore::from_iter(vec![no_ski_cert, matching_cert]);
     let validator = Validator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
     let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
-    assert_chain_is(result, &[&leaf, &parse(matching_der), &parse(root_der)]);
+    assert_chain_is(result, &[&leaf, &parse(&matching_der), &parse(&root_der)]);
 }
 
 #[test]
@@ -870,15 +872,15 @@ fn cross_signed_root_is_supported() {
     let ca1_cross_signed = ca1.cross_signed_by(&ca2);
     let intermediate = issue_ca("intermediate", &ca1, None, |_| {});
 
-    let leaf_der = leak(issue_leaf("leaf", &["www.example.com"], &intermediate));
-    let intermediate_der = leak(intermediate.der);
-    let cross_signed_der = leak(ca1_cross_signed.der);
-    let ca2_der = leak(ca2.der);
+    let leaf_der = issue_leaf("leaf", &["www.example.com"], &intermediate);
+    let intermediate_der = intermediate.der;
+    let cross_signed_der = ca1_cross_signed.der;
+    let ca2_der = ca2.der;
 
-    let leaf = parse(leaf_der);
-    let roots = CertificateStore::from_iter(vec![parse(ca2_der)]);
+    let leaf = parse(&leaf_der);
+    let roots = CertificateStore::from_iter(vec![parse(&ca2_der)]);
     let intermediates =
-        CertificateStore::from_iter(vec![parse(intermediate_der), parse(cross_signed_der)]);
+        CertificateStore::from_iter(vec![parse(&intermediate_der), parse(&cross_signed_der)]);
     let validator = Validator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
     let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
@@ -886,9 +888,9 @@ fn cross_signed_root_is_supported() {
         result,
         &[
             &leaf,
-            &parse(intermediate_der),
-            &parse(cross_signed_der),
-            &parse(ca2_der),
+            &parse(&intermediate_der),
+            &parse(&cross_signed_der),
+            &parse(&ca2_der),
         ],
     );
 }
@@ -910,24 +912,27 @@ fn shorter_path_is_built_when_cross_signed_roots_offer_both() {
     let ca2_cross_signed = ca2.cross_signed_by(&ca1);
     let intermediate = issue_ca("intermediate", &ca1, None, |_| {});
 
-    let leaf_der = leak(issue_leaf("leaf", &["www.example.com"], &intermediate));
-    let intermediate_der = leak(intermediate.der);
-    let ca1_cross_der = leak(ca1_cross_signed.der);
-    let ca2_cross_der = leak(ca2_cross_signed.der);
-    let ca1_der = leak(ca1.der);
-    let ca2_der = leak(ca2.der);
+    let leaf_der = issue_leaf("leaf", &["www.example.com"], &intermediate);
+    let intermediate_der = intermediate.der;
+    let ca1_cross_der = ca1_cross_signed.der;
+    let ca2_cross_der = ca2_cross_signed.der;
+    let ca1_der = ca1.der;
+    let ca2_der = ca2.der;
 
-    let leaf = parse(leaf_der);
-    let roots = CertificateStore::from_iter(vec![parse(ca1_der), parse(ca2_der)]);
+    let leaf = parse(&leaf_der);
+    let roots = CertificateStore::from_iter(vec![parse(&ca1_der), parse(&ca2_der)]);
     let intermediates = CertificateStore::from_iter(vec![
-        parse(intermediate_der),
-        parse(ca2_cross_der),
-        parse(ca1_cross_der),
+        parse(&intermediate_der),
+        parse(&ca2_cross_der),
+        parse(&ca1_cross_der),
     ]);
     let validator = Validator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
     let result = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
-    assert_chain_is(result, &[&leaf, &parse(intermediate_der), &parse(ca1_der)]);
+    assert_chain_is(
+        result,
+        &[&leaf, &parse(&intermediate_der), &parse(&ca1_der)],
+    );
 }
 
 #[test]
@@ -957,37 +962,37 @@ fn roots_that_did_not_sign_the_certificate_below_them_are_rejected() {
         |_| {},
     );
 
-    let leaf_der = leak(issue_leaf("leaf", &["www.example.com"], &intermediate));
-    let intermediate_der = leak(intermediate.der);
-    let ca1_cross_der = leak(ca1_cross_signed.der);
-    let ca2_cross_der = leak(ca2_cross_signed.der);
-    let ca1_other_der = leak(ca1_with_other_key.der);
-    let ca2_der = leak(ca2.der);
+    let leaf_der = issue_leaf("leaf", &["www.example.com"], &intermediate);
+    let intermediate_der = intermediate.der;
+    let ca1_cross_der = ca1_cross_signed.der;
+    let ca2_cross_der = ca2_cross_signed.der;
+    let ca1_other_der = ca1_with_other_key.der;
+    let ca2_der = ca2.der;
 
-    let leaf = parse(leaf_der);
-    let ca1_other_cert = parse(ca1_other_der);
+    let leaf = parse(&leaf_der);
+    let ca1_other_cert = parse(&ca1_other_der);
 
     // Guard against a vacuous test: the impostor anchor must match the
     // intermediate's issuer name, and must carry a different key from
     // the one that signed the intermediate.
     assert_eq!(
         ca1_other_cert.subject_key(),
-        parse(intermediate_der).issuer_key(),
+        parse(&intermediate_der).issuer_key(),
         "the impostor anchor must be found by the intermediate's issuer name"
     );
     assert_ne!(
         ca1_other_cert.public_key().raw,
-        parse(ca1_cross_der).public_key().raw,
+        parse(&ca1_cross_der).public_key().raw,
         "the impostor anchor must carry a different key than the real ca1"
     );
 
     // ca1 itself is deliberately absent from the trust store; only the
     // impostor bearing its name and ca2 are trusted.
-    let roots = CertificateStore::from_iter(vec![ca1_other_cert, parse(ca2_der)]);
+    let roots = CertificateStore::from_iter(vec![ca1_other_cert, parse(&ca2_der)]);
     let intermediates = CertificateStore::from_iter(vec![
-        parse(ca1_cross_der),
-        parse(ca2_cross_der),
-        parse(intermediate_der),
+        parse(&ca1_cross_der),
+        parse(&ca2_cross_der),
+        parse(&intermediate_der),
     ]);
     let validator = Validator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
@@ -996,9 +1001,9 @@ fn roots_that_did_not_sign_the_certificate_below_them_are_rejected() {
         result,
         &[
             &leaf,
-            &parse(intermediate_der),
-            &parse(ca1_cross_der),
-            &parse(ca2_der),
+            &parse(&intermediate_der),
+            &parse(&ca1_cross_der),
+            &parse(&ca2_der),
         ],
     );
 }
@@ -1038,19 +1043,19 @@ fn policy_failures_let_the_search_find_a_longer_path() {
     let ca2_cross_signed = ca2.cross_signed_by(&ca1);
     let intermediate = issue_ca("intermediate", &ca1, None, |_| {});
 
-    let leaf_der = leak(issue_leaf("leaf", &["www.example.com"], &intermediate));
-    let intermediate_der = leak(intermediate.der);
-    let ca1_cross_der = leak(ca1_cross_signed.der);
-    let ca2_cross_der = leak(ca2_cross_signed.der);
-    let ca1_der = leak(ca1.der);
-    let ca2_der = leak(ca2.der);
+    let leaf_der = issue_leaf("leaf", &["www.example.com"], &intermediate);
+    let intermediate_der = intermediate.der;
+    let ca1_cross_der = ca1_cross_signed.der;
+    let ca2_cross_der = ca2_cross_signed.der;
+    let ca1_der = ca1.der;
+    let ca2_der = ca2.der;
 
-    let leaf = parse(leaf_der);
-    let roots = CertificateStore::from_iter(vec![parse(ca1_der), parse(ca2_der)]);
+    let leaf = parse(&leaf_der);
+    let roots = CertificateStore::from_iter(vec![parse(&ca1_der), parse(&ca2_der)]);
     let intermediates = CertificateStore::from_iter(vec![
-        parse(intermediate_der),
-        parse(ca2_cross_der),
-        parse(ca1_cross_der),
+        parse(&intermediate_der),
+        parse(&ca2_cross_der),
+        parse(&ca1_cross_der),
     ]);
     let policy = ForbidCertificatePolicy {
         forbidden_der: ca1_der.to_vec(),
@@ -1062,9 +1067,9 @@ fn policy_failures_let_the_search_find_a_longer_path() {
         result,
         &[
             &leaf,
-            &parse(intermediate_der),
-            &parse(ca1_cross_der),
-            &parse(ca2_der),
+            &parse(&intermediate_der),
+            &parse(&ca1_cross_der),
+            &parse(&ca2_der),
         ],
     );
 }
@@ -1197,41 +1202,41 @@ fn pathological_pki_with_mutually_cross_signed_intermediates_can_still_build() {
         params.use_authority_key_identifier_extension = true;
     });
 
-    let root_der = leak(root.der);
-    let t1_der = leak(t1.der);
-    let t2_der = leak(t2.der);
-    let t3_der = leak(t3.der);
-    let x1_der = leak(x1.der);
-    let x2_der = leak(x2.der);
-    let leaf_der = leak(insane_leaf_der);
+    let root_der = root.der;
+    let t1_der = t1.der;
+    let t2_der = t2.der;
+    let t3_der = t3.der;
+    let x1_der = x1.der;
+    let x2_der = x2.der;
+    let leaf_der = insane_leaf_der;
 
-    let leaf = parse(leaf_der);
+    let leaf = parse(&leaf_der);
 
     // Guard against a vacuous test: the graph must really contain a
     // cycle by issuer name, otherwise loop detection is never exercised.
     assert_eq!(
-        parse(t2_der).issuer_key(),
-        parse(x1_der).subject_key(),
+        parse(&t2_der).issuer_key(),
+        parse(&x1_der).subject_key(),
         "T certificates must name X as their issuer"
     );
     assert_eq!(
-        parse(x1_der).issuer_key(),
-        parse(t2_der).subject_key(),
+        parse(&x1_der).issuer_key(),
+        parse(&t2_der).subject_key(),
         "X certificates must name T as their issuer, closing the cycle"
     );
     assert_eq!(
         leaf.authority_key_identifier(),
-        parse(t3_der).subject_key_identifier(),
+        parse(&t3_der).subject_key_identifier(),
         "the leaf's AKI must select t3 first"
     );
 
-    let roots = CertificateStore::from_iter(vec![parse(root_der)]);
+    let roots = CertificateStore::from_iter(vec![parse(&root_der)]);
     let intermediates = CertificateStore::from_iter(vec![
-        parse(t1_der),
-        parse(t2_der),
-        parse(t3_der),
-        parse(x2_der),
-        parse(x1_der),
+        parse(&t1_der),
+        parse(&t2_der),
+        parse(&t3_der),
+        parse(&x2_der),
+        parse(&x1_der),
     ]);
     let validator = Validator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
@@ -1256,12 +1261,12 @@ fn pathological_pki_with_mutually_cross_signed_intermediates_can_still_build() {
         result,
         &[
             &leaf,
-            &parse(t3_der),
-            &parse(x2_der),
-            &parse(t2_der),
-            &parse(x1_der),
-            &parse(t1_der),
-            &parse(root_der),
+            &parse(&t3_der),
+            &parse(&x2_der),
+            &parse(&t2_der),
+            &parse(&x1_der),
+            &parse(&t1_der),
+            &parse(&root_der),
         ],
     );
 }
@@ -1274,11 +1279,11 @@ fn verification_diagnostic_description_does_not_include_new_lines() {
     // form is available separately for callers that want it.
     let root = self_signed_ca_with("root", |_| {});
     let intermediate = issue_ca("intermediate", &root, None, |_| {});
-    let leaf_der = leak(issue_leaf("leaf", &["www.example.com"], &intermediate));
+    let leaf_der = issue_leaf("leaf", &["www.example.com"], &intermediate);
 
-    let leaf = cert(leaf_der.to_vec());
-    let intermediate_cert = cert(intermediate.der);
-    let root_cert = cert(root.der);
+    let leaf = cert(&leaf_der);
+    let intermediate_cert = cert(&intermediate.der);
+    let root_cert = cert(&root.der);
 
     let handled = vec![
         OID_X509_EXT_BASIC_CONSTRAINTS,
@@ -1347,16 +1352,16 @@ fn validate_agrees_with_validate_with_diagnostics_on_a_valid_chain() {
     // same one the diagnostic-emitting path returns, link for link.
     let root = self_signed_ca_with("root", |_| {});
     let intermediate = issue_ca("intermediate", &root, None, |_| {});
-    let leaf_der = leak(issue_leaf("leaf", &["www.example.com"], &intermediate));
-    let intermediate_der = leak(intermediate.der);
-    let root_der = leak(root.der);
+    let leaf_der = issue_leaf("leaf", &["www.example.com"], &intermediate);
+    let intermediate_der = intermediate.der;
+    let root_der = root.der;
 
-    let leaf = parse(leaf_der);
-    let roots = CertificateStore::from_iter(vec![parse(root_der)]);
-    let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
+    let leaf = parse(&leaf_der);
+    let roots = CertificateStore::from_iter(vec![parse(&root_der)]);
+    let intermediates = CertificateStore::from_iter(vec![parse(&intermediate_der)]);
     let validator = Validator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
-    let expected = [&leaf, &parse(intermediate_der), &parse(root_der)];
+    let expected = [&leaf, &parse(&intermediate_der), &parse(&root_der)];
     assert_chain_is(validator.validate(&leaf, &intermediates), &expected);
     assert_chain_is(
         validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {}),
@@ -1371,13 +1376,13 @@ fn validate_agrees_with_validate_with_diagnostics_on_a_rejected_chain() {
     // rejected chains are reported back to the caller.
     let root = self_signed_ca_with("root", |_| {});
     let intermediate = issue_ca("intermediate", &root, None, |_| {});
-    let leaf_der = leak(issue_leaf("leaf", &["www.example.com"], &intermediate));
-    let intermediate_der = leak(intermediate.der);
-    let root_der = leak(root.der);
+    let leaf_der = issue_leaf("leaf", &["www.example.com"], &intermediate);
+    let intermediate_der = intermediate.der;
+    let root_der = root.der;
 
-    let leaf = parse(leaf_der);
-    let roots = CertificateStore::from_iter(vec![parse(root_der)]);
-    let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
+    let leaf = parse(&leaf_der);
+    let roots = CertificateStore::from_iter(vec![parse(&root_der)]);
+    let intermediates = CertificateStore::from_iter(vec![parse(&intermediate_der)]);
     // A policy that rejects every chain forces the search to exhaust the
     // whole tree and return the failures it collected along the way.
     let validator = Validator::with_policy_and_backend(roots, NeverMeetsPolicy, &DEFAULT_PROVIDER);
@@ -1407,13 +1412,13 @@ fn suppressing_diagnostics_does_not_change_the_diagnostic_sequence() {
     // while the construction is conditional.
     let root = self_signed_ca_with("root", |_| {});
     let intermediate = issue_ca("intermediate", &root, None, |_| {});
-    let leaf_der = leak(issue_leaf("leaf", &["www.example.com"], &intermediate));
-    let intermediate_der = leak(intermediate.der);
-    let root_der = leak(root.der);
+    let leaf_der = issue_leaf("leaf", &["www.example.com"], &intermediate);
+    let intermediate_der = intermediate.der;
+    let root_der = root.der;
 
-    let leaf = parse(leaf_der);
-    let roots = CertificateStore::from_iter(vec![parse(root_der)]);
-    let intermediates = CertificateStore::from_iter(vec![parse(intermediate_der)]);
+    let leaf = parse(&leaf_der);
+    let roots = CertificateStore::from_iter(vec![parse(&root_der)]);
+    let intermediates = CertificateStore::from_iter(vec![parse(&intermediate_der)]);
     let validator = Validator::with_policy_and_backend(roots, AlwaysMeetsPolicy, &DEFAULT_PROVIDER);
 
     fn collect<'a, P: ValidationPolicy>(
@@ -1470,7 +1475,7 @@ fn suppressing_diagnostics_does_not_change_the_diagnostic_sequence() {
     // end of the function, which the success path returns before ever
     // reaching. Pinning it means deleting that call site fails this test.
     let rejecting = Validator::with_policy_and_backend(
-        CertificateStore::from_iter(vec![parse(root_der)]),
+        CertificateStore::from_iter(vec![parse(&root_der)]),
         NeverMeetsPolicy,
         &DEFAULT_PROVIDER,
     );

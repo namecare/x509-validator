@@ -13,9 +13,9 @@ use x509_validator_bench_measure::fixtures;
 fn chain() -> UnverifiedCertificateChain<'static> {
     let parity = fixtures::parity();
     UnverifiedCertificateChain::new(vec![
-        parity.localhost_leaf.clone(),
-        parity.intermediate1.clone(),
-        parity.ca1.clone(),
+        parity.localhost_leaf().clone(),
+        parity.intermediate1().clone(),
+        parity.ca1().clone(),
     ])
 }
 

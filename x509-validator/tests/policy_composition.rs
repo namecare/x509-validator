@@ -84,7 +84,8 @@ fn _assert_object_safe(_: Box<dyn ValidationPolicy>) {}
 
 #[test]
 fn test_unverified_chain_with_policy() {
-    let chain = chain_of(vec![self_signed_ca("root")]);
+    let ders = chain_of(vec![self_signed_ca("root")]);
+    let chain = ders.chain();
     let policy = AlwaysMeetsPolicy;
 
     let result = policy.chain_meets_policy_requirements(&chain);
@@ -93,14 +94,16 @@ fn test_unverified_chain_with_policy() {
 
 #[test]
 fn tuple2_passes_when_both_policies_pass() {
-    let chain = chain_of(vec![self_signed_ca("root")]);
+    let ders = chain_of(vec![self_signed_ca("root")]);
+    let chain = ders.chain();
     let policy = Tuple2::new(AlwaysMeetsPolicy, AlwaysMeetsPolicy);
     assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
 }
 
 #[test]
 fn tuple2_fails_when_first_policy_fails() {
-    let chain = chain_of(vec![self_signed_ca("root")]);
+    let ders = chain_of(vec![self_signed_ca("root")]);
+    let chain = ders.chain();
     let policy = Tuple2::new(AlwaysFailsPolicy, AlwaysMeetsPolicy);
     assert!(
         policy
@@ -111,7 +114,8 @@ fn tuple2_fails_when_first_policy_fails() {
 
 #[test]
 fn tuple2_fails_when_second_policy_fails() {
-    let chain = chain_of(vec![self_signed_ca("root")]);
+    let ders = chain_of(vec![self_signed_ca("root")]);
+    let chain = ders.chain();
     let policy = Tuple2::new(AlwaysMeetsPolicy, AlwaysFailsPolicy);
     assert!(
         policy
@@ -122,21 +126,24 @@ fn tuple2_fails_when_second_policy_fails() {
 
 #[test]
 fn either_first_variant_evaluates_first_policy() {
-    let chain = chain_of(vec![self_signed_ca("root")]);
+    let ders = chain_of(vec![self_signed_ca("root")]);
+    let chain = ders.chain();
     let policy: Either<AlwaysMeetsPolicy, AlwaysFailsPolicy> = Either::First(AlwaysMeetsPolicy);
     assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
 }
 
 #[test]
 fn either_second_variant_evaluates_second_policy() {
-    let chain = chain_of(vec![self_signed_ca("root")]);
+    let ders = chain_of(vec![self_signed_ca("root")]);
+    let chain = ders.chain();
     let policy: Either<AlwaysFailsPolicy, AlwaysMeetsPolicy> = Either::Second(AlwaysMeetsPolicy);
     assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
 }
 
 #[test]
 fn either_does_not_evaluate_the_inactive_variant() {
-    let chain = chain_of(vec![self_signed_ca("root")]);
+    let ders = chain_of(vec![self_signed_ca("root")]);
+    let chain = ders.chain();
     // First is AlwaysFailsPolicy but inactive (Second variant chosen) — overall must pass.
     let policy: Either<AlwaysFailsPolicy, AlwaysMeetsPolicy> = Either::Second(AlwaysMeetsPolicy);
     assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
@@ -144,14 +151,16 @@ fn either_does_not_evaluate_the_inactive_variant() {
 
 #[test]
 fn wrapped_optional_none_auto_passes() {
-    let chain = chain_of(vec![self_signed_ca("root")]);
+    let ders = chain_of(vec![self_signed_ca("root")]);
+    let chain = ders.chain();
     let policy: WrappedOptional<AlwaysFailsPolicy> = WrappedOptional::new(None);
     assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
 }
 
 #[test]
 fn wrapped_optional_some_delegates_to_inner_policy() {
-    let chain = chain_of(vec![self_signed_ca("root")]);
+    let ders = chain_of(vec![self_signed_ca("root")]);
+    let chain = ders.chain();
     let policy = WrappedOptional::new(Some(AlwaysFailsPolicy));
     assert!(
         policy
@@ -163,7 +172,8 @@ fn wrapped_optional_some_delegates_to_inner_policy() {
 #[test]
 fn all_of_policies_wraps_a_single_policy() {
     use x509_validator::AllOfPolicies;
-    let chain = chain_of(vec![self_signed_ca("root")]);
+    let ders = chain_of(vec![self_signed_ca("root")]);
+    let chain = ders.chain();
     let policy = AllOfPolicies::new(AlwaysMeetsPolicy);
     assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
 }
@@ -171,7 +181,8 @@ fn all_of_policies_wraps_a_single_policy() {
 #[test]
 fn all_of_policies_wraps_a_tuple2_chain() {
     use x509_validator::AllOfPolicies;
-    let chain = chain_of(vec![self_signed_ca("root")]);
+    let ders = chain_of(vec![self_signed_ca("root")]);
+    let chain = ders.chain();
     let policy = AllOfPolicies::new(Tuple2::new(AlwaysMeetsPolicy, AlwaysFailsPolicy));
     assert!(
         policy
@@ -183,7 +194,8 @@ fn all_of_policies_wraps_a_tuple2_chain() {
 #[test]
 fn one_of_policies_wraps_a_single_policy() {
     use x509_validator::OneOfPolicies;
-    let chain = chain_of(vec![self_signed_ca("root")]);
+    let ders = chain_of(vec![self_signed_ca("root")]);
+    let chain = ders.chain();
     let policy = OneOfPolicies::new(AlwaysMeetsPolicy);
     assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
 }
@@ -191,7 +203,8 @@ fn one_of_policies_wraps_a_single_policy() {
 #[test]
 fn one_of_policies_wraps_an_either_choice() {
     use x509_validator::OneOfPolicies;
-    let chain = chain_of(vec![self_signed_ca("root")]);
+    let ders = chain_of(vec![self_signed_ca("root")]);
+    let chain = ders.chain();
     let policy: OneOfPolicies<Either<AlwaysFailsPolicy, AlwaysMeetsPolicy>> =
         OneOfPolicies::new(Either::Second(AlwaysMeetsPolicy));
     assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
@@ -200,7 +213,8 @@ fn one_of_policies_wraps_an_either_choice() {
 #[test]
 fn one_of_policies_fails_when_the_active_either_arm_fails() {
     use x509_validator::OneOfPolicies;
-    let chain = chain_of(vec![self_signed_ca("root")]);
+    let ders = chain_of(vec![self_signed_ca("root")]);
+    let chain = ders.chain();
     let policy: OneOfPolicies<Either<AlwaysFailsPolicy, AlwaysMeetsPolicy>> =
         OneOfPolicies::new(Either::First(AlwaysFailsPolicy));
     assert!(
@@ -212,14 +226,16 @@ fn one_of_policies_fails_when_the_active_either_arm_fails() {
 
 #[test]
 fn policy_macro_single_expression_has_no_wrapper() {
-    let chain = chain_of(vec![self_signed_ca("root")]);
+    let ders = chain_of(vec![self_signed_ca("root")]);
+    let chain = ders.chain();
     let built = policy! { AlwaysMeetsPolicy };
     assert_eq!(built.chain_meets_policy_requirements(&chain), Ok(()));
 }
 
 #[test]
 fn policy_macro_flat_sequence_is_an_and_chain() {
-    let chain = chain_of(vec![self_signed_ca("root")]);
+    let ders = chain_of(vec![self_signed_ca("root")]);
+    let chain = ders.chain();
     let built = policy! {
         AlwaysMeetsPolicy;
         AlwaysMeetsPolicy;
@@ -230,7 +246,8 @@ fn policy_macro_flat_sequence_is_an_and_chain() {
 
 #[test]
 fn policy_macro_flat_sequence_fails_if_any_member_fails() {
-    let chain = chain_of(vec![self_signed_ca("root")]);
+    let ders = chain_of(vec![self_signed_ca("root")]);
+    let chain = ders.chain();
     let built = policy! {
         AlwaysMeetsPolicy;
         AlwaysFailsPolicy;
@@ -245,7 +262,8 @@ fn policy_macro_flat_sequence_fails_if_any_member_fails() {
 
 #[test]
 fn policy_macro_if_else_picks_the_true_branch() {
-    let chain = chain_of(vec![self_signed_ca("root")]);
+    let ders = chain_of(vec![self_signed_ca("root")]);
+    let chain = ders.chain();
     let cond = true;
     let built = policy! {
         if (cond) {
@@ -259,7 +277,8 @@ fn policy_macro_if_else_picks_the_true_branch() {
 
 #[test]
 fn policy_macro_if_else_picks_the_false_branch() {
-    let chain = chain_of(vec![self_signed_ca("root")]);
+    let ders = chain_of(vec![self_signed_ca("root")]);
+    let chain = ders.chain();
     let cond = false;
     let built = policy! {
         if (cond) {
@@ -273,7 +292,8 @@ fn policy_macro_if_else_picks_the_false_branch() {
 
 #[test]
 fn policy_macro_bare_if_true_evaluates_inner_policy() {
-    let chain = chain_of(vec![self_signed_ca("root")]);
+    let ders = chain_of(vec![self_signed_ca("root")]);
+    let chain = ders.chain();
     let cond = true;
     let built = policy! {
         if (cond) {
@@ -289,7 +309,8 @@ fn policy_macro_bare_if_true_evaluates_inner_policy() {
 
 #[test]
 fn policy_macro_bare_if_false_auto_passes() {
-    let chain = chain_of(vec![self_signed_ca("root")]);
+    let ders = chain_of(vec![self_signed_ca("root")]);
+    let chain = ders.chain();
     let cond = false;
     let built = policy! {
         if (cond) {
@@ -301,7 +322,8 @@ fn policy_macro_bare_if_false_auto_passes() {
 
 #[test]
 fn policy_macro_mixes_sequence_and_conditional() {
-    let chain = chain_of(vec![self_signed_ca("root")]);
+    let ders = chain_of(vec![self_signed_ca("root")]);
+    let chain = ders.chain();
     let online = true;
     let built = policy! {
         AlwaysMeetsPolicy;
@@ -314,7 +336,8 @@ fn policy_macro_mixes_sequence_and_conditional() {
 
 #[test]
 fn policy_macro_mixes_sequence_and_if_else() {
-    let chain = chain_of(vec![self_signed_ca("root")]);
+    let ders = chain_of(vec![self_signed_ca("root")]);
+    let chain = ders.chain();
     let online = false;
     let built = policy! {
         AlwaysMeetsPolicy;
@@ -330,21 +353,24 @@ fn policy_macro_mixes_sequence_and_if_else() {
 
 #[test]
 fn one_of_tuple2_tries_first_before_second() {
-    let chain = chain_of(vec![self_signed_ca("root")]);
+    let ders = chain_of(vec![self_signed_ca("root")]);
+    let chain = ders.chain();
     let policy = OneOfTuple2::new(AlwaysMeetsPolicy, AlwaysFailsPolicy);
     assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
 }
 
 #[test]
 fn one_of_tuple2_falls_back_to_second_on_first_failure() {
-    let chain = chain_of(vec![self_signed_ca("root")]);
+    let ders = chain_of(vec![self_signed_ca("root")]);
+    let chain = ders.chain();
     let policy = OneOfTuple2::new(AlwaysFailsPolicy, AlwaysMeetsPolicy);
     assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
 }
 
 #[test]
 fn one_of_tuple2_fails_with_joined_reason_when_both_fail() {
-    let chain = chain_of(vec![self_signed_ca("root")]);
+    let ders = chain_of(vec![self_signed_ca("root")]);
+    let chain = ders.chain();
     let policy = OneOfTuple2::new(AlwaysFailsPolicy, AlwaysFailsPolicy);
     let result = policy.chain_meets_policy_requirements(&chain);
     let err = result.expect_err("both alternatives fail");
@@ -371,7 +397,8 @@ fn one_of_tuple2_extensions_are_intersection_not_union() {
 
 #[test]
 fn one_of_wrapped_optional_none_fails() {
-    let chain = chain_of(vec![self_signed_ca("root")]);
+    let ders = chain_of(vec![self_signed_ca("root")]);
+    let chain = ders.chain();
     let policy: OneOfWrappedOptional<AlwaysMeetsPolicy> = OneOfWrappedOptional::new(None);
     assert!(
         policy
@@ -382,7 +409,8 @@ fn one_of_wrapped_optional_none_fails() {
 
 #[test]
 fn one_of_macro_tries_alternatives_in_order() {
-    let chain = chain_of(vec![self_signed_ca("root")]);
+    let ders = chain_of(vec![self_signed_ca("root")]);
+    let chain = ders.chain();
     let built = one_of! {
         AlwaysFailsPolicy;
         AlwaysMeetsPolicy
@@ -392,7 +420,8 @@ fn one_of_macro_tries_alternatives_in_order() {
 
 #[test]
 fn one_of_macro_if_else_uses_either() {
-    let chain = chain_of(vec![self_signed_ca("root")]);
+    let ders = chain_of(vec![self_signed_ca("root")]);
+    let chain = ders.chain();
     let cond = true;
     let built = one_of! {
         if (cond) {
@@ -406,7 +435,8 @@ fn one_of_macro_if_else_uses_either() {
 
 #[test]
 fn one_of_macro_bare_if_false_fails_not_auto_passes() {
-    let chain = chain_of(vec![self_signed_ca("root")]);
+    let ders = chain_of(vec![self_signed_ca("root")]);
+    let chain = ders.chain();
     let cond = false;
     let built = one_of! {
         if (cond) {
