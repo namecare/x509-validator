@@ -125,17 +125,25 @@ mod tests {
     use super::*;
     use crate::{Certificate, CertificateExt, FromDer};
 
-    /// A real self-signed certificate's `AlgorithmIdentifier` and
-    /// `SubjectPublicKeyInfo`, for tests that only need *some* valid values
-    /// of these types rather than to exercise a specific algorithm.
-    fn algorithm_and_spki() -> (AlgorithmIdentifier<'static>, SubjectPublicKeyInfo<'static>) {
+    /// The DER of a real self-signed certificate, for tests that only need
+    /// *some* valid `AlgorithmIdentifier` and `SubjectPublicKeyInfo` rather
+    /// than to exercise a specific algorithm.
+    ///
+    /// Those two values borrow the certificate they came from, which in turn
+    /// borrows this DER, so the caller owns the bytes for as long as it uses
+    /// them; see [`algorithm_and_spki`].
+    fn self_signed_der() -> Vec<u8> {
         let key_pair = KeyPair::generate().expect("generate key pair");
-        let der = CertificateParams::default()
+        CertificateParams::default()
             .self_signed(&key_pair)
             .expect("self-sign")
             .der()
-            .to_vec();
-        let der: &'static [u8] = Box::leak(der.into_boxed_slice());
+            .to_vec()
+    }
+
+    /// A real self-signed certificate's `AlgorithmIdentifier` and
+    /// `SubjectPublicKeyInfo`, borrowed from DER the caller owns.
+    fn algorithm_and_spki(der: &[u8]) -> (AlgorithmIdentifier<'_>, SubjectPublicKeyInfo<'_>) {
         let cert = Certificate::parse(der).expect("parse certificate");
         (cert.signature_algorithm, cert.tbs_certificate.subject_pki)
     }
@@ -178,7 +186,8 @@ mod tests {
 
     #[test]
     fn verify_signature_receives_the_signature_algorithm() {
-        let (algorithm, spki) = algorithm_and_spki();
+        let der = self_signed_der();
+        let (algorithm, spki) = algorithm_and_spki(&der);
 
         let result = TaggedVerifier.verify_signature(&algorithm, &spki, b"message", b"signature");
 
@@ -192,7 +201,8 @@ mod tests {
 
     #[test]
     fn verify_signature_propagates_verification_failure() {
-        let (algorithm, spki) = algorithm_and_spki();
+        let der = self_signed_der();
+        let (algorithm, spki) = algorithm_and_spki(&der);
 
         let result = FailureVerifier.verify_signature(&algorithm, &spki, b"message", b"signature");
 

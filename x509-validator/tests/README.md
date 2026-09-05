@@ -97,3 +97,14 @@ that has no counterpart in this port.
 ## Totals
 
 47 unit + 162 integration + 4 core = **213**.
+
+## Vendored suite: rustls/webpki
+
+`tests/rustls_webpki/` holds the portable part of a second upstream's
+integration tests, ported to run against this library. It has its own
+`README.md` recording the upstream revision, what was ported, and where this
+library diverges.
+
+Its counts are not comparable with the parity tables above: it is a different
+upstream with a different notion of what one test covers, and it is kept for
+the divergences it surfaces rather than for coverage parity.

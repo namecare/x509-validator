@@ -10,24 +10,36 @@ use x509_validator::oid_registry::OID_X509_EXT_BASIC_CONSTRAINTS;
 use x509_validator::{Certificate, PolicyFailureReason, VerificationDiagnostic};
 use x509_validator_testkit::{cert, issue_ca, issue_leaf, self_signed_ca_with};
 
-/// A root, an intermediate issued by it, and a leaf issued by the
+/// The DER of a root, an intermediate issued by it, and a leaf issued by the
 /// intermediate — enough material to populate every variant.
-fn sample_chain() -> (
-    Certificate<'static>,
-    Certificate<'static>,
-    Certificate<'static>,
-) {
+///
+/// A `Certificate` borrows the bytes it was parsed from, so the DER is
+/// returned for the caller to own; [`sample_chain`] parses it.
+struct SampleDers {
+    leaf: Vec<u8>,
+    intermediate: Vec<u8>,
+    root: Vec<u8>,
+}
+
+fn sample_ders() -> SampleDers {
     let root = self_signed_ca_with("Diagnostic Root", |_| {});
     let intermediate = issue_ca("Diagnostic Intermediate", &root, None, |_| {});
-    let leaf_der = issue_leaf("diagnostic-leaf", &["www.example.com"], &intermediate);
-    let intermediate_der = intermediate.der;
-    let root_der = root.der;
-    (cert(leaf_der), cert(intermediate_der), cert(root_der))
+    let leaf = issue_leaf("diagnostic-leaf", &["www.example.com"], &intermediate);
+    SampleDers {
+        leaf,
+        intermediate: intermediate.der,
+        root: root.der,
+    }
+}
+
+/// The sample chain, borrowing DER the caller owns.
+fn sample_chain(ders: &SampleDers) -> (Certificate<'_>, Certificate<'_>, Certificate<'_>) {
+    (cert(&ders.leaf), cert(&ders.intermediate), cert(&ders.root))
 }
 
 /// A self-signed CA carrying an unrecognized critical extension with OID
 /// 1.2.3.4.5, alongside the critical basicConstraints rcgen always adds.
-fn certificate_with_unknown_critical_extension() -> Certificate<'static> {
+fn unknown_critical_extension_der() -> Vec<u8> {
     let ca = self_signed_ca_with(
         "Unknown Critical Ext",
         |params: &mut x509_validator_testkit::rcgen::CertificateParams| {
@@ -39,16 +51,16 @@ fn certificate_with_unknown_critical_extension() -> Certificate<'static> {
             params.custom_extensions.push(ext);
         },
     );
-    cert(ca.der)
+    ca.der
 }
 
 /// Every variant, constructed over the same sample material. The
 /// invariant tests below iterate this table so a newly added variant is
 /// covered by construction.
-fn all_variants() -> Vec<VerificationDiagnostic<'static>> {
-    let (leaf, intermediate, root) = sample_chain();
+fn all_variants<'a>(sample: &'a SampleDers, odd_der: &'a [u8]) -> Vec<VerificationDiagnostic<'a>> {
+    let (leaf, intermediate, root) = sample_chain(sample);
     let handled = vec![OID_X509_EXT_BASIC_CONSTRAINTS];
-    let odd = certificate_with_unknown_critical_extension();
+    let odd = cert(odd_der);
 
     vec![
         VerificationDiagnostic::leaf_certificate_has_unhandled_critical_extension(
@@ -93,12 +105,16 @@ fn all_variants() -> Vec<VerificationDiagnostic<'static>> {
 
 #[test]
 fn table_covers_every_variant() {
-    assert_eq!(all_variants().len(), 11);
+    let sample = sample_ders();
+    let odd_der = unknown_critical_extension_der();
+    assert_eq!(all_variants(&sample, &odd_der).len(), 11);
 }
 
 #[test]
 fn every_variant_renders_non_empty_single_and_multiline_forms() {
-    for diagnostic in all_variants() {
+    let sample = sample_ders();
+    let odd_der = unknown_critical_extension_der();
+    for diagnostic in all_variants(&sample, &odd_der) {
         let single = diagnostic.to_string();
         let multi = diagnostic.multiline_description();
         assert!(!single.is_empty());
@@ -112,7 +128,9 @@ fn every_variant_renders_non_empty_single_and_multiline_forms() {
 
 #[test]
 fn single_line_description_never_contains_a_newline() {
-    for diagnostic in all_variants() {
+    let sample = sample_ders();
+    let odd_der = unknown_critical_extension_der();
+    for diagnostic in all_variants(&sample, &odd_der) {
         let rendered = format!("{diagnostic}");
         assert!(
             !rendered.contains('\n'),
@@ -123,7 +141,9 @@ fn single_line_description_never_contains_a_newline() {
 
 #[test]
 fn debug_is_the_quoted_single_line_description() {
-    for diagnostic in all_variants() {
+    let sample = sample_ders();
+    let odd_der = unknown_critical_extension_der();
+    for diagnostic in all_variants(&sample, &odd_der) {
         assert_eq!(
             format!("{diagnostic:?}"),
             format!("{:?}", diagnostic.to_string())
@@ -133,7 +153,9 @@ fn debug_is_the_quoted_single_line_description() {
 
 #[test]
 fn multiline_description_contains_newlines_for_list_variants() {
-    for diagnostic in all_variants() {
+    let sample = sample_ders();
+    let odd_der = unknown_critical_extension_der();
+    for diagnostic in all_variants(&sample, &odd_der) {
         let rendered = diagnostic.multiline_description();
         assert!(
             rendered.contains('\n'),
@@ -144,7 +166,8 @@ fn multiline_description_contains_newlines_for_list_variants() {
 
 #[test]
 fn chain_variants_put_each_certificate_on_its_own_line() {
-    let (leaf, intermediate, root) = sample_chain();
+    let sample = sample_ders();
+    let (leaf, intermediate, root) = sample_chain(&sample);
     let diagnostic =
         VerificationDiagnostic::found_valid_certificate_chain(vec![leaf, intermediate, root]);
 
@@ -170,7 +193,8 @@ fn chain_variants_put_each_certificate_on_its_own_line() {
 
 #[test]
 fn single_line_chain_variant_separates_certificates_with_commas() {
-    let (leaf, intermediate, root) = sample_chain();
+    let sample = sample_ders();
+    let (leaf, intermediate, root) = sample_chain(&sample);
     let diagnostic = VerificationDiagnostic::chain_fails_to_meet_policy(
         vec![leaf, intermediate, root],
         PolicyFailureReason::new("expired"),
@@ -193,7 +217,8 @@ fn single_line_chain_variant_separates_certificates_with_commas() {
 
 #[test]
 fn leaf_unhandled_critical_extension_renders_only_the_unhandled_oids() {
-    let cert = certificate_with_unknown_critical_extension();
+    let cert_der = unknown_critical_extension_der();
+    let cert = cert(&cert_der);
     let diagnostic = VerificationDiagnostic::leaf_certificate_has_unhandled_critical_extension(
         cert,
         vec![OID_X509_EXT_BASIC_CONSTRAINTS],
@@ -224,7 +249,7 @@ fn leaf_unhandled_critical_extension_renders_only_the_unhandled_oids() {
 #[test]
 fn leaf_with_only_handled_critical_extensions_reports_an_empty_unhandled_list() {
     let ca = self_signed_ca_with("All Handled", |_| {});
-    let leaf_cert = cert(ca.der);
+    let leaf_cert = cert(&ca.der);
     let diagnostic = VerificationDiagnostic::leaf_certificate_has_unhandled_critical_extension(
         leaf_cert,
         vec![OID_X509_EXT_BASIC_CONSTRAINTS],
@@ -236,8 +261,10 @@ fn leaf_with_only_handled_critical_extensions_reports_an_empty_unhandled_list() 
 
 #[test]
 fn issuer_unhandled_critical_extension_renders_only_the_unhandled_oids() {
-    let (leaf, _, _) = sample_chain();
-    let issuer = certificate_with_unknown_critical_extension();
+    let sample = sample_ders();
+    let (leaf, _, _) = sample_chain(&sample);
+    let issuer_der = unknown_critical_extension_der();
+    let issuer = cert(&issuer_der);
     let diagnostic = VerificationDiagnostic::issuer_has_unhandled_critical_extension(
         issuer,
         vec![leaf],
@@ -265,7 +292,8 @@ fn issuer_unhandled_critical_extension_renders_only_the_unhandled_oids() {
 
 #[test]
 fn issuer_unhandled_critical_extension_with_handling_policy_lists_nothing() {
-    let (leaf, intermediate, _) = sample_chain();
+    let sample = sample_ders();
+    let (leaf, intermediate, _) = sample_chain(&sample);
     let diagnostic = VerificationDiagnostic::issuer_has_unhandled_critical_extension(
         intermediate,
         vec![leaf],
@@ -278,7 +306,8 @@ fn issuer_unhandled_critical_extension_with_handling_policy_lists_nothing() {
 
 #[test]
 fn issuer_variants_append_the_issuer_after_the_partial_chain() {
-    let (leaf, intermediate, root) = sample_chain();
+    let sample = sample_ders();
+    let (leaf, intermediate, root) = sample_chain(&sample);
     let diagnostic =
         VerificationDiagnostic::issuer_has_not_signed_certificate(root, vec![leaf, intermediate]);
 
@@ -302,7 +331,8 @@ fn issuer_variants_append_the_issuer_after_the_partial_chain() {
 
 #[test]
 fn already_in_chain_variant_names_the_repeated_issuer() {
-    let (leaf, intermediate, root) = sample_chain();
+    let sample = sample_ders();
+    let (leaf, intermediate, root) = sample_chain(&sample);
     let diagnostic =
         VerificationDiagnostic::issuer_is_already_in_the_chain(vec![leaf, intermediate], root);
 
@@ -329,7 +359,8 @@ fn already_in_chain_variant_names_the_repeated_issuer() {
 
 #[test]
 fn could_not_validate_leaf_certificate_carries_the_leaf() {
-    let (leaf, _, _) = sample_chain();
+    let sample = sample_ders();
+    let (leaf, _, _) = sample_chain(&sample);
     let diagnostic = VerificationDiagnostic::could_not_validate_leaf_certificate(leaf);
 
     let single = diagnostic.to_string();
@@ -348,7 +379,8 @@ fn could_not_validate_leaf_certificate_carries_the_leaf() {
 
 #[test]
 fn candidate_issuer_store_variants_name_their_store() {
-    let (leaf, intermediate, root) = sample_chain();
+    let sample = sample_ders();
+    let (leaf, intermediate, root) = sample_chain(&sample);
 
     let from_roots = VerificationDiagnostic::found_candidate_issuers_of_partial_chain_in_root_store(
         vec![leaf.clone(), intermediate.clone()],
@@ -374,7 +406,8 @@ fn candidate_issuer_store_variants_name_their_store() {
 
 #[test]
 fn searching_for_issuer_renders_the_partial_chain() {
-    let (leaf, intermediate, _) = sample_chain();
+    let sample = sample_ders();
+    let (leaf, intermediate, _) = sample_chain(&sample);
     let diagnostic =
         VerificationDiagnostic::searching_for_issuer_of_partial_chain(vec![leaf, intermediate]);
 
@@ -396,7 +429,8 @@ fn searching_for_issuer_renders_the_partial_chain() {
 
 #[test]
 fn leaf_in_root_store_variant_renders_the_policy_reason() {
-    let (leaf, _, _) = sample_chain();
+    let sample = sample_ders();
+    let (leaf, _, _) = sample_chain(&sample);
     let diagnostic =
         VerificationDiagnostic::leaf_certificate_is_in_the_root_store_but_does_not_meet_policy(
             leaf,

@@ -19,24 +19,24 @@ fn all_verifiers_accept_the_tls_chain() {
     // `tests/` and `benches/` are separate compilation targets that cannot
     // share private code, so this setup is inlined rather than reached
     // through a shared helper.
-    let roots = CertificateStore::from_iter(vec![parity.ca1.clone()]);
-    let intermediates = CertificateStore::from_iter(vec![parity.intermediate1.clone()]);
+    let roots = CertificateStore::from_iter(vec![parity.ca1().clone()]);
+    let intermediates = CertificateStore::from_iter(vec![parity.intermediate1().clone()]);
     let policy = AllOfPolicies::new(Tuple2::new(
         RFC5280Policy::new(REFERENCE_TIME),
         ServerIdentityPolicy::new(Some("localhost"), None),
     ));
     let validator = Validator::with_policy_and_backend(roots, policy, DEFAULT_BACKEND.provider);
     let result =
-        validator.validate_with_diagnostics(&parity.localhost_leaf, &intermediates, &mut |_| {});
+        validator.validate_with_diagnostics(&parity.localhost_leaf(), &intermediates, &mut |_| {});
     assert!(
         result.is_ok(),
         "our validator must accept the TLS fixture chain",
     );
 
     // rustls-webpki.
-    let leaf = CertificateDer::from(parity.localhost_leaf.as_raw());
-    let inter = CertificateDer::from(parity.intermediate1.as_raw());
-    let root = CertificateDer::from(parity.ca1.as_raw());
+    let leaf = CertificateDer::from(parity.localhost_leaf().as_raw());
+    let inter = CertificateDer::from(parity.intermediate1().as_raw());
+    let root = CertificateDer::from(parity.ca1().as_raw());
     let anchor = webpki::anchor_from_trusted_cert(&root).expect("anchor");
     let ee = webpki::EndEntityCert::try_from(&leaf).expect("parse leaf");
     let time = UnixTime::since_unix_epoch(core::time::Duration::from_secs(REFERENCE_TIME as u64));
@@ -110,9 +110,9 @@ fn openssl_accepts_the_tls_chain() {
     use openssl::x509::{X509StoreContext, X509};
 
     let parity = parity();
-    let leaf = X509::from_der(parity.localhost_leaf.as_raw()).expect("leaf");
-    let inter = X509::from_der(parity.intermediate1.as_raw()).expect("inter");
-    let root = X509::from_der(parity.ca1.as_raw()).expect("root");
+    let leaf = X509::from_der(parity.localhost_leaf().as_raw()).expect("leaf");
+    let inter = X509::from_der(parity.intermediate1().as_raw()).expect("inter");
+    let root = X509::from_der(parity.ca1().as_raw()).expect("root");
 
     let mut builder = X509StoreBuilder::new().expect("builder");
     builder

@@ -22,8 +22,8 @@ mod tls_fixture {
     /// check so it does the same work the other two rows do.
     fn ours(bencher: Bencher<'_, '_>, provider: &'static dyn SignatureVerifier) {
         let parity = parity();
-        let roots = vec![parity.ca1.clone()];
-        let intermediates = vec![parity.intermediate1.clone()];
+        let roots = vec![parity.ca1().clone()];
+        let intermediates = vec![parity.intermediate1().clone()];
 
         let validate = || {
             let validator = Validator::with_policy_and_backend(
@@ -35,7 +35,7 @@ mod tls_fixture {
                 provider,
             );
             validator.validate_with_diagnostics(
-                &parity.localhost_leaf,
+                &parity.localhost_leaf(),
                 &CertificateStore::from_iter(intermediates.clone()),
                 &mut |_| {},
             )
@@ -76,9 +76,9 @@ mod tls_fixture {
     #[divan::bench]
     fn rustls_webpki(bencher: Bencher<'_, '_>) {
         let parity = parity();
-        let leaf = CertificateDer::from(parity.localhost_leaf.as_raw());
-        let inter = CertificateDer::from(parity.intermediate1.as_raw());
-        let root = CertificateDer::from(parity.ca1.as_raw());
+        let leaf = CertificateDer::from(parity.localhost_leaf().as_raw());
+        let inter = CertificateDer::from(parity.intermediate1().as_raw());
+        let root = CertificateDer::from(parity.ca1().as_raw());
         let time =
             UnixTime::since_unix_epoch(core::time::Duration::from_secs(REFERENCE_TIME as u64));
         let name = ServerName::try_from(HOST).expect("server name");
@@ -111,11 +111,16 @@ mod tls_fixture {
     #[cfg(feature = "openssl")]
     fn openssl(bencher: Bencher<'_, '_>) {
         let parity = parity();
+        // Parsed outside the closure: the fixture parses its DER on each
+        // access, and only the verification is being measured.
+        let leaf = parity.localhost_leaf();
+        let inter = parity.intermediate1();
+        let root = parity.ca1();
         let verify = || {
             super::openssl_verify(
-                parity.localhost_leaf.as_raw(),
-                parity.intermediate1.as_raw(),
-                parity.ca1.as_raw(),
+                leaf.as_raw(),
+                inter.as_raw(),
+                root.as_raw(),
                 REFERENCE_TIME,
                 Some(HOST),
             )
