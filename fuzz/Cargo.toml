@@ -1,54 +1,33 @@
 [package]
 name = "x509-validator-fuzz"
-version = "0.0.0"
+version = "0.0.1"
 edition = "2024"
 publish = false
 
 [package.metadata]
 cargo-fuzz = true
 
-[workspace]
-
-[lints.clippy]
-alloc_instead_of_core = "warn"
-std_instead_of_core = "warn"
-
 [dependencies]
 libfuzzer-sys = "0.4"
-x509-validator = { path = "../x509-validator", features = ["aws_lc"] }
+x509-validator = { path = "../x509-validator", default-features = false }
+x509-validator-fuzzing-provider = { path = "../x509-validator-fuzzing-provider" }
 
-[dev-dependencies]
-x509-validator-testkit = { path = "../x509-validator-testkit" }
-
-[profile.release]
-debug = 1
-debug-assertions = true
-overflow-checks = true
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
 
 [[bin]]
 name = "parse_certificate"
 path = "fuzzers/parse_certificate.rs"
-test = false
-doc = false
-bench = false
 
 [[bin]]
 name = "validate_chain"
 path = "fuzzers/validate_chain.rs"
-test = false
-doc = false
-bench = false
 
 [[bin]]
 name = "server_identity"
 path = "fuzzers/server_identity.rs"
-test = false
-doc = false
-bench = false
 
 [[bin]]
 name = "name_constraints"
 path = "fuzzers/name_constraints.rs"
-test = false
-doc = false
-bench = false

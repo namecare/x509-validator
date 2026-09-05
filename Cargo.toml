@@ -6,7 +6,9 @@ members = [
   "examples",
   "x509-validator-bench/compare",
   "x509-validator-bench/measure",
+  "x509-validator-fuzzing-provider",
 ]
+exclude = ["fuzz"]
 
 [workspace.package]
 edition = "2024"
@@ -18,6 +20,7 @@ rand = { version = "0.10.2", features = ["thread_rng"] }
 time = "0.3.55"
 x509-validator = { path = "x509-validator" }
 x509-validator-testkit = { path = "x509-validator-testkit" }
+x509-validator-fuzzing-provider = { path = "x509-validator-fuzzing-provider" }
 
 [workspace.lints.clippy]
 alloc_instead_of_core = "warn"

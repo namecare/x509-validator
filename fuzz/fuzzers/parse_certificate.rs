@@ -1,6 +1,8 @@
 #![no_main]
+#[macro_use]
+extern crate libfuzzer_sys;
+extern crate x509_validator;
 
-use libfuzzer_sys::fuzz_target;
 use x509_validator::{Certificate, CertificateExt};
 
 fuzz_target!(|data: &[u8]| {
@@ -21,7 +23,6 @@ fuzz_target!(|data: &[u8]| {
 
     let _ = x509_validator::certificate::format_certificate(&cert);
 
-    // Re-parsing the same bytes must land in the same place.
     let again = Certificate::parse(data).expect("reparse of accepted DER");
     assert!(cert.has_same_identity_as(&again));
 });
