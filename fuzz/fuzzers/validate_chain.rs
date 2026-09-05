@@ -1,35 +1,17 @@
 #![no_main]
+#[macro_use]
+extern crate libfuzzer_sys;
+extern crate x509_validator;
 
 mod common;
 
-use libfuzzer_sys::fuzz_target;
-use x509_validator::crypto::{CryptoError, SignatureVerifier};
 use x509_validator::rfc5280::RFC5280Policy;
 use x509_validator::store::CertificateStore;
-use x509_validator::{
-    AlgorithmIdentifier, Certificate, CertificateExt, SubjectPublicKeyInfo, Validator,
-};
+use x509_validator::{Certificate, CertificateExt, Validator};
 
-#[derive(Debug)]
-struct AcceptEverySignature;
-
-impl SignatureVerifier for AcceptEverySignature {
-    fn verify_signature(
-        &self,
-        _algorithm: &AlgorithmIdentifier<'_>,
-        _public_key: &SubjectPublicKeyInfo<'_>,
-        _message: &[u8],
-        _signature: &[u8],
-    ) -> Result<(), CryptoError> {
-        Ok(())
-    }
-}
+const VALIDATION_TIME: i64 = 1_760_000_000;
 
 fuzz_target!(|data: &[u8]| {
-    let Some((&selector, data)) = data.split_first() else {
-        return;
-    };
-
     let frames = common::frames(data, 8);
     let Some((leaf_der, rest)) = frames.split_first() else {
         return;
@@ -47,16 +29,11 @@ fuzz_target!(|data: &[u8]| {
     let roots: CertificateStore<'_> = parsed.iter().cloned().collect();
     let intermediates: CertificateStore<'_> = parsed.into_iter().collect();
 
-    let policy = RFC5280Policy::new(1_760_000_000);
-
-    let stub = AcceptEverySignature;
-    let crypto: &dyn SignatureVerifier = if selector & 1 == 0 {
-        &stub
-    } else {
-        x509_validator::crypto::default_provider()
-    };
-
-    let validator = Validator::with_policy_and_backend(roots, policy, crypto);
+    let validator = Validator::with_policy_and_backend(
+        roots,
+        RFC5280Policy::new(VALIDATION_TIME),
+        &x509_validator_fuzzing_provider::PROVIDER,
+    );
 
     let _ = validator.validate_with_diagnostics(&leaf, &intermediates, &mut |_| {});
 });

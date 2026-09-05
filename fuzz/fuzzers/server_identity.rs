@@ -1,8 +1,10 @@
 #![no_main]
+#[macro_use]
+extern crate libfuzzer_sys;
+extern crate x509_validator;
 
 mod common;
 
-use libfuzzer_sys::fuzz_target;
 use x509_validator::unverified_chain::UnverifiedCertificateChain;
 use x509_validator::{Certificate, CertificateExt, ServerIdentityPolicy, ValidationPolicy};
 

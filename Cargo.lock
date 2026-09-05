@@ -2311,6 +2311,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "x509-validator-fuzzing-provider"
+version = "0.0.0"
+dependencies = [
+ "x509-validator",
+]
+
+[[package]]
 name = "x509-validator-testkit"
 version = "0.0.0"
 dependencies = [

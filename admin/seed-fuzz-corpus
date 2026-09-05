@@ -7,9 +7,9 @@ framing change. It replaces the corpus wholesale: inputs libFuzzer discovered
 during a local run are deliberately dropped, because the committed corpus is
 meant to be a small curated starting point rather than an accumulating cache.
 
-The framing mirrors `fuzz/fuzzers/common::frames` — a two-byte big-endian
-length before each part. Changing one without the other silently invalidates
-every framed entry.
+The framing mirrors `fuzz/fuzzers/common::frames` — a
+two-byte big-endian length before each part. Changing one without the other
+silently invalidates every framed entry.
 """
 
 import pathlib
@@ -59,20 +59,15 @@ def main() -> None:
     for source in mozilla + sorted(APPLE.glob("*.der")):
         shutil.copyfile(source, single / source.name)
 
-    # `validate_chain` reads a leading selector byte: even picks the stub
-    # verifier that accepts every signature, odd picks the real backend. Only
-    # the stub keeps reaching chain building once a mutation breaks a
-    # signature, so both are seeded.
-    for prefix, tag in [(b"\x00", "stub"), (b"\x01", "real")]:
-        for name, parts in [
-            ("apple-full-chain", (leaf, intermediate, root)),
-            ("apple-leaf-only", (leaf,)),
-            ("apple-missing-intermediate", (leaf, root)),
-            ("apple-reversed", (root, intermediate, leaf)),
-            ("self-signed-root", (root, root)),
-            ("unrelated-roots", (leaf, digicert, isrg)),
-        ]:
-            write("validate_chain", f"{name}-{tag}", prefix + frame(*parts))
+    for name, parts in [
+        ("apple-full-chain", (leaf, intermediate, root)),
+        ("apple-leaf-only", (leaf,)),
+        ("apple-missing-intermediate", (leaf, root)),
+        ("apple-reversed", (root, intermediate, leaf)),
+        ("self-signed-root", (root, root)),
+        ("unrelated-roots", (leaf, digicert, isrg)),
+    ]:
+        write("validate_chain", name, frame(*parts))
 
     for name, hostname in [
         ("apple-exact", b"Prod ECC Mac App Store and iTunes Store Receipt Signing"),
