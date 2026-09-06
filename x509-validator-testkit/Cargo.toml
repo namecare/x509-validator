@@ -10,6 +10,6 @@ publish = false
 workspace = true
 
 [dependencies]
-rcgen = "0.14.8"
+rcgen.workspace = true
 time.workspace = true
 x509-validator.workspace = true
