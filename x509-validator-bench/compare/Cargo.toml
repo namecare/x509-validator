@@ -12,7 +12,7 @@ workspace = true
 x509-validator = { workspace = true, features = ["aws_lc", "ring", "rust_crypto"] }
 x509-validator-testkit.workspace = true
 rsa.workspace = true
-rand.workspace = true
+rand = { workspace = true, features = ["thread_rng"] }
 x509-verify = { version = "0.4.8", optional = true }
 openssl = { version = "0.10.81", optional = true }
 rustls-webpki = { version = "0.103", optional = true, features = ["aws-lc-rs", "alloc", "std"] }

@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.3.0] - 2026-09-06
+
+### Added
+- `EkuPolicy`, a `ValidationPolicy` for the extendedKeyUsage extension
+  (RFC 5280 §4.2.1.12). Requires any one of a set of key purposes, with
+  `server_auth()` and `client_auth()` shortcuts and the well-known purpose
+  OIDs in `eku_oids`. `applies_to(CertificateRole)` narrows the requirement
+  to the end entity, the issuers, or the whole chain; `require_extension()`
+  rejects certificates that omit the extension instead of treating them as
+  unrestricted.
+- `CertificateRole`, naming a certificate's position in a chain for policies
+  that apply per position.
+
+### Changed
+- Examples rewritten as self-contained files starting from DER bytes:
+  `webpki`, `apple_x5c`, `client_certificate`, `pinned_root`, `diagnostics`
+  and `custom_crypto_backend`, with real captured chains in `examples/mocks`.
+- `aws_lc` backend: bumped `aws-lc-rs` to 1.18.1 and `aws-lc-sys` to 0.45.0.
+
+### Internal
+- Fuzzing moved to its own workspace under `fuzz/`, with an
+  `x509-validator-fuzzing-provider` crate so the fuzzers build without a
+  crypto backend. Four targets: `parse_certificate`, `validate_chain`,
+  `server_identity`, `name_constraints`.
+
 ## [0.2.0] - 2026-08-12
 
 ### Added

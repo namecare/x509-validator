@@ -31,7 +31,7 @@ of PKI applications. It ships with a default verifier and a number of built-in v
 Add the dependency and pick a crypto backend:
 
 ```toml
-x509-validator = { version = "0.2.0", features = ["aws_lc"] }
+x509-validator = { version = "0.3.0", features = ["aws_lc"] }
 ```
 
 | Feature | Backend | Notes                   |
@@ -110,7 +110,29 @@ Crypto is swappable via the feature flags above, or you can supply your own
 `SignatureVerifier`.
 
 Policy is where the actual rules live. A `ValidationPolicy` receives each candidate chain and
-accepts or rejects it.
+accepts or rejects it. The built-in ones:
+
+| Policy | Checks |
+|---|---|
+| `RFC5280Policy` | Validity period, version, basic constraints, name constraints |
+| `EkuPolicy` | Extended key usage: serverAuth, clientAuth, or any purpose OID you name |
+| `ServerIdentityPolicy` | Hostname or IP against the subject alternative names, RFC 6125 style |
+
+Policies compose with the `policy!` macro, so a TLS client's checks read as
+one list:
+
+```rust
+use x509_validator::rfc5280::{EkuPolicy, RFC5280Policy, Timestamp};
+use x509_validator::{ServerIdentityPolicy, policy};
+
+fn tls_client_policy(now: Timestamp, hostname: &str) -> impl x509_validator::ValidationPolicy {
+    policy! {
+        RFC5280Policy::new(now);
+        EkuPolicy::server_auth();
+        ServerIdentityPolicy::new(Some(hostname), None)
+    }
+}
+```
 
 ## Benchmarks
 
@@ -119,6 +141,12 @@ Two crates, in [x509-validator-bench]:
 - [`measure`][bench-measure] — Regression benchmarks.
 - [`compare`][bench-compare] — Compare backends, parsers, other verifiers, and
   the Swift original across four groups ([index][bench-results]).
+
+## Fuzzing
+
+Four [cargo-fuzz] targets live in [fuzz], covering parsing, chain validation,
+server identity matching and name constraints. They run on every pull request
+and nightly; see the [fuzzing README][fuzz] to run them locally.
 
 ## Contributing
 
@@ -141,6 +169,8 @@ You may use this software under the terms of any of these licenses, at your opti
 [x509-validator-bench]: https://github.com/namecare/x509-validator/tree/master/x509-validator-bench
 [bench-measure]: https://github.com/namecare/x509-validator/blob/master/x509-validator-bench/measure/README.md
 [bench-compare]: https://github.com/namecare/x509-validator/blob/master/x509-validator-bench/compare/README.md
+[fuzz]: https://github.com/namecare/x509-validator/tree/master/fuzz
+[cargo-fuzz]: https://github.com/rust-fuzz/cargo-fuzz
 [bench-results]: https://github.com/namecare/x509-validator/blob/master/x509-validator-bench/compare/README.md#groups
 [coc]: https://github.com/namecare/x509-validator/blob/master/CODE_OF_CONDUCT.md
 [contribute]: https://github.com/namecare/x509-validator/blob/master/CONTRIBUTING.md
