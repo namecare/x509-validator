@@ -20,7 +20,7 @@ rcgen.workspace = true
 rustls-native-certs = "0.8"
 
 # `x5c` chains arrive base64-encoded inside a JWS header.
-base64 = "0.22"
+base64 = "0.23"
 
 # Backs the `custom_crypto_backend` example. Not a dependency of
 # x509-validator itself — the point of that example is that a backend is
