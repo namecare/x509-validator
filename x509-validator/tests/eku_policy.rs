@@ -54,7 +54,8 @@ fn leaf_naming_the_required_purpose_is_accepted() {
         &root,
         with_ekus(vec![ExtendedKeyUsagePurpose::ServerAuth]),
     );
-    let chain = chain_of(vec![leaf, root.der]);
+    let ders = chain_of(vec![leaf, root.der]);
+    let chain = ders.chain();
 
     assert_eq!(
         EkuPolicy::server_auth().chain_meets_policy_requirements(&chain),
@@ -75,7 +76,8 @@ fn required_purpose_among_several_is_accepted() {
             ExtendedKeyUsagePurpose::EmailProtection,
         ]),
     );
-    let chain = chain_of(vec![leaf, root.der]);
+    let ders = chain_of(vec![leaf, root.der]);
+    let chain = ders.chain();
 
     assert_eq!(
         EkuPolicy::server_auth().chain_meets_policy_requirements(&chain),
@@ -92,7 +94,8 @@ fn client_auth_is_not_satisfied_by_server_auth() {
         &root,
         with_ekus(vec![ExtendedKeyUsagePurpose::ServerAuth]),
     );
-    let chain = chain_of(vec![leaf, root.der]);
+    let ders = chain_of(vec![leaf, root.der]);
+    let chain = ders.chain();
 
     assert!(
         EkuPolicy::client_auth()
@@ -110,7 +113,8 @@ fn an_arbitrary_purpose_oid_can_be_required() {
         &root,
         with_ekus(vec![ExtendedKeyUsagePurpose::CodeSigning]),
     );
-    let chain = chain_of(vec![leaf, root.der]);
+    let ders = chain_of(vec![leaf, root.der]);
+    let chain = ders.chain();
 
     assert_eq!(
         EkuPolicy::new(eku_oids::code_signing()).chain_meets_policy_requirements(&chain),
@@ -131,7 +135,8 @@ fn any_one_of_the_accepted_purposes_suffices() {
         &root,
         with_ekus(vec![ExtendedKeyUsagePurpose::Any]),
     );
-    let chain = chain_of(vec![leaf, root.der]);
+    let ders = chain_of(vec![leaf, root.der]);
+    let chain = ders.chain();
 
     assert_eq!(
         server_auth_or_any().chain_meets_policy_requirements(&chain),
@@ -148,7 +153,8 @@ fn a_purpose_outside_the_accepted_set_is_rejected() {
         &root,
         with_ekus(vec![ExtendedKeyUsagePurpose::ClientAuth]),
     );
-    let chain = chain_of(vec![leaf, root.der]);
+    let ders = chain_of(vec![leaf, root.der]);
+    let chain = ders.chain();
 
     assert!(
         server_auth_or_any()
@@ -168,7 +174,8 @@ fn any_extended_key_usage_alone_does_not_satisfy_a_specific_purpose() {
         &root,
         with_ekus(vec![ExtendedKeyUsagePurpose::Any]),
     );
-    let chain = chain_of(vec![leaf, root.der]);
+    let ders = chain_of(vec![leaf, root.der]);
+    let chain = ders.chain();
 
     assert!(
         EkuPolicy::server_auth()
@@ -185,7 +192,8 @@ fn any_extended_key_usage_alone_does_not_satisfy_a_specific_purpose() {
 fn leaf_without_the_extension_is_accepted() {
     let root = self_signed_ca_with("root", |_| {});
     let leaf = issue_leaf_with("leaf", &["www.example.com"], &root, |_| {});
-    let chain = chain_of(vec![leaf, root.der]);
+    let ders = chain_of(vec![leaf, root.der]);
+    let chain = ders.chain();
 
     assert_eq!(
         EkuPolicy::server_auth().chain_meets_policy_requirements(&chain),
@@ -197,7 +205,8 @@ fn leaf_without_the_extension_is_accepted() {
 fn requiring_the_extension_rejects_a_leaf_without_one() {
     let root = self_signed_ca_with("root", |_| {});
     let leaf = issue_leaf_with("leaf", &["www.example.com"], &root, |_| {});
-    let chain = chain_of(vec![leaf, root.der]);
+    let ders = chain_of(vec![leaf, root.der]);
+    let chain = ders.chain();
 
     assert!(
         EkuPolicy::server_auth()
@@ -217,7 +226,8 @@ fn requiring_the_extension_accepts_a_leaf_that_names_the_purpose() {
         &root,
         with_ekus(vec![ExtendedKeyUsagePurpose::ServerAuth]),
     );
-    let chain = chain_of(vec![leaf, root.der]);
+    let ders = chain_of(vec![leaf, root.der]);
+    let chain = ders.chain();
 
     assert_eq!(
         EkuPolicy::server_auth()
@@ -240,7 +250,8 @@ fn requiring_the_extension_chain_wide_rejects_an_issuer_without_one() {
         &root,
         with_ekus(vec![ExtendedKeyUsagePurpose::ServerAuth]),
     );
-    let chain = chain_of(vec![leaf, root.der]);
+    let ders = chain_of(vec![leaf, root.der]);
+    let chain = ders.chain();
 
     assert!(
         EkuPolicy::server_auth()
@@ -263,7 +274,8 @@ fn empty_eku_sequence_is_rejected() {
         &root,
         with_raw_eku(empty_eku_sequence()),
     );
-    let chain = chain_of(vec![leaf, root.der]);
+    let ders = chain_of(vec![leaf, root.der]);
+    let chain = ders.chain();
 
     assert!(
         EkuPolicy::server_auth()
@@ -281,7 +293,8 @@ fn malformed_eku_extension_is_rejected() {
         &root,
         with_raw_eku(malformed_eku()),
     );
-    let chain = chain_of(vec![leaf, root.der]);
+    let ders = chain_of(vec![leaf, root.der]);
+    let chain = ders.chain();
 
     assert!(
         EkuPolicy::server_auth()
@@ -309,7 +322,8 @@ fn entire_chain_rejects_a_restrictive_issuer() {
         &intermediate,
         with_ekus(vec![ExtendedKeyUsagePurpose::ServerAuth]),
     );
-    let chain = chain_of(vec![leaf, intermediate.der, root.der]);
+    let ders = chain_of(vec![leaf, intermediate.der, root.der]);
+    let chain = ders.chain();
 
     assert!(
         EkuPolicy::server_auth()
@@ -333,7 +347,8 @@ fn end_entity_role_ignores_a_restrictive_issuer() {
         &intermediate,
         with_ekus(vec![ExtendedKeyUsagePurpose::ServerAuth]),
     );
-    let chain = chain_of(vec![leaf, intermediate.der, root.der]);
+    let ders = chain_of(vec![leaf, intermediate.der, root.der]);
+    let chain = ders.chain();
 
     assert_eq!(
         EkuPolicy::server_auth()
@@ -358,7 +373,8 @@ fn issuers_role_ignores_a_restrictive_leaf() {
         &intermediate,
         with_ekus(vec![ExtendedKeyUsagePurpose::ClientAuth]),
     );
-    let chain = chain_of(vec![leaf, intermediate.der, root.der]);
+    let ders = chain_of(vec![leaf, intermediate.der, root.der]);
+    let chain = ders.chain();
 
     assert_eq!(
         EkuPolicy::server_auth()
@@ -383,7 +399,8 @@ fn issuers_role_rejects_a_restrictive_intermediate() {
         &intermediate,
         with_ekus(vec![ExtendedKeyUsagePurpose::ServerAuth]),
     );
-    let chain = chain_of(vec![leaf, intermediate.der, root.der]);
+    let ders = chain_of(vec![leaf, intermediate.der, root.der]);
+    let chain = ders.chain();
 
     assert!(
         EkuPolicy::server_auth()
@@ -403,7 +420,8 @@ fn issuers_role_covers_the_trust_anchor() {
         &intermediate,
         with_ekus(vec![ExtendedKeyUsagePurpose::ServerAuth]),
     );
-    let chain = chain_of(vec![leaf, intermediate.der, root.der]);
+    let ders = chain_of(vec![leaf, intermediate.der, root.der]);
+    let chain = ders.chain();
 
     assert!(
         EkuPolicy::server_auth()
@@ -423,7 +441,8 @@ fn excluding_the_anchor_ignores_a_restrictive_root() {
         &intermediate,
         with_ekus(vec![ExtendedKeyUsagePurpose::ServerAuth]),
     );
-    let chain = chain_of(vec![leaf, intermediate.der, root.der]);
+    let ders = chain_of(vec![leaf, intermediate.der, root.der]);
+    let chain = ders.chain();
 
     assert_eq!(
         EkuPolicy::server_auth()
@@ -448,7 +467,8 @@ fn excluding_the_anchor_still_checks_intermediates() {
         &intermediate,
         with_ekus(vec![ExtendedKeyUsagePurpose::ServerAuth]),
     );
-    let chain = chain_of(vec![leaf, intermediate.der, root.der]);
+    let ders = chain_of(vec![leaf, intermediate.der, root.der]);
+    let chain = ders.chain();
 
     assert!(
         EkuPolicy::server_auth()
@@ -463,7 +483,8 @@ fn excluding_the_anchor_still_checks_intermediates() {
 #[test]
 fn issuer_roles_are_vacuous_on_a_single_certificate_chain() {
     let root = self_signed_ca_with("root", with_ekus(vec![ExtendedKeyUsagePurpose::ClientAuth]));
-    let chain = chain_of(vec![root.der]);
+    let ders = chain_of(vec![root.der]);
+    let chain = ders.chain();
 
     assert_eq!(
         EkuPolicy::server_auth()
@@ -476,7 +497,8 @@ fn issuer_roles_are_vacuous_on_a_single_certificate_chain() {
 #[test]
 fn end_entity_role_checks_a_single_certificate_chain() {
     let root = self_signed_ca_with("root", with_ekus(vec![ExtendedKeyUsagePurpose::ClientAuth]));
-    let chain = chain_of(vec![root.der]);
+    let ders = chain_of(vec![root.der]);
+    let chain = ders.chain();
 
     assert!(
         EkuPolicy::server_auth()
@@ -515,7 +537,8 @@ fn a_composed_policy_requires_the_purpose_of_the_leaf_and_allows_any_on_issuers(
         &intermediate,
         with_ekus(vec![ExtendedKeyUsagePurpose::ServerAuth]),
     );
-    let chain = chain_of(vec![leaf, intermediate.der, root.der]);
+    let ders = chain_of(vec![leaf, intermediate.der, root.der]);
+    let chain = ders.chain();
     assert_eq!(composed().chain_meets_policy_requirements(&chain), Ok(()));
 
     // The same latitude does not extend to the end entity.
@@ -527,7 +550,8 @@ fn a_composed_policy_requires_the_purpose_of_the_leaf_and_allows_any_on_issuers(
         &intermediate,
         with_ekus(vec![ExtendedKeyUsagePurpose::Any]),
     );
-    let chain = chain_of(vec![leaf, intermediate.der, root.der]);
+    let ders = chain_of(vec![leaf, intermediate.der, root.der]);
+    let chain = ders.chain();
     assert!(
         composed()
             .chain_meets_policy_requirements(&chain)
@@ -538,7 +562,8 @@ fn a_composed_policy_requires_the_purpose_of_the_leaf_and_allows_any_on_issuers(
     let root = self_signed_ca_with("root", |_| {});
     let intermediate = issue_ca("intermediate", &root, None, |_| {});
     let leaf = issue_leaf_with("leaf", &["www.example.com"], &intermediate, |_| {});
-    let chain = chain_of(vec![leaf, intermediate.der, root.der]);
+    let ders = chain_of(vec![leaf, intermediate.der, root.der]);
+    let chain = ders.chain();
     assert!(
         composed()
             .chain_meets_policy_requirements(&chain)

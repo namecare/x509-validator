@@ -1,5 +1,8 @@
 use rcgen::string::Ia5String;
-use rcgen::{CertificateParams, DistinguishedName, ExtendedKeyUsagePurpose, KeyPair, SanType};
+use rcgen::{
+    CertificateParams, DistinguishedName, ExtendedKeyUsagePurpose, KeyPair, KeyUsagePurpose,
+    SanType,
+};
 
 use crate::ca::{Ca, base_params};
 
@@ -115,6 +118,7 @@ pub struct LeafSpec {
     include_aki: bool,
     critical_extension: Option<(Vec<u64>, Vec<u8>)>,
     extended_key_usages: Vec<ExtendedKeyUsagePurpose>,
+    key_usages: Vec<KeyUsagePurpose>,
 }
 
 impl LeafSpec {
@@ -128,6 +132,7 @@ impl LeafSpec {
             include_aki: false,
             critical_extension: None,
             extended_key_usages: Vec::new(),
+            key_usages: Vec::new(),
         }
     }
 
@@ -161,6 +166,15 @@ impl LeafSpec {
         self
     }
 
+    /// Attaches a `keyUsage` naming the given purposes. Setting this also
+    /// makes rcgen emit the extensions block (as does any other setting
+    /// here that needs it), so a call with an empty slice still produces a
+    /// present-but-empty `keyUsage` bitstring rather than an absent one.
+    pub fn key_usages(mut self, purposes: &[KeyUsagePurpose]) -> Self {
+        self.key_usages = purposes.to_vec();
+        self
+    }
+
     /// Attaches an extension the validator does not recognise, marked
     /// critical — the shape a policy must reject as unhandled.
     pub fn critical_extension(mut self, oid: &[u64], value: Vec<u8>) -> Self {
@@ -188,6 +202,7 @@ impl LeafSpec {
             params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
         }
         params.extended_key_usages = self.extended_key_usages;
+        params.key_usages = self.key_usages;
         if let Some((oid, value)) = self.critical_extension {
             let mut ext = rcgen::CustomExtension::from_oid_content(&oid, value);
             ext.set_criticality(true);

@@ -222,8 +222,8 @@ mod tests {
     #[test]
     fn ecdsa_p256_round_trip_verifies() {
         let key_pair = KeyPair::generate().expect("generate key pair");
-        let der: &'static [u8] = Box::leak(self_signed(&key_pair).into_boxed_slice());
-        let cert = Certificate::parse(der).expect("parse certificate");
+        let der = self_signed(&key_pair);
+        let cert = Certificate::parse(&der).expect("parse certificate");
 
         let result = RustCrypto.verify_signature(
             &cert.signature_algorithm,
@@ -240,8 +240,8 @@ mod tests {
     #[test]
     fn ecdsa_p256_tampered_message_fails() {
         let key_pair = KeyPair::generate().expect("generate key pair");
-        let der: &'static [u8] = Box::leak(self_signed(&key_pair).into_boxed_slice());
-        let cert = Certificate::parse(der).expect("parse certificate");
+        let der = self_signed(&key_pair);
+        let cert = Certificate::parse(&der).expect("parse certificate");
 
         let result = RustCrypto.verify_signature(
             &cert.signature_algorithm,
@@ -259,8 +259,8 @@ mod tests {
             parameters: None,
         };
         let key_pair = KeyPair::generate().expect("generate key pair");
-        let der: &'static [u8] = Box::leak(self_signed(&key_pair).into_boxed_slice());
-        let cert = Certificate::parse(der).expect("parse certificate");
+        let der = self_signed(&key_pair);
+        let cert = Certificate::parse(&der).expect("parse certificate");
 
         let result =
             RustCrypto.verify_signature(&algorithm, cert.public_key(), b"message", b"signature");
@@ -274,8 +274,8 @@ mod tests {
             parameters: None,
         };
         let key_pair = KeyPair::generate().expect("generate key pair");
-        let der: &'static [u8] = Box::leak(self_signed(&key_pair).into_boxed_slice());
-        let cert = Certificate::parse(der).expect("parse certificate");
+        let der = self_signed(&key_pair);
+        let cert = Certificate::parse(&der).expect("parse certificate");
 
         let result =
             RustCrypto.verify_signature(&algorithm, cert.public_key(), b"message", b"signature");
@@ -284,8 +284,8 @@ mod tests {
 
     fn assert_round_trip(algorithm: &'static rcgen::SignatureAlgorithm) {
         let key_pair = KeyPair::generate_for(algorithm).expect("generate key pair");
-        let der: &'static [u8] = Box::leak(self_signed(&key_pair).into_boxed_slice());
-        let cert = Certificate::parse(der).expect("parse certificate");
+        let der = self_signed(&key_pair);
+        let cert = Certificate::parse(&der).expect("parse certificate");
 
         let result = RustCrypto.verify_signature(
             &cert.signature_algorithm,
@@ -320,8 +320,8 @@ mod tests {
 
     fn assert_rsa_round_trip(algorithm: &'static rcgen::SignatureAlgorithm) {
         let key_pair = rsa_key_pair(algorithm);
-        let der: &'static [u8] = Box::leak(self_signed(&key_pair).into_boxed_slice());
-        let cert = Certificate::parse(der).expect("parse certificate");
+        let der = self_signed(&key_pair);
+        let cert = Certificate::parse(&der).expect("parse certificate");
 
         let result = RustCrypto.verify_signature(
             &cert.signature_algorithm,

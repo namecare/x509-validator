@@ -8,7 +8,8 @@ use x509_validator_testkit::{chain_of, issue_ca, issue_leaf, self_signed_ca_with
 fn leaf_and_ca_chain_is_accepted() {
     let root = self_signed_ca_with("root", |_| {});
     let leaf = issue_leaf("leaf", &["www.example.com"], &root);
-    let chain = chain_of(vec![leaf, root.der]);
+    let ders = chain_of(vec![leaf, root.der]);
+    let chain = ders.chain();
     let policy = BasicConstraintsPolicy;
     assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
 }
@@ -16,7 +17,8 @@ fn leaf_and_ca_chain_is_accepted() {
 #[test]
 fn self_signed_leaf_used_as_trust_anchor_must_be_a_ca() {
     let root = self_signed_ca_with("root", |_| {});
-    let chain = chain_of(vec![root.der]);
+    let ders = chain_of(vec![root.der]);
+    let chain = ders.chain();
     let policy = BasicConstraintsPolicy;
     assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
 }
@@ -28,7 +30,8 @@ fn self_signed_leaf_without_ca_bit_is_rejected() {
     let this = self_signed_ca_with("root", |params: &mut CertificateParams| {
         params.is_ca = x509_validator_testkit::rcgen::IsCa::NoCa;
     });
-    let chain = chain_of(vec![this.der]);
+    let ders = chain_of(vec![this.der]);
+    let chain = ders.chain();
     let policy = BasicConstraintsPolicy;
     assert!(
         policy
@@ -43,20 +46,12 @@ fn non_ca_intermediate_is_rejected() {
     // "intermediate" is issued as a non-CA leaf, then used to sign
     // another cert anyway — its basicConstraints has no CA bit set.
     let intermediate = issue_leaf("intermediate", &[], &root);
-    let intermediate_der: &'static [u8] = Box::leak(intermediate.into_boxed_slice());
-    let intermediate_cert = Certificate::parse(intermediate_der).unwrap();
     let leaf = issue_leaf("leaf", &["www.example.com"], &root);
 
     let chain = UnverifiedCertificateChain::new(vec![
-        {
-            let leaf_der: &'static [u8] = Box::leak(leaf.into_boxed_slice());
-            Certificate::parse(leaf_der).unwrap()
-        },
-        intermediate_cert,
-        {
-            let root_der: &'static [u8] = Box::leak(root.der.into_boxed_slice());
-            Certificate::parse(root_der).unwrap()
-        },
+        Certificate::parse(&leaf).unwrap(),
+        Certificate::parse(&intermediate).unwrap(),
+        Certificate::parse(&root.der).unwrap(),
     ]);
     let policy = BasicConstraintsPolicy;
     assert!(
@@ -71,7 +66,8 @@ fn path_length_constraint_satisfied_is_accepted() {
     let root = self_signed_ca_with("root", |_| {});
     let intermediate = issue_ca("intermediate", &root, Some(1), |_| {});
     let leaf = issue_leaf("leaf", &["www.example.com"], &intermediate);
-    let chain = chain_of(vec![leaf, intermediate.der, root.der]);
+    let ders = chain_of(vec![leaf, intermediate.der, root.der]);
+    let chain = ders.chain();
     let policy = BasicConstraintsPolicy;
     assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
 }
@@ -82,7 +78,8 @@ fn path_length_constraint_violated_is_rejected() {
     let intermediate1 = issue_ca("intermediate1", &root, Some(0), |_| {});
     let intermediate2 = issue_ca("intermediate2", &intermediate1, None, |_| {});
     let leaf = issue_leaf("leaf", &["www.example.com"], &intermediate2);
-    let chain = chain_of(vec![leaf, intermediate2.der, intermediate1.der, root.der]);
+    let ders = chain_of(vec![leaf, intermediate2.der, intermediate1.der, root.der]);
+    let chain = ders.chain();
     let policy = BasicConstraintsPolicy;
     assert!(
         policy
@@ -100,7 +97,8 @@ fn self_issued_intermediate_does_not_count_against_path_length() {
     let intermediate = issue_ca("intermediate", &root, Some(0), |_| {});
     let self_issued = issue_ca("intermediate", &intermediate, Some(0), |_| {});
     let leaf = issue_leaf("leaf", &["www.example.com"], &self_issued);
-    let chain = chain_of(vec![leaf, self_issued.der, intermediate.der, root.der]);
+    let ders = chain_of(vec![leaf, self_issued.der, intermediate.der, root.der]);
+    let chain = ders.chain();
     let policy = BasicConstraintsPolicy;
     assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
 }

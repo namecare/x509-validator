@@ -31,7 +31,8 @@ mod tests {
     fn chain_passing_all_sub_policies_is_accepted() {
         let root = self_signed_ca_with("root", with_validity(1000, 2000));
         let leaf = issue_leaf("leaf", &["www.example.com"], &root);
-        let chain = chain_of(vec![leaf, root.der]);
+        let ders = chain_of(vec![leaf, root.der]);
+        let chain = ders.chain();
 
         let policy = RFC5280Policy::new(1500);
         assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
@@ -48,7 +49,8 @@ mod tests {
                 Some(name_constraints(vec![], vec![dns_subtree("example.com")]));
         });
         let leaf = issue_leaf("leaf", &["www.example.com"], &root);
-        let chain = chain_of(vec![leaf, root.der]);
+        let ders = chain_of(vec![leaf, root.der]);
+        let chain = ders.chain();
 
         let policy = RFC5280Policy::new(1500);
         assert_eq!(
@@ -66,7 +68,8 @@ mod tests {
             params.is_ca = x509_validator_testkit::rcgen::IsCa::NoCa;
         });
         let leaf = issue_leaf("leaf", &[], &root);
-        let chain = chain_of(vec![leaf, root.der]);
+        let ders = chain_of(vec![leaf, root.der]);
+        let chain = ders.chain();
 
         let policy = RFC5280Policy::new(1500);
         assert!(
@@ -80,7 +83,8 @@ mod tests {
     fn chain_failing_only_expiry_is_rejected() {
         let root = self_signed_ca_with("root", with_validity(1000, 2000));
         let leaf = issue_leaf("leaf", &[], &root);
-        let chain = chain_of(vec![leaf, root.der]);
+        let ders = chain_of(vec![leaf, root.der]);
+        let chain = ders.chain();
 
         let policy = RFC5280Policy::new(9999);
         assert_eq!(
@@ -95,7 +99,8 @@ mod tests {
     fn with_validity_check_disabled_accepts_an_expired_chain() {
         let root = self_signed_ca_with("root", with_validity(1000, 2000));
         let leaf = issue_leaf("leaf", &[], &root);
-        let chain = chain_of(vec![leaf, root.der]);
+        let ders = chain_of(vec![leaf, root.der]);
+        let chain = ders.chain();
 
         // The same chain at the same "now" is rejected with expiry enabled.
         let enabled = RFC5280Policy::new(9999);
@@ -107,7 +112,8 @@ mod tests {
 
         let root2 = self_signed_ca_with("root", with_validity(1000, 2000));
         let leaf2 = issue_leaf("leaf", &[], &root2);
-        let chain2 = chain_of(vec![leaf2, root2.der]);
+        let chain2_ders = chain_of(vec![leaf2, root2.der]);
+        let chain2 = chain2_ders.chain();
         let disabled = RFC5280Policy::with_validity_check_disabled();
         assert_eq!(disabled.chain_meets_policy_requirements(&chain2), Ok(()));
     }
@@ -120,7 +126,8 @@ mod tests {
                 Some(name_constraints(vec![], vec![dns_subtree("example.com")]));
         });
         let leaf = issue_leaf("leaf", &["www.example.com"], &root);
-        let chain = chain_of(vec![leaf, root.der]);
+        let ders = chain_of(vec![leaf, root.der]);
+        let chain = ders.chain();
 
         let policy = RFC5280Policy::with_validity_check_disabled();
         assert_eq!(
@@ -243,7 +250,8 @@ mod conformance {
     #[test]
     fn valid_certs_are_accepted() {
         let (root, intermediate, leaf) = unconstrained_chain();
-        let chain = chain_of(vec![leaf, intermediate.der, root.der]);
+        let ders = chain_of(vec![leaf, intermediate.der, root.der]);
+        let chain = ders.chain();
 
         for_both_policies(PolicyUnderTest::Version, |policy| {
             assert_eq!(policy.evaluate(NOW, &chain), Ok(()), "{policy:?}");
@@ -261,7 +269,8 @@ mod conformance {
         let leaf = issue_leaf_with("leaf", &[], &root, |params: &mut CertificateParams| {
             params.use_authority_key_identifier_extension = false;
         });
-        let chain = chain_of(vec![leaf, root.der]);
+        let ders = chain_of(vec![leaf, root.der]);
+        let chain = ders.chain();
 
         for_both_policies(PolicyUnderTest::Version, |policy| {
             assert_eq!(policy.evaluate(NOW, &chain), Ok(()), "{policy:?}");
@@ -277,8 +286,7 @@ mod conformance {
         // while carrying extensions.
         let root = self_signed_ca_with("root", |_| {});
         let leaf = issue_leaf("leaf", &["www.example.com"], &root);
-        let leaf_der: &'static [u8] = Box::leak(leaf.into_boxed_slice());
-        let parsed = Certificate::parse(leaf_der).unwrap();
+        let parsed = Certificate::parse(&leaf).unwrap();
 
         assert!(
             !parsed
@@ -316,11 +324,15 @@ mod conformance {
     /// Builds a root/intermediate/leaf chain where the certificate at
     /// `position` has the given validity window and every other
     /// certificate is valid for all of `1000..=9000`.
+    ///
+    /// Returns the DER holder rather than the chain itself: a chain borrows
+    /// the bytes its certificates were parsed from, so the caller binds the
+    /// holder to a local and calls `chain()` on it.
     fn chain_with_validity_at(
         position: Position,
         not_before: Timestamp,
         not_after: Timestamp,
-    ) -> UnverifiedCertificateChain<'static> {
+    ) -> x509_validator_testkit::parse::Ders {
         let wide = validity(1000, 9000);
         let narrow = validity(not_before, not_after);
 
@@ -355,7 +367,8 @@ mod conformance {
         not_after: Timestamp,
         now: Timestamp,
     ) {
-        let chain = chain_with_validity_at(position, not_before, not_after);
+        let chain_ders = chain_with_validity_at(position, not_before, not_after);
+        let chain = chain_ders.chain();
 
         for_both_policies(PolicyUnderTest::Expiry, |policy| {
             assert!(
@@ -428,7 +441,8 @@ mod conformance {
         // policy and using it" cannot change the verdict: the same policy
         // value must answer identically however much later it is used, and
         // the verdict must track the timestamp it was handed.
-        let chain = chain_with_validity_at(Position::Leaf, 1000, 2000);
+        let chain_ders = chain_with_validity_at(Position::Leaf, 1000, 2000);
+        let chain = chain_ders.chain();
 
         let before_expiry = RFC5280Policy::new(1500);
         let after_expiry = RFC5280Policy::new(2500);
@@ -481,7 +495,8 @@ mod conformance {
             (ca_path_len_zero, true),
             (not_a_ca, false),
         ] {
-            let chain = chain_of(vec![der]);
+            let ders = chain_of(vec![der]);
+            let chain = ders.chain();
             for_both_policies(PolicyUnderTest::BasicConstraints, |policy| {
                 assert_eq!(
                     policy.evaluate(NOW, &chain).is_ok(),
@@ -505,7 +520,8 @@ mod conformance {
             },
         );
         let leaf = issue_leaf("leaf", &["www.example.com"], &bad_intermediate);
-        let bad_chain = chain_of(vec![leaf, bad_intermediate.der, root.der]);
+        let bad_chain_ders = chain_of(vec![leaf, bad_intermediate.der, root.der]);
+        let bad_chain = bad_chain_ders.chain();
 
         for_both_policies(PolicyUnderTest::BasicConstraints, |policy| {
             assert!(
@@ -519,7 +535,8 @@ mod conformance {
         // Swapping in a properly marked intermediate fixes it, proving the
         // rejection above is about the CA bit and nothing else.
         let (root, intermediate, leaf) = unconstrained_chain();
-        let good_chain = chain_of(vec![leaf, intermediate.der, root.der]);
+        let good_chain_ders = chain_of(vec![leaf, intermediate.der, root.der]);
+        let good_chain = good_chain_ders.chain();
 
         for_both_policies(PolicyUnderTest::BasicConstraints, |policy| {
             assert_eq!(policy.evaluate(NOW, &good_chain), Ok(()), "{policy:?}");
@@ -532,7 +549,8 @@ mod conformance {
             params.is_ca = x509_validator_testkit::rcgen::IsCa::NoCa;
         });
         let leaf = issue_leaf("leaf", &["www.example.com"], &bad_root);
-        let bad_chain = chain_of(vec![leaf, bad_root.der]);
+        let bad_chain_ders = chain_of(vec![leaf, bad_root.der]);
+        let bad_chain = bad_chain_ders.chain();
 
         for_both_policies(PolicyUnderTest::BasicConstraints, |policy| {
             assert!(
@@ -545,7 +563,8 @@ mod conformance {
 
         let good_root = self_signed_ca_with("root", |_| {});
         let good_leaf = issue_leaf("leaf", &["www.example.com"], &good_root);
-        let good_chain = chain_of(vec![good_leaf, good_root.der]);
+        let good_chain_ders = chain_of(vec![good_leaf, good_root.der]);
+        let good_chain = good_chain_ders.chain();
 
         for_both_policies(PolicyUnderTest::BasicConstraints, |policy| {
             assert_eq!(policy.evaluate(NOW, &good_chain), Ok(()), "{policy:?}");
@@ -561,7 +580,8 @@ mod conformance {
         let first_level = issue_ca("first", &root, Some(0), |_| {});
         let second_level = issue_ca("second", &first_level, Some(0), |_| {});
         let leaf = issue_leaf("leaf", &["www.example.com"], &second_level);
-        let too_long = chain_of(vec![leaf, second_level.der, first_level.der, root.der]);
+        let too_long_ders = chain_of(vec![leaf, second_level.der, first_level.der, root.der]);
+        let too_long = too_long_ders.chain();
 
         for_both_policies(PolicyUnderTest::BasicConstraints, |policy| {
             assert!(policy.evaluate(NOW, &too_long).is_err(), "{policy:?}");
@@ -572,7 +592,8 @@ mod conformance {
         let first_level = issue_ca("first", &root, Some(1), |_| {});
         let second_level = issue_ca("second", &first_level, Some(0), |_| {});
         let leaf = issue_leaf("leaf", &["www.example.com"], &second_level);
-        let fits = chain_of(vec![leaf, second_level.der, first_level.der, root.der]);
+        let fits_ders = chain_of(vec![leaf, second_level.der, first_level.der, root.der]);
+        let fits = fits_ders.chain();
 
         for_both_policies(PolicyUnderTest::BasicConstraints, |policy| {
             assert_eq!(policy.evaluate(NOW, &fits), Ok(()), "{policy:?}");
@@ -590,7 +611,8 @@ mod conformance {
         let first_level = issue_ca("first", &root, None, |_| {});
         let second_level = issue_ca("second", &first_level, None, |_| {});
         let leaf = issue_leaf("leaf", &["www.example.com"], &second_level);
-        let too_long = chain_of(vec![leaf, second_level.der, first_level.der, root.der]);
+        let too_long_ders = chain_of(vec![leaf, second_level.der, first_level.der, root.der]);
+        let too_long = too_long_ders.chain();
 
         for_both_policies(PolicyUnderTest::BasicConstraints, |policy| {
             assert!(policy.evaluate(NOW, &too_long).is_err(), "{policy:?}");
@@ -606,7 +628,8 @@ mod conformance {
             );
         });
         let leaf = issue_leaf("leaf", &["www.example.com"], &root);
-        let fits = chain_of(vec![leaf, root.der]);
+        let fits_ders = chain_of(vec![leaf, root.der]);
+        let fits = fits_ders.chain();
 
         for_both_policies(PolicyUnderTest::BasicConstraints, |policy| {
             assert_eq!(policy.evaluate(NOW, &fits), Ok(()), "{policy:?}");
@@ -626,7 +649,8 @@ mod conformance {
         });
         let self_issued = issue_self_issued_ca(&root, Some(0));
         let leaf = issue_leaf("leaf", &["www.example.com"], &self_issued);
-        let chain = chain_of(vec![leaf, self_issued.der, root.der]);
+        let ders = chain_of(vec![leaf, self_issued.der, root.der]);
+        let chain = ders.chain();
 
         for_both_policies(PolicyUnderTest::BasicConstraints, |policy| {
             assert_eq!(policy.evaluate(NOW, &chain), Ok(()), "{policy:?}");
@@ -644,7 +668,8 @@ mod conformance {
         let other_named = issue_ca("someone-else", &root, Some(0), |_| {});
         let sub = issue_ca("sub", &other_named, Some(0), |_| {});
         let leaf = issue_leaf("leaf", &["www.example.com"], &sub);
-        let chain = chain_of(vec![leaf, sub.der, other_named.der, root.der]);
+        let ders = chain_of(vec![leaf, sub.der, other_named.der, root.der]);
+        let chain = ders.chain();
 
         for_both_policies(PolicyUnderTest::BasicConstraints, |policy| {
             assert!(policy.evaluate(NOW, &chain).is_err(), "{policy:?}");
@@ -679,11 +704,15 @@ mod conformance {
     /// Builds a chain placing `constrain` (which installs a
     /// nameConstraints extension) and `name` (which installs the
     /// subjectAltName under test) per `placement`.
+    ///
+    /// Returns the DER holder rather than the chain: a chain borrows the
+    /// bytes its certificates were parsed from, so the caller binds the
+    /// holder to a local and calls `chain()` on it.
     fn constrained_chain(
         placement: ConstraintPlacement,
         constrain: &dyn Fn(&mut CertificateParams),
         name: &dyn Fn(&mut CertificateParams),
-    ) -> UnverifiedCertificateChain<'static> {
+    ) -> x509_validator_testkit::parse::Ders {
         match placement {
             ConstraintPlacement::RootConstrainsLeaf => {
                 let root = self_signed_ca_with("root", constrain);
@@ -726,7 +755,8 @@ mod conformance {
         expected_reason: Option<&str>,
     ) {
         for placement in PLACEMENTS {
-            let chain = constrained_chain(placement, constrain, name);
+            let chain_ders = constrained_chain(placement, constrain, name);
+            let chain = chain_ders.chain();
             for_both_policies(PolicyUnderTest::NameConstraints, |policy| {
                 let result = policy.evaluate(NOW, &chain);
                 assert_eq!(
@@ -915,7 +945,8 @@ mod conformance {
 
         for (label, name) in &names {
             for placement in PLACEMENTS {
-                let chain = constrained_chain(placement, &excluded, name.as_ref());
+                let chain_ders = constrained_chain(placement, &excluded, name.as_ref());
+                let chain = chain_ders.chain();
                 for_both_policies(PolicyUnderTest::NameConstraints, |policy| {
                     assert!(
                         policy.evaluate(NOW, &chain).is_err(),
@@ -978,7 +1009,8 @@ mod conformance {
                     ("excluded", &excluded as &dyn Fn(&mut CertificateParams)),
                     ("permitted", &permitted as &dyn Fn(&mut CertificateParams)),
                 ] {
-                    let chain = constrained_chain(placement, constrain, &name);
+                    let chain_ders = constrained_chain(placement, constrain, &name);
+                    let chain = chain_ders.chain();
                     for_both_policies(PolicyUnderTest::NameConstraints, |policy| {
                         assert!(
                             policy.evaluate(NOW, &chain).is_err(),
@@ -1014,7 +1046,8 @@ mod conformance {
 
         for (label, name) in &names {
             for placement in PLACEMENTS {
-                let chain = constrained_chain(placement, &both, name.as_ref());
+                let chain_ders = constrained_chain(placement, &both, name.as_ref());
+                let chain = chain_ders.chain();
                 for_both_policies(PolicyUnderTest::NameConstraints, |policy| {
                     assert!(
                         policy.evaluate(NOW, &chain).is_err(),
@@ -1037,7 +1070,8 @@ mod conformance {
         };
 
         for placement in PLACEMENTS {
-            let chain = constrained_chain(placement, &broken, &dns_san("www.example.com"));
+            let chain_ders = constrained_chain(placement, &broken, &dns_san("www.example.com"));
+            let chain = chain_ders.chain();
             for_both_policies(PolicyUnderTest::NameConstraints, |policy| {
                 assert!(
                     policy.evaluate(NOW, &chain).is_err(),
@@ -1063,7 +1097,8 @@ mod conformance {
         };
 
         for placement in PLACEMENTS {
-            let chain = constrained_chain(placement, &constrain, &broken_san);
+            let chain_ders = constrained_chain(placement, &constrain, &broken_san);
+            let chain = chain_ders.chain();
             for_both_policies(PolicyUnderTest::NameConstraints, |policy| {
                 assert!(
                     policy.evaluate(NOW, &chain).is_err(),
@@ -1095,7 +1130,8 @@ mod conformance {
             },
         );
         let leaf = issue_leaf("leaf", &["www.example.com"], &intermediate);
-        let chain = chain_of(vec![leaf, intermediate.der, root.der]);
+        let ders = chain_of(vec![leaf, intermediate.der, root.der]);
+        let chain = ders.chain();
 
         let policy = RFC5280Policy::new(NOW);
         assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
@@ -1126,8 +1162,7 @@ mod conformance {
                     .push(x509_validator_testkit::weird_critical_extension());
             },
         );
-        let leaf_der: &'static [u8] = Box::leak(leaf.into_boxed_slice());
-        let parsed = Certificate::parse(leaf_der).unwrap();
+        let parsed = Certificate::parse(&leaf).unwrap();
 
         let handled = RFC5280Policy::new(NOW).verifying_critical_extensions();
 

@@ -17,13 +17,13 @@ fn x509_verify_accepts_every_corpus_sample() {
         // Algorithms x509-verify does not support are skipped, not failed: an
         // absent row means "unsupported", matching how the benchmark treats an
         // unsupported backend pairing.
-        let Ok(spki) = SubjectPublicKeyInfoRef::from_der(sample.spki.raw) else {
+        let Ok(spki) = SubjectPublicKeyInfoRef::from_der(sample.spki().raw) else {
             continue;
         };
         let Ok(key) = VerifyingKey::try_from(spki) else {
             continue;
         };
-        let Some(algorithm_der) = signatures::algorithm_der(&sample.algorithm) else {
+        let Some(algorithm_der) = signatures::algorithm_der(&sample.algorithm()) else {
             continue;
         };
         let Ok(algorithm) = AlgorithmIdentifierOwned::from_der(&algorithm_der) else {
@@ -31,8 +31,8 @@ fn x509_verify_accepts_every_corpus_sample() {
         };
 
         let info = VerifyInfo::new(
-            Message::new(sample.message),
-            Signature::new(&algorithm, sample.signature),
+            Message::new(sample.message()),
+            Signature::new(&algorithm, sample.signature()),
         );
         assert!(
             key.verify(info).is_ok(),
