@@ -22,13 +22,9 @@ impl NameConstraintsPolicy {
 }
 
 fn is_valid_cidr_mask(mask: &[u8]) -> bool {
-    // Quick check: is the first byte zero? If it is, we can skip the rest: it matches nothing,
-    // either by way of being invalid or by being all zeros.
-    if mask.first() == Some(&0) {
-        return false;
-    }
-
-    // A valid CIDR mask is a sequence of leading 1s, followed by a sequence of 0s.
+    // A valid CIDR mask is a sequence of leading 1s, followed by a sequence of 0s, where either
+    // sequence may be empty. In particular the all-zero mask is the /0 prefix, and matches every
+    // address of its family.
     // Look for the first index that isn't all 1s.
     let Some(first_interesting_index) = mask.iter().position(|&b| b != 0xff) else {
         // Huh, the mask is all 1s. Fine.
@@ -145,8 +141,8 @@ mod tests {
                 c4("17.250.78.1", "255.239.255.255"),
                 false,
             ),
-            // An all-zero mask matches nothing.
-            (a4("17.250.78.1"), c4("0.0.0.0", "0.0.0.0"), false),
+            // An all-zero mask is the /0 prefix and matches every address of its family.
+            (a4("17.250.78.1"), c4("0.0.0.0", "0.0.0.0"), true),
             // Address and constraint from different families never match.
             (a4("17.250.78.1"), c6("8000::", "8000::"), false),
             (a6("fe80::"), c4("254.128.0.0", "255.128.0.0"), false),
@@ -246,8 +242,8 @@ mod tests {
                 ),
                 false,
             ),
-            // An all-zero IPv6 mask matches nothing.
-            (a6("fe80::8d:f7d:79c5:5719"), c6("::", "::"), false),
+            // An all-zero IPv6 mask is the ::/0 prefix and matches every IPv6 address.
+            (a6("fe80::8d:f7d:79c5:5719"), c6("::", "::"), true),
             // A constraint must be exactly twice the address length.
             (a4("17.250.78.1"), ones(1), false),
             (a4("17.250.78.1"), ones(7), false),
@@ -318,13 +314,17 @@ mod tests {
     }
 
     #[test]
-    fn all_zero_mask_matches_nothing() {
-        let address = v4(10, 0, 0, 1);
+    fn all_zero_mask_matches_every_address() {
+        // The all-zero mask is the /0 prefix. As an excluded subtree it forbids every address of
+        // its family, which is the shape a technically constrained sub-CA uses to forbid issuing
+        // for IP addresses at all.
         let constraint = v4_constraint([0, 0, 0, 0], [0, 0, 0, 0]);
-        assert!(!NameConstraintsPolicy::ip_address_matches_constraint(
-            &address,
-            &constraint
-        ));
+        for address in [v4(10, 0, 0, 1), v4(203, 0, 113, 10), v4(0, 0, 0, 0)] {
+            assert!(NameConstraintsPolicy::ip_address_matches_constraint(
+                &address,
+                &constraint
+            ));
+        }
     }
 
     #[test]

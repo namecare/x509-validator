@@ -1,10 +1,12 @@
+use core::net::IpAddr;
+
 use x509_validator::{
     CertificateExt, NameConstraintsPolicy, PolicyFailureReason, ValidationPolicy,
 };
 use x509_validator_testkit::rcgen::CertificateParams;
 use x509_validator_testkit::{
-    RawGeneralName, chain_of, dns_subtree, issue_leaf, issue_leaf_with, name_constraints,
-    raw_name_constraints_extension, self_signed_ca_with,
+    RawGeneralName, chain_of, dns_subtree, ipv4_subtree, ipv6_subtree, issue_leaf, issue_leaf_with,
+    issue_leaf_with_ip_sans, name_constraints, raw_name_constraints_extension, self_signed_ca_with,
 };
 
 #[test]
@@ -56,6 +58,80 @@ fn leaf_name_in_excluded_subtree_is_rejected() {
             .unwrap_err(),
         PolicyFailureReason::new("name is in an excluded subtree")
     );
+}
+
+#[test]
+fn all_zero_ip_address_mask_covers_every_address_of_its_family() {
+    // An all-zero mask is the /0 prefix: it matches every address of its family, and no address
+    // of the other.
+    let ipv4_everything = || ipv4_subtree([0; 4], [0; 4]);
+    let ipv6_everything = || ipv6_subtree([0; 16], [0; 16]);
+    let v4: IpAddr = "203.0.113.10".parse().unwrap();
+    let v6: IpAddr = "2001:db8::10".parse().unwrap();
+
+    for (ip, subtrees, matched) in [
+        (v4, vec![ipv4_everything()], true),
+        (v4, vec![ipv6_everything()], false),
+        (v6, vec![ipv6_everything()], true),
+        (v6, vec![ipv4_everything()], false),
+        (v4, vec![ipv4_everything(), ipv6_everything()], true),
+        (v6, vec![ipv4_everything(), ipv6_everything()], true),
+    ] {
+        let excluding = self_signed_ca_with("root", |params: &mut CertificateParams| {
+            params.name_constraints = Some(name_constraints(vec![], subtrees.clone()));
+        });
+        let leaf = issue_leaf_with_ip_sans("leaf", vec![ip], &excluding);
+        let chain = chain_of(vec![leaf, excluding.der]);
+        assert_eq!(
+            NameConstraintsPolicy
+                .chain_meets_policy_requirements(&chain)
+                .is_err(),
+            matched,
+            "expected {ip} excluded by {subtrees:?} to be {matched}"
+        );
+
+        let permitting = self_signed_ca_with("root", |params: &mut CertificateParams| {
+            params.name_constraints = Some(name_constraints(subtrees.clone(), vec![]));
+        });
+        let leaf = issue_leaf_with_ip_sans("leaf", vec![ip], &permitting);
+        let chain = chain_of(vec![leaf, permitting.der]);
+        assert_eq!(
+            NameConstraintsPolicy
+                .chain_meets_policy_requirements(&chain)
+                .is_ok(),
+            matched,
+            "expected {ip} permitted by {subtrees:?} to be {matched}"
+        );
+    }
+}
+
+#[test]
+fn excluded_ip_address_subtrees_do_not_affect_permitted_dns_names() {
+    // The shape of a technically constrained intermediate: DNS names under a domain are
+    // permitted, all IP addresses are excluded.
+    let root = self_signed_ca_with("root", |params: &mut CertificateParams| {
+        params.name_constraints = Some(name_constraints(
+            vec![dns_subtree("example.com")],
+            vec![ipv4_subtree([0; 4], [0; 4]), ipv6_subtree([0; 16], [0; 16])],
+        ));
+    });
+
+    let dns_leaf = |name: &str| issue_leaf("leaf", &[name], &root);
+    let ip_leaf = |ip: &str| issue_leaf_with_ip_sans("leaf", vec![ip.parse().unwrap()], &root);
+    for (leaf, valid) in [
+        (dns_leaf("www.example.com"), true),
+        (dns_leaf("www.example.org"), false),
+        (ip_leaf("203.0.113.10"), false),
+        (ip_leaf("2001:db8::10"), false),
+    ] {
+        let chain = chain_of(vec![leaf, root.der.clone()]);
+        assert_eq!(
+            NameConstraintsPolicy
+                .chain_meets_policy_requirements(&chain)
+                .is_ok(),
+            valid
+        );
+    }
 }
 
 #[test]

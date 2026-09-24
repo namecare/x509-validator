@@ -9,6 +9,11 @@ pub fn ipv4_subtree(base: [u8; 4], mask: [u8; 4]) -> GeneralSubtree {
     GeneralSubtree::IpAddress(rcgen::CidrSubnet::V4(base, mask))
 }
 
+/// An iPAddress subtree covering the given IPv6 base/mask pair.
+pub fn ipv6_subtree(base: [u8; 16], mask: [u8; 16]) -> GeneralSubtree {
+    GeneralSubtree::IpAddress(rcgen::CidrSubnet::V6(base, mask))
+}
+
 /// A directoryName subtree carrying a single commonName attribute.
 pub fn directory_name_subtree(common_name: &str) -> GeneralSubtree {
     let mut dn = DistinguishedName::new();
