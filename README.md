@@ -31,7 +31,7 @@ of PKI applications. It ships with a default verifier and a number of built-in v
 Add the dependency and pick a crypto backend:
 
 ```toml
-x509-validator = { version = "0.3.0", features = ["aws_lc"] }
+x509-validator = { version = "0.3.1", features = ["aws_lc"] }
 ```
 
 | Feature | Backend | Notes                   |

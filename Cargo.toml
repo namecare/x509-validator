@@ -19,7 +19,7 @@ x509-validator-testkit = { path = "x509-validator-testkit" }
 x509-validator-fuzzing-provider = { path = "x509-validator-fuzzing-provider" }
 
 x509-parser = "0.18.1"
-thiserror = "2.0.20"
+thiserror = "2.0.21"
 
 aws-lc-rs = "1.18.1"
 aws-lc-sys = "0.45.0"
@@ -35,7 +35,7 @@ sha2 = "0.11.0"
 signature = "3.0.0"
 
 # Dev
-rand = "0.10.2"
+rand = "0.10.3"
 rcgen = "0.14.10"
 time = "0.3.55"
 

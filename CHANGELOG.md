@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.1] - 2026-09-24
+
+### Security
+- Fixed a name constraints bypass for IP addresses
+  ([GHSA-39mm-4q6x-3vrx](https://github.com/namecare/x509-validator/security/advisories/GHSA-39mm-4q6x-3vrx)).
+  An iPAddress subtree with an all-zero mask (`0.0.0.0/0` or `::/0`) was
+  treated as matching nothing instead of every address of its family. An
+  excluded `/0` subtree, the usual way a constrained CA forbids issuing for
+  IP addresses at all, therefore let any IP address SAN through. Upgrade is
+  recommended for everyone relying on name constraints.
+
 ## [0.3.0] - 2026-09-06
 
 ### Added
