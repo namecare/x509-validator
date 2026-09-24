@@ -23,9 +23,13 @@
 
 mod rustls_webpki {
     mod amazon;
+    mod cert_v1_unsupported;
+    mod cert_without_extensions;
     mod client_auth;
     pub mod common;
     mod custom_ekus;
     mod integration;
+    mod signatures;
     mod tls_server_certs;
+    mod x509_limbo;
 }

@@ -88,7 +88,7 @@ fn all_zero_ip_address_mask_covers_every_address_of_its_family() {
         let chain = chain_of(vec![leaf, excluding.der]);
         assert_eq!(
             NameConstraintsPolicy
-                .chain_meets_policy_requirements(&chain)
+                .chain_meets_policy_requirements(&chain.chain())
                 .is_err(),
             matched,
             "expected {ip} excluded by {subtrees:?} to be {matched}"
@@ -101,7 +101,7 @@ fn all_zero_ip_address_mask_covers_every_address_of_its_family() {
         let chain = chain_of(vec![leaf, permitting.der]);
         assert_eq!(
             NameConstraintsPolicy
-                .chain_meets_policy_requirements(&chain)
+                .chain_meets_policy_requirements(&chain.chain())
                 .is_ok(),
             matched,
             "expected {ip} permitted by {subtrees:?} to be {matched}"
@@ -131,7 +131,7 @@ fn excluded_ip_address_subtrees_do_not_affect_permitted_dns_names() {
         let chain = chain_of(vec![leaf, root.der.clone()]);
         assert_eq!(
             NameConstraintsPolicy
-                .chain_meets_policy_requirements(&chain)
+                .chain_meets_policy_requirements(&chain.chain())
                 .is_ok(),
             valid
         );
