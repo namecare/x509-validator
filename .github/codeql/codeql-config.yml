@@ -1,0 +1,5 @@
+name: x509-validator CodeQL config
+
+paths:
+  - x509-validator
+  - examples
