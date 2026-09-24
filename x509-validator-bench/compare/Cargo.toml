@@ -22,7 +22,7 @@ rustls-pki-types = { version = "1", optional = true }
 divan = "0.1.21"
 x509-cert = "0.3.0"
 der = "0.8.1"
-const-oid = "0.10"
+const-oid = "0.10.2"
 
 [features]
 default = ["aws_lc", "ring", "rust_crypto"]
