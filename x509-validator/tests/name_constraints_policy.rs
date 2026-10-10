@@ -13,7 +13,8 @@ use x509_validator_testkit::{
 fn chain_without_name_constraints_is_accepted() {
     let root = self_signed_ca_with("root", |_| {});
     let leaf = issue_leaf("leaf", &["www.example.com"], &root);
-    let chain = chain_of(vec![leaf, root.der]);
+    let ders = chain_of(vec![leaf, root.der]);
+    let chain = ders.chain();
     let policy = NameConstraintsPolicy;
     assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
 }
@@ -24,7 +25,8 @@ fn leaf_name_in_permitted_subtree_is_accepted() {
         params.name_constraints = Some(name_constraints(vec![dns_subtree("example.com")], vec![]));
     });
     let leaf = issue_leaf("leaf", &["www.example.com"], &root);
-    let chain = chain_of(vec![leaf, root.der]);
+    let ders = chain_of(vec![leaf, root.der]);
+    let chain = ders.chain();
     let policy = NameConstraintsPolicy;
     assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
 }
@@ -35,7 +37,8 @@ fn leaf_name_outside_permitted_subtree_is_rejected() {
         params.name_constraints = Some(name_constraints(vec![dns_subtree("example.com")], vec![]));
     });
     let leaf = issue_leaf("leaf", &["www.evil.com"], &root);
-    let chain = chain_of(vec![leaf, root.der]);
+    let ders = chain_of(vec![leaf, root.der]);
+    let chain = ders.chain();
     let policy = NameConstraintsPolicy;
     assert!(
         policy
@@ -50,7 +53,8 @@ fn leaf_name_in_excluded_subtree_is_rejected() {
         params.name_constraints = Some(name_constraints(vec![], vec![dns_subtree("example.com")]));
     });
     let leaf = issue_leaf("leaf", &["www.example.com"], &root);
-    let chain = chain_of(vec![leaf, root.der]);
+    let ders = chain_of(vec![leaf, root.der]);
+    let chain = ders.chain();
     let policy = NameConstraintsPolicy;
     assert_eq!(
         policy
@@ -141,7 +145,8 @@ fn constraints_apply_transitively_through_intermediate() {
     });
     let intermediate = x509_validator_testkit::issue_ca("intermediate", &root, None, |_| {});
     let leaf = issue_leaf("leaf", &["www.evil.com"], &intermediate);
-    let chain = chain_of(vec![leaf, intermediate.der, root.der]);
+    let ders = chain_of(vec![leaf, intermediate.der, root.der]);
+    let chain = ders.chain();
     let policy = NameConstraintsPolicy;
     assert!(
         policy
@@ -158,7 +163,8 @@ fn self_signed_single_certificate_enforces_its_own_constraints() {
         )];
         params.name_constraints = Some(name_constraints(vec![dns_subtree("example.com")], vec![]));
     });
-    let chain = chain_of(vec![root.der]);
+    let ders = chain_of(vec![root.der]);
+    let chain = ders.chain();
     let policy = NameConstraintsPolicy;
     assert!(
         policy
@@ -178,7 +184,8 @@ fn directory_name_constraint_is_rejected_outright() {
         ));
     });
     let leaf = issue_leaf("leaf", &["www.example.com"], &root);
-    let chain = chain_of(vec![leaf, root.der]);
+    let ders = chain_of(vec![leaf, root.der]);
+    let chain = ders.chain();
     let policy = NameConstraintsPolicy;
     assert_eq!(
         policy
@@ -212,7 +219,8 @@ fn name_that_cannot_be_decoded_is_rejected_rather_than_skipped() {
             .custom_extensions
             .push(undecodable_dns_san());
     });
-    let chain = chain_of(vec![leaf, root.der]);
+    let ders = chain_of(vec![leaf, root.der]);
+    let chain = ders.chain();
 
     // Guard against a vacuous test: the name has to reach the policy as `Invalid`, because an
     // extension that failed to parse outright would be rejected by a different path.
@@ -256,7 +264,8 @@ fn unsupported_constraint_kind_is_rejected_even_with_no_name_of_that_kind() {
                 .push(raw_name_constraints_extension(&permitted, &excluded));
         });
         let leaf = issue_leaf("leaf", &["www.example.com"], &root);
-        let chain = chain_of(vec![leaf, root.der]);
+        let ders = chain_of(vec![leaf, root.der]);
+        let chain = ders.chain();
 
         let policy = NameConstraintsPolicy;
         assert_eq!(

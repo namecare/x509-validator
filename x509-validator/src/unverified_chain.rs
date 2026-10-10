@@ -38,30 +38,38 @@ impl<'a> core::ops::Index<usize> for UnverifiedCertificateChain<'a> {
 
 #[cfg(test)]
 mod tests {
+    use x509_validator_testkit::parse::Ders;
     use x509_validator_testkit::{cert, issue_ca, issue_leaf, self_signed_ca_with};
 
     use super::*;
     use crate::CertificateExt;
 
-    /// A three-certificate chain, leaf-first: leaf, intermediate, root.
-    fn leaf_intermediate_root() -> Vec<Certificate<'static>> {
+    /// The DER of a three-certificate chain, leaf-first: leaf, intermediate,
+    /// root.
+    ///
+    /// A `Certificate` borrows the bytes it was parsed from, so the DER is
+    /// held by the caller and the certificates are parsed from it via
+    /// [`Ders::certificates`].
+    fn leaf_intermediate_root() -> Ders {
         let root = self_signed_ca_with("Root", |_| {});
         let intermediate = issue_ca("Intermediate", &root, None, |_| {});
         let leaf = issue_leaf("leaf.example.com", &["leaf.example.com"], &intermediate);
 
-        vec![cert(leaf), cert(intermediate.der), cert(root.der)]
+        Ders::new(vec![leaf, intermediate.der, root.der])
     }
 
     #[test]
     fn leaf_is_the_first_certificate() {
-        let chain = UnverifiedCertificateChain::new(leaf_intermediate_root());
+        let ders = leaf_intermediate_root();
+        let chain = UnverifiedCertificateChain::new(ders.certificates());
 
         assert_eq!(chain.leaf().subject().to_string(), "CN=leaf.example.com");
     }
 
     #[test]
     fn indexing_walks_from_leaf_to_root() {
-        let chain = UnverifiedCertificateChain::new(leaf_intermediate_root());
+        let ders = leaf_intermediate_root();
+        let chain = UnverifiedCertificateChain::new(ders.certificates());
 
         assert_eq!(chain[0].subject().to_string(), "CN=leaf.example.com");
         assert_eq!(chain[1].subject().to_string(), "CN=Intermediate");
@@ -70,7 +78,8 @@ mod tests {
 
     #[test]
     fn each_certificate_is_issued_by_its_successor() {
-        let chain = UnverifiedCertificateChain::new(leaf_intermediate_root());
+        let ders = leaf_intermediate_root();
+        let chain = UnverifiedCertificateChain::new(ders.certificates());
 
         for i in 0..chain.len() - 1 {
             assert_eq!(chain[i].issuer_key(), chain[i + 1].subject_key());
@@ -79,7 +88,8 @@ mod tests {
 
     #[test]
     fn iter_yields_every_certificate_in_index_order() {
-        let chain = UnverifiedCertificateChain::new(leaf_intermediate_root());
+        let ders = leaf_intermediate_root();
+        let chain = UnverifiedCertificateChain::new(ders.certificates());
 
         let subjects: Vec<_> = chain
             .iter()
@@ -95,8 +105,8 @@ mod tests {
 
     #[test]
     fn a_chain_is_never_empty() {
-        let chain =
-            UnverifiedCertificateChain::new(vec![cert(self_signed_ca_with("Root", |_| {}).der)]);
+        let der = self_signed_ca_with("Root", |_| {}).der;
+        let chain = UnverifiedCertificateChain::new(vec![cert(&der)]);
 
         assert_eq!(chain.len(), 1);
         assert!(!chain.is_empty());
@@ -112,7 +122,8 @@ mod tests {
     #[test]
     #[should_panic]
     fn indexing_past_the_end_panics() {
-        let chain = UnverifiedCertificateChain::new(leaf_intermediate_root());
+        let ders = leaf_intermediate_root();
+        let chain = UnverifiedCertificateChain::new(ders.certificates());
 
         let _ = &chain[3];
     }

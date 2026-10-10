@@ -13,28 +13,32 @@ fn cert_with_validity(not_before: Timestamp, not_after: Timestamp) -> Vec<u8> {
 
 #[test]
 fn certificate_within_validity_window_is_accepted() {
-    let chain = chain_of(vec![cert_with_validity(1000, 2000)]);
+    let ders = chain_of(vec![cert_with_validity(1000, 2000)]);
+    let chain = ders.chain();
     let policy = ExpiryPolicy::new(1500);
     assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
 }
 
 #[test]
 fn certificate_exactly_at_not_before_is_accepted() {
-    let chain = chain_of(vec![cert_with_validity(1000, 2000)]);
+    let ders = chain_of(vec![cert_with_validity(1000, 2000)]);
+    let chain = ders.chain();
     let policy = ExpiryPolicy::new(1000);
     assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
 }
 
 #[test]
 fn certificate_exactly_at_not_after_is_accepted() {
-    let chain = chain_of(vec![cert_with_validity(1000, 2000)]);
+    let ders = chain_of(vec![cert_with_validity(1000, 2000)]);
+    let chain = ders.chain();
     let policy = ExpiryPolicy::new(2000);
     assert_eq!(policy.chain_meets_policy_requirements(&chain), Ok(()));
 }
 
 #[test]
 fn certificate_not_yet_valid_is_rejected() {
-    let chain = chain_of(vec![cert_with_validity(1000, 2000)]);
+    let ders = chain_of(vec![cert_with_validity(1000, 2000)]);
+    let chain = ders.chain();
     let policy = ExpiryPolicy::new(500);
     assert!(
         policy
@@ -45,7 +49,8 @@ fn certificate_not_yet_valid_is_rejected() {
 
 #[test]
 fn expired_certificate_is_rejected() {
-    let chain = chain_of(vec![cert_with_validity(1000, 2000)]);
+    let ders = chain_of(vec![cert_with_validity(1000, 2000)]);
+    let chain = ders.chain();
     let policy = ExpiryPolicy::new(2500);
     assert_eq!(
         policy

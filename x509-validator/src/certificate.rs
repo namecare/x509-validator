@@ -172,7 +172,7 @@ mod tests {
     #[test]
     fn formats_self_signed_ca() {
         let ca = self_signed_ca_with("Test Root CA", |_| {});
-        let cert = cert(ca.der);
+        let cert = cert(&ca.der);
 
         let rendered = format_certificate(&cert);
 
@@ -199,7 +199,7 @@ mod tests {
     #[test]
     fn serial_number_is_hex_not_decimal_bytes() {
         let ca = self_signed_ca_with("Serial Root", |_| {});
-        let cert = cert(ca.der);
+        let cert = cert(&ca.der);
 
         let rendered = format_certificate(&cert);
         let serial = rendered
@@ -222,7 +222,7 @@ mod tests {
     fn formats_leaf_with_sans() {
         let root = self_signed_ca_with("SAN Root", |_| {});
         let leaf_der = issue_leaf("leaf", &["www.example.com", "example.com"], &root);
-        let cert = cert(leaf_der);
+        let cert = cert(&leaf_der);
 
         let rendered = format_certificate(&cert);
 
@@ -248,7 +248,7 @@ mod tests {
                 vec![],
             ));
         });
-        let cert = cert(intermediate.der);
+        let cert = cert(&intermediate.der);
 
         let rendered = format_certificate(&cert);
 

@@ -26,23 +26,30 @@ impl<'a> ValidatedCertificateChain<'a> {
 
 #[cfg(test)]
 mod tests {
+    use x509_validator_testkit::parse::Ders;
     use x509_validator_testkit::{cert, issue_ca, issue_leaf, self_signed_ca_with};
 
     use super::*;
     use crate::CertificateExt;
 
-    /// A three-certificate chain, leaf-first: leaf, intermediate, root.
-    fn leaf_intermediate_root() -> Vec<Certificate<'static>> {
+    /// The DER of a three-certificate chain, leaf-first: leaf, intermediate,
+    /// root.
+    ///
+    /// A `Certificate` borrows the bytes it was parsed from, so the DER is
+    /// held by the caller and the certificates are parsed from it via
+    /// [`Ders::certificates`].
+    fn leaf_intermediate_root() -> Ders {
         let root = self_signed_ca_with("Root", |_| {});
         let intermediate = issue_ca("Intermediate", &root, None, |_| {});
         let leaf = issue_leaf("leaf.example.com", &["leaf.example.com"], &intermediate);
 
-        vec![cert(leaf), cert(intermediate.der), cert(root.der)]
+        Ders::new(vec![leaf, intermediate.der, root.der])
     }
 
     #[test]
     fn leaf_and_root_are_the_two_ends_of_the_chain() {
-        let chain = ValidatedCertificateChain::new_unchecked(leaf_intermediate_root());
+        let ders = leaf_intermediate_root();
+        let chain = ValidatedCertificateChain::new_unchecked(ders.certificates());
 
         assert_eq!(chain.leaf().subject().to_string(), "CN=leaf.example.com");
         assert_eq!(chain.root().subject().to_string(), "CN=Root");
@@ -50,7 +57,8 @@ mod tests {
 
     #[test]
     fn root_is_the_self_signed_end_not_the_leaf() {
-        let chain = ValidatedCertificateChain::new_unchecked(leaf_intermediate_root());
+        let ders = leaf_intermediate_root();
+        let chain = ValidatedCertificateChain::new_unchecked(ders.certificates());
 
         let root = chain.root();
         assert_eq!(root.subject_key(), root.issuer_key());
@@ -59,7 +67,8 @@ mod tests {
 
     #[test]
     fn iter_yields_the_chain_leaf_first() {
-        let chain = ValidatedCertificateChain::new_unchecked(leaf_intermediate_root());
+        let ders = leaf_intermediate_root();
+        let chain = ValidatedCertificateChain::new_unchecked(ders.certificates());
 
         let subjects: Vec<_> = chain
             .iter()
@@ -74,7 +83,8 @@ mod tests {
 
     #[test]
     fn a_single_certificate_is_both_leaf_and_root() {
-        let root = cert(self_signed_ca_with("Root", |_| {}).der);
+        let der = self_signed_ca_with("Root", |_| {}).der;
+        let root = cert(&der);
         let chain = ValidatedCertificateChain::new_unchecked(vec![root]);
 
         assert_eq!(chain.leaf().subject().to_string(), "CN=Root");
@@ -91,8 +101,10 @@ mod tests {
         // Two unrelated self-signed certificates: nothing issues anything
         // else. The constructor is named `_unchecked` because it accepts
         // this — policy evaluation is the caller's job.
-        let a = cert(self_signed_ca_with("A", |_| {}).der);
-        let b = cert(self_signed_ca_with("B", |_| {}).der);
+        let a_der = self_signed_ca_with("A", |_| {}).der;
+        let b_der = self_signed_ca_with("B", |_| {}).der;
+        let a = cert(&a_der);
+        let b = cert(&b_der);
 
         let chain = ValidatedCertificateChain::new_unchecked(vec![a, b]);
 
