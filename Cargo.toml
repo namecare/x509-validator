@@ -22,7 +22,7 @@ x509-parser = "0.18.1"
 thiserror = "2.0.21"
 
 aws-lc-rs = "1.18.1"
-aws-lc-sys = "0.45.0"
+aws-lc-sys = "0.46.0"
 
 ring = "0.17.14"
 
