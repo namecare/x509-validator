@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.2] - 2026-11-04
+
+### Changed
+- Dropped `aws-lc-sys` dependency. The crate now
+  depends only on `aws-lc-rs` (bumped to 1.19.0).
+- Crypto dependencies are now declared with `default-features = false` and
+  enable only the features the backends use, so depending on
+  `x509-validator` no longer turns on unrelated default features of
+  `aws-lc-rs`, `ring` or the RustCrypto crates.
+- Updated dependencies to their latest versions, including `rsa`
+  0.10.0-rc.20 and `sha2` 0.11.1. This brings in `crypto-bigint` 0.7.10
+  (from 0.7.5), which fixes the constant-time issues in
+  RUSTSEC-2026-0387 for the `rust_crypto` backend.
+
 ## [0.3.1] - 2026-09-24
 
 ### Security
