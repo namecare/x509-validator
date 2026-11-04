@@ -2249,7 +2249,7 @@ dependencies = [
 
 [[package]]
 name = "x509-validator"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "aws-lc-rs",
  "ed25519-dalek 3.0.0",
